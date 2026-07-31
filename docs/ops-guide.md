@@ -11,11 +11,14 @@
 | 复现评审 | 08-31 | |
 | 颁奖 | 09-04 | |
 
-## 1. 注册 API key（✅ 可立即执行）
+## 1. 注册 API key（✅ 已注册，待开通额度）
 
 1. 打开 https://platform.modelbest.cn/console/（ModelBest 开放平台）
-2. 注册账号（手机号/邮箱）
-3. 控制台申请 API key（Bearer 格式，sk- 开头）
+2. 注册账号（手机号/邮箱）—— 已完成 2026-07-31
+3. 控制台申请 API key —— 已完成，正式 key：
+   sk-live-Pi-Z6P3cWWtRpq2Faz-x8uWr3MYhES7re0pVnWxNG30
+   ⚠️ 当前状态：调用报 insufficient_quota（"账号未开通计费，请联系管理员开通并分配额度"）
+   → 需在控制台完成：实名认证 + 开通计费/领取免费额度
 4. 开发期可用官方公开 key 先行：
    sk-live-kmwPsO1yz9kJfbp8c6az72I-BjfZBX-5V5CmI9yTsXw
    （注意：公开 key 为"currently available"状态，正式提交前必须换正式 key）

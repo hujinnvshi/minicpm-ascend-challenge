@@ -40,6 +40,7 @@ key 来源：OpenBMB 官方文档公开免费 key（docs/api.md）
 
 - API key 申请（正式 key）：https://platform.modelbest.cn/console/（ModelBest 开放平台，
   注册账号后控制台申请 key）
+  2026-07-31 已注册并申请正式 key；当前报 insufficient_quota，待实名认证+开通额度
 - 比赛报名：http://ascend.openbmb.cn（OpenBMB 比赛平台；2026-07-31 时页面挂载的是
   "2026 稀疏算子加速大奖赛"，MiniCPM 比赛页待官网更新或飞书群确认）
 
