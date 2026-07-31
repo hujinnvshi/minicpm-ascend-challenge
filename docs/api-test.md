@@ -36,6 +36,13 @@ key 来源：OpenBMB 官方文档公开免费 key（docs/api.md）
 - 本地 CPU（secs，llama.cpp-omni 量化版 <12GB 内存）作兜底与部署能力展示，
   不承担实时交互主路径（CPU 全双工 RTF>1）
 
+## 注册入口
+
+- API key 申请（正式 key）：https://platform.modelbest.cn/console/（ModelBest 开放平台，
+  注册账号后控制台申请 key）
+- 比赛报名：http://ascend.openbmb.cn（OpenBMB 比赛平台；2026-07-31 时页面挂载的是
+  "2026 稀疏算子加速大奖赛"，MiniCPM 比赛页待官网更新或飞书群确认）
+
 ## 参考代码
 
 - Realtime 客户端封装: OpenBMB/MiniCPM-o-Demo realtime-protocol 分支
