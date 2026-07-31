@@ -49,6 +49,15 @@ MiniCPM-o-4_5-gguf/
 ```
 下载：HuggingFace openbmb/MiniCPM-o-4_5-gguf；国内走 ModelScope 镜像
 
+## 模型仓库链接
+
+- GGUF 版（比赛用，已下载）：https://www.modelscope.cn/models/openbmb/MiniCPM-o-4_5-gguf
+- PyTorch 原始版（18.76GB，供参考，比赛不需要）：
+  https://www.modelscope.cn/models/OpenBMB/MiniCPM-o-4_5
+  说明：PyTorch 版给 transformers/vLLM/PyTorch 推理用（对应 Demo 的
+  py_backend）；llama.cpp-omni 只用 GGUF 版。唯一潜在用途是精度对比
+  基准（PyTorch 无损输出当参考），官方评测会自己做精度验证，可不下载。
+
 ## 构建（本地 CPU 学习版）
 
 ```bash
