@@ -1,7 +1,10 @@
 # HiDevLab 算力申请信息（模板）
 
 用途：赛道一（高性能推理优化 - llama.cpp-omni 子赛道）910C 算力申请
-平台：https://hidevlab.huawei.com（华为计算创新实验室）
+平台：https://hidevlab.huawei.com（华为计算创新实验室，官方算力提供站点）
+账号：已注册（2026-07-31），密码：[REDACTED] ⚠️ 敏感信息，勿外泄
+审批通知页：https://hidevlab.huawei.com/personal-center/noticeManagement
+（个人中心-通知管理，查看算力申请审批结果）
 
 ## 项目背景
 
