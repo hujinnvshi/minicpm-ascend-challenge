@@ -1,4 +1,16 @@
-# HiDevLab 算力申请信息（模板）
+# HiDevLab 算力申请
+
+> 2026-07-31 更新：官方飞书指南（https://modelbest.feishu.cn/wiki/PeStwWCA1i0ptXkqh9scu5AynUe）要点已并入，
+> 完整提交物清单见 submission-checklist.md
+
+## 官方流程要点（飞书指南 7/28）
+
+- 审核约需 3 日，尽早申请（已申请）
+- 流程：华为账号登录 → 体验IDE → 创建环境 → 申请权限 → 审核通过后配置环境
+- 环境配置：算力类型=昇腾910C / 镜像=推荐镜像列表（CANN 9.1.0-beta1 系列，A 赛道） / 配置规格
+- 卡时规则：1NPU=100h、2NPU=50h、4NPU=25h（总卡时与规格负相关）
+- 挂载目录 /user_data 持久化，数据必须放挂载目录下
+- B 赛道镜像（与我们无关）：quay.io/ascend/vllm-omni:v0.25.0-a3 需自定义拉取
 
 用途：赛道一（高性能推理优化 - llama.cpp-omni 子赛道）910C 算力申请
 平台：https://hidevlab.huawei.com（华为计算创新实验室，官方算力提供站点）
