@@ -31,6 +31,9 @@
 
 ## 目录结构
 
-- docs/   调研与筹备文档
-- assets/ 官方资料（海报、时间线、奖项、飞书群二维码）
-- notes/  筹备过程记录（可选）
+- docs/competition-research.md  比赛调研（赛道/奖项/时间线/规则/报名）
+- docs/api-test.md              官方 API 实测记录 + 注册入口
+- docs/decisions.md             决策记录（赛道选择/技术路线/场景推荐）
+- docs/ops-guide.md             操作手册（注册步骤/API 调用速查/风险清单）
+- assets/                       官方资料（海报、时间线、奖项、飞书群二维码）
+- notes/                        筹备过程记录（可选）
