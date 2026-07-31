@@ -38,6 +38,15 @@
   → 比赛评测形态即此（流式 chunk），基线已实时，优化目标 <0.5
 - 报告存档：docs/perf-reports/perf_report_Q4KM_baseline.md
 
+### 实验 003：双工 perf Q8_0（-ngl 99, GPU1）
+- 时间：2026-07-31
+- 结果：TTS RTF 平均 0.32（全 PASS）
+  · 注意：本轮音频 101.84s（模型话痨），长音频摊薄固定开销，
+    RTF 与 Q4_K_M（2-3s 音频）不完全可比，需统一测试集验证
+- 初步观察：Q8_0 在 4090 量化核效率高，RTF 显著低于 Q4_K_M
+- 报告存档：docs/perf-reports/perf_report_Q8_baseline.md
+- 待办：量化矩阵全部跑完后，用固定输入复测交叉验证
+
 ## 优化队列（更新）
 
 1. 量化对比：Q8_0（精度参考）→ Q3/Q2（RTF 下限试探）——需补下 Q6_K/Q5_K_M/Q3 档
