@@ -1,10 +1,11 @@
 #!/bin/bash
 # sync-weights.sh - 权重同步脚本（secs → 910C）
 # 用法:
-#   bash sync-weights.sh push <910C_SSH>     # secs 推送到 910C
-#   bash sync-weights.sh pull-on-910C        # 在 910C 上从 ModelScope 直拉（备选）
+#   bash sync-weights.sh pull-on-910C        # 在 910C 上从 ModelScope 直拉【首选】
+#   bash sync-weights.sh push <910C_SSH>     # secs 推送到 910C（仅当 SSH 通道可用时）
+# 注意: HiDevLab 未开放直接 SSH/FTP，push 大概率不可用；先确认环境外网再走 pull-on-910C
 # 权重路径: /data/minicpm-omni/weights/MiniCPM-o-4_5-gguf/
-# 910C 目标: /user_data/MiniCPM-o-4_5-gguf/（官方大容量共享目录）
+# 910C 目标: /user_data/MiniCPM-o-4_5-gguf/（官方大容量共享目录，持久化）
 
 SRC="/data/minicpm-omni/weights/MiniCPM-o-4_5-gguf"
 MS_BASE="https://modelscope.cn/models/openbmb/MiniCPM-o-4_5-gguf/resolve/master"

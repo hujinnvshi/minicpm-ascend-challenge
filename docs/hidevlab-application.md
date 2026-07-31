@@ -3,6 +3,24 @@
 > 2026-07-31 更新：官方飞书指南（https://modelbest.feishu.cn/wiki/PeStwWCA1i0ptXkqh9scu5AynUe）要点已并入，
 > 完整提交物清单见 submission-checklist.md
 
+## 文件/权重传输方式（2026-07-31 用户手册确认）
+
+HiDevLab 体验 IDE **未开放直接 SSH/FTP 上传**，传输通道按优先级：
+
+1. **910C 环境内 ModelScope 直拉**（首选，权重 15-30G 一条 wget 搞定）
+   环境如有外网：sh scripts/sync-weights.sh pull-on-910C
+   需先确认环境外网通不通（curl modelscope.cn）
+2. **WebIDE 文件夹上传**（代码/patch/脚本等小文件，权重不现实）
+   WebIDE 文件树右键上传或拖拽
+3. **VS Code 连接后拖拽**（openLiBing Remote-SSH 通道，速度取决于通道带宽，
+   小文件可用；连接步骤见用户手册 1.4）
+4. 环境内 git clone（代码路径：GitHub/GitCode 均支持，手册第 3 章）
+
+要点：
+- VS Code 用 Remote-SSH 插件连接（openLiBing 封装，非用户可直连的 22 端口）
+- 仅支持创建 1 个 IDE 环境；断开即停止计时但保存挂载目录数据
+- 挂载目录 /user_data 持久化，所有权重/产物必须放挂载目录下
+
 ## 官方流程要点（飞书指南 7/28）
 
 - 审核约需 3 日，尽早申请（已申请）
