@@ -1,7 +1,7 @@
 # 比赛调研报告
 
 调研日期：2026-07-31
-信息来源：官方公众号文章、MindSpore 活动页（图片 OCR）、官网
+信息来源：官方公众号文章、MindSpore 活动页（图片 OCR）、官网、GitHub/魔乐社区
 
 ## 主办与背景
 
@@ -71,20 +71,46 @@
 
 - 官网：http://ascend.openbmb.cn（注意：2026-07-31 检查时该站 SPA 挂载的是
   "2026 稀疏算子加速大奖赛"，MiniCPM 比赛页可能即将上线或已下线，需持续关注）
-- 飞书答疑群二维码：assets/ms_4.jpg
+- 飞书答疑群二维码：assets/feishu-group-qr.png
 - 官方发布页：https://www.mindspore.cn/activities/zh/2026-7-13
 - 线下 Meetup 解读：2026-07-23 北京站（已结束）
+
+## 开发环境情况（2026-07-31 确认）
+
+官方统一昇腾环境仅用于**复现验证**，不提供开发期环境（赛道一需自备 910C，
+对无 NPU 资源者基本不可行）。
+
+但 MiniCPM-o 4.5 官方生态对赛道二完全开放：
+
+1. **免费 API**：OpenBMB 官方提供 MiniCPM-V 4.5/4.6 与 MiniCPM-o 4.5 的免费
+   API 访问（2026-05-17 发布），MiniCPM-V 4.6 还有公开免费 key。
+   Demo 可直接接入，零算力成本。
+2. **免费在线体验**：官方在线 Demo（PC + 手机端），无需注册。
+3. **开源完整 Demo 代码**：OpenBMB/MiniCPM-o-Demo（GitHub），含
+   Frontend + Gateway + Worker + Backend 完整架构，Docker 部署，
+   后端可选 PyTorch 版或 llama.cpp-omni C++ 版，可直接二次开发。
+4. **本地部署兜底**：llama.cpp-omni 量化版官方宣称部署内存 <12GB，
+   本机 secs（AMD EPYC 224C / 1TiB RAM）CPU 推理完全可行；
+   PyTorch 无损版需 ≥28GB 显存 GPU。
+5. **端侧安装包**：Comni 桌面端（Windows/macOS）一键安装，可作参考。
+
+结论：赛道二开发环境无阻碍，技术路线 = 官方免费 API（主）+ 本地 CPU
+部署 llama.cpp-omni（兜底/展示部署能力）。
 
 ## 关键资源链接
 
 - 赛事官网：https://ascend.openbmb.cn/competition
 - MindSpore 发布页：https://www.mindspore.cn/activities/zh/2026-7-13
 - 昇腾推理开发：https://www.hiascend.com/cn/developer/inference
-- MiniCPM-o 4.5 开源（魔乐社区）
-- 参考：MiniCPM-V-4_5 昇腾 NPU 部署（vLLM-Ascend）
+- MiniCPM-o 4.5 仓库：https://github.com/OpenBMB/MiniCPM-V
+- MiniCPM-o Demo：https://github.com/OpenBMB/MiniCPM-o-Demo
+- GGUF 量化权重：https://huggingface.co/openbmb/MiniCPM-o-4_5-gguf
+- vLLM-Omni 部署指南：https://docs.vllm.ai/projects/vllm-omni/
+- 魔乐社区（国内镜像）：ModelScope
 
 ## 下一步待办（TBD）
 
-- [ ] 确认官网报名入口可用性
-- [ ] 确认是否具备昇腾 910C 资源（或主办方提供环境的具体方式）
-- [ ] 确定参赛赛道与组队
+- [ ] 确认官网报名入口可用性（官网当前挂着别的比赛，需盯）
+- [ ] 申请官方免费 API key（API Guide 在 MiniCPM-V 仓库）
+- [ ] 确定参赛赛道（倾向赛道二）与组队
+- [ ] 选定 Demo 场景（候选：DB/运维多模态助手）
