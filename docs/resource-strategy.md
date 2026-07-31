@@ -38,7 +38,8 @@ CUDA 与 CANN 后端的推理链路/CLI 参数/benchmark 方法/量化档位/大
 
 ## GPU1 使用约束（secs 共享机器）
 
-- GPU0/2/3 被他人 vLLM 服务占用，勿动
-- GPU1 剩余 ~14.5G：Q4_K_M 全模态 ~9G 可跑；Q8_0 全模态 ~13G 勉强；
-  F16 不可跑（~20G）
+- GPU0/2/3 被他人服务占用，勿动
+- 2026-07-31 已释放：ComfyUI 容器（docker stop comfyui）+ root 的
+  rerank 服务（kill 2822062，uvicorn:9239）→ GPU1 现完全空闲（24.5G 可用）
+- 全模态双工需 ~16-18G 显存，此前 GPU1 共享时 OOM，现已解决
 - 使用前 nvidia-smi 确认显存余量，避免影响他人作业
