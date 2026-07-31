@@ -77,6 +77,23 @@ cmake --build build --target llama-omni-server --target llama-omni-cli -j
 5. --vision-batch-encode（视觉场景）
 6. 进阶（看缘分）：算子级优化、流水线重叠
 
+## 官方工具链（重要，避免重复造轮子）
+
+### Demo（官方提供，不用自己开发）
+- OpenBMB/MiniCPM-o-Demo 仓库：Gateway + Worker + Backend 完整架构
+- 支持 llama.cpp-omni C++ 后端（docker-compose.cpp.yml）
+- 任务：跑通 + 启动脚本化 + 录演示视频，不开发
+
+### Benchmark 工具链（官方自带，tools/omni/perf/）
+- perf-duplex.cpp：采集 LLM 判定延迟 + 音频 chunk 时间线 → JSON
+- analyze_perf.py：JSON → RTF 报告
+- run_perf.sh：一键运行
+- DUPLEX_PROFILING.md 判据：
+  · TTS RTF 平均 < 1.0
+  · 每帧 push→判定 P95 < 进帧间隔（默认 1000ms）
+  · 首响 e2e：SPEAK 轮首帧 push → 首个 wav，P95 < 进帧间隔
+  · e2e RTF（展示用）：首帧 push → 末 wav / 音频时长
+
 ## 阶段计划
 
 - 7/31-8/03 本地编译 CPU 版跑通 + secs 下载权重 + 精读 docs/ops.md CANN 部分
