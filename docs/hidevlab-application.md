@@ -5,6 +5,8 @@
 账号：已注册（2026-07-31），密码：[REDACTED] ⚠️ 敏感信息，勿外泄
 审批通知页：https://hidevlab.huawei.com/personal-center/noticeManagement
 （个人中心-通知管理，查看算力申请审批结果）
+状态：✅ 算力申请已获批（2026-07-31）——单卡 910C，镜像 CANN 9.1.0-beta1
+环境访问方式：待确认（SSH / Web IDE / 平台入口）
 
 ## 项目背景
 
