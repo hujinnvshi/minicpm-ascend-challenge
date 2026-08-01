@@ -1,1 +1,38 @@
-code/
+# ===== 构建产物 =====
+code/*/build*/
+code/*/cmake-build-*/
+code/*/.cache/
+
+# ===== 实验输出（perf 报告在 docs/perf-reports/ 另行归档） =====
+code/*/output_*/
+code/*/tools/omni/output*/
+code/*/tools/omni/logs/
+
+# ===== 大体积示例数据（需要时从上游重新获取） =====
+code/daily-omni/example_videos/
+code/daily-omni/assets/
+
+# ===== 权重文件 =====
+*.gguf
+*.safetensors
+*.bin
+# 例外：llama.cpp-omni 官方测试词表（编译/测试必需，非比赛权重）
+!code/llama.cpp-omni/models/*.gguf
+
+# ===== Python =====
+__pycache__/
+*.pyc
+
+# ===== Node =====
+node_modules/
+
+# ===== 提交打包产物 =====
+dist/
+*.tar.gz
+*.tgz
+
+# ===== 系统/编辑器 =====
+.DS_Store
+*.swp
+.idea/
+.vscode/
