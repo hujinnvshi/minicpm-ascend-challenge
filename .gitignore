@@ -31,7 +31,9 @@ dist/
 *.tar.gz
 *.tgz
 
-# ===== 系统/编辑器 =====
+# ===== 本地敏感信息（永不提交） =====
+.secrets.local
+*.local
 .DS_Store
 *.swp
 .idea/
