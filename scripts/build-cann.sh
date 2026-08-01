@@ -9,6 +9,18 @@ BUILD_DIR="${BUILD_DIR:-$REPO/build-cann}"
 JOBS="$(nproc)"
 
 echo "[1/3] 检查 CANN 环境..."
+# CANN 版本检查（官方 QA：环境可能预装 9.0.0，需自行升级 9.1.0-beta1）
+VERSION_CFG="/usr/local/Ascend/ascend-toolkit/latest/version.cfg"
+if [ -f "$VERSION_CFG" ]; then
+    echo "    当前 CANN: $(cat "$VERSION_CFG" | grep -i version | head -1)"
+else
+    echo "    WARN: $VERSION_CFG 不存在（CANN 未安装或路径不同）"
+fi
+echo "    架构: $(uname -m)"
+# 升级方法（如需 9.0.0→9.1.0-beta1，见 docs/hidevlab-faq.md）:
+#   https://www.hiascend.com/developer/download/community/result?module=cann&cann=9.0.0 下载 run 包
+#   chmod +x xxx.run && ./xxx.run --upgrade && python -c "import acl; print('ACL OK')"
+
 # CANN 安装目录：镜像预装则 ASCEND_TOOLKIT_HOME 已设；否则手动指定
 if [ -z "${CANN_INSTALL_DIR:-}" ]; then
     if [ -n "${ASCEND_TOOLKIT_HOME:-}" ]; then

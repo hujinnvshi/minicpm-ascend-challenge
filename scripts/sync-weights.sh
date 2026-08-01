@@ -2,10 +2,11 @@
 # sync-weights.sh - 权重同步脚本（secs → 910C）
 # 用法:
 #   bash sync-weights.sh pull-on-910C        # 在 910C 上从 ModelScope 直拉【首选】
-#   bash sync-weights.sh push <910C_SSH>     # secs 推送到 910C（仅当 SSH 通道可用时）
-# 注意: HiDevLab 未开放直接 SSH/FTP，push 大概率不可用；先确认环境外网再走 pull-on-910C
+#   bash sync-weights.sh push <user@host>    # SSH 直连可用时 secs 推送（官方 QA 确认支持 ssh user@<IP>）
+# 路径说明（官方 QA 2026-08-01 确认）:
+#   user_data: /home/ma-user/work/user_data/（持久化挂载目录）
+#   shared_assets: 官方共享空间（重要数据建议双备份）
 # 权重路径: /data/minicpm-omni/weights/MiniCPM-o-4_5-gguf/
-# 910C 目标: /user_data/MiniCPM-o-4_5-gguf/（官方大容量共享目录，持久化）
 
 SRC="/data/minicpm-omni/weights/MiniCPM-o-4_5-gguf"
 MS_BASE="https://modelscope.cn/models/openbmb/MiniCPM-o-4_5-gguf/resolve/master"
@@ -34,9 +35,9 @@ push() {
 }
 
 pull_on_910c() {
-    echo "910C 上直拉 ModelScope（备选路径）"
-    mkdir -p /user_data/MiniCPM-o-4_5-gguf
-    cd /user_data/MiniCPM-o-4_5-gguf
+    echo "910C 上直拉 ModelScope（首选路径）"
+    mkdir -p /home/ma-user/work/user_data/MiniCPM-o-4_5-gguf
+    cd /home/ma-user/work/user_data/MiniCPM-o-4_5-gguf
     for f in "${FILES[@]}"; do
         mkdir -p "$(dirname "$f")"
         [ -f "$f" ] && [ "$(stat -c%s "$f" 2>/dev/null || echo 0)" -gt 1000000 ] && { echo "SKIP $f"; continue; }
