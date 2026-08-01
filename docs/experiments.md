@@ -161,3 +161,33 @@ LLM 判定延迟基本不变（120-122ms）→ 影响在 TTS/滑窗段
 2. ctx 参数矩阵：2048→0.81、4096→0.73、8192→0.68（进行中，16384 待测）
 3. 编译：-O3/LTO/march
 4. CANN 侧（910C）：USE_ACL_GRAPH 图模式
+
+## 实验 020：Flow 采样步数（n_timesteps）优化探索（2026-08-01）
+
+背景：官方 QA 确认允许对 Token2Wav/Flow 蒸馏/微调替换权重。
+代码发现：C++ Token2Wav 的 Flow ODE 采样步数 n_timesteps 硬编码 5（omni.cpp 三处），
+减少步数可线性降低 TTS/Token2Wav 段（瓶颈段）计算量。
+
+改动：omni.cpp 三处传参改为 OMNI_FLOW_STEPS env 控制（默认 5 保持基线）。
+已同步 secs 重编译。
+
+实验结果：
+| 步数 | 结果 | 说明 |
+|---|---|---|
+| 5（默认） | 基线 0.75 | 正常 |
+| 4 | 失败 EXIT=3 | GPU init failed，无 wav |
+| 3 | 失败 EXIT=3 | GPU init failed，无 wav（LLM 段正常 P50 124.7ms） |
+
+根因（代码定位）：prompt_cache.gguf 内嵌 n_timesteps=5（导出时写入），
+init_from_host_caches 校验 cache_host.n_timesteps != n_timesteps → 拒绝
+（token2wav-impl.cpp:8309）。图构建本身支持任意步数（need_rebuild 按步数重建），
+但被 cache 校验封死。解法需按新步数重新导出 prompt_cache.gguf。
+
+重新导出三路评估：
+1. prompt_bundle 现算 + T2W_EXPORT_CACHE_DIR：bundle 文件无生成工具（只读不写）→ 死路
+2. Python T2W（pyt2w/）：支持 n_timesteps 现算，但无 CLI 开关 + 需 1.2GB PyTorch 模型
+   + Python 基线慢 → 性价比低，放弃
+3. 蒸馏 flow 少步数 + 自定义导出（官方允许）：训练路径，时间紧 → 列为 910C 期可选加分项
+
+结论：n_timesteps 是真实杠杆但被 cache 绑定封死；本次 env 改动保留（默认 5 无副作用）；
+910C 上如 CANN 后端无此校验可复用。后续优先级：图模式 → 量化重扫 → 大 ctx。
