@@ -32,7 +32,7 @@ HiDevLab 体验 IDE **未开放直接 SSH/FTP 上传**，传输通道按优先�
 
 用途：赛道一（高性能推理优化 - llama.cpp-omni 子赛道）910C 算力申请
 平台：https://hidevlab.huawei.com（华为计算创新实验室，官方算力提供站点）
-账号：已注册（2026-07-31），密码：[REDACTED] ⚠️ 敏感信息，勿外泄
+账号：已注册（2026-07-31），密码：[REDACTED-勿外泄，本地保存]
 审批通知页：https://hidevlab.huawei.com/personal-center/noticeManagement
 （个人中心-通知管理，查看算力申请审批结果）
 状态：✅ 算力申请已获批（2026-07-31）——单卡 910C，镜像 CANN 9.1.0-beta1
