@@ -26,6 +26,15 @@
 **隧道后续**：Cloudflare Tunnel 方案保留为备选（端口放行后可复用已建好的
 asc-910b 隧道 8eb69525 + ssh.asc910b.opengood.cc CNAME），当前不依赖。
 
+## 2026-08-04 决策（P1.6）：双工 LLM model 上 device（use_mmap=false 突破），compute/流水线下阶段
+
+**背景**：P1.6 深查双工 LLM offload，加双探针（LLAMA ngl + CANN alloc result）定位。
+**突破**：perf-duplex `use_mmap=false` + 补丁6 host_buffer → 双工 LLM model **上 device**（HBM 23.6G + alloc 14.4G 成功 err=0 + AICore 峰值 66%）。之前"HBM 3481=model CPU"是采样时机误判。
+**成果**：双工 **TTS RTF 0.80 PASS**（首个 <1，接近 4090 0.75）。
+**新瓶颈**：decode 中 AICore 仅 4%（model 在 device 但 NPU 几乎没算）+ LLM P50 8840ms（含等待，疑似 audio encoder/流水线）+ model 后续释放。offload 成功但 compute/流水线是独立新问题。
+**下阶段**：查 duplex LLM compute 为何 AICore 4%（graph_compute backend / duplex_llm_thread_func）+ duplex 流水线瓶颈（audio encoder/encoder 线程）。
+**详见**：[experiments.md](experiments.md) P1.6
+
 ## 2026-08-04 决策（P1.5）：host_buffer 默认 false——单工 LLM 上 NPU，双工待 duplex 修复
 
 **背景**：P1.5 改 cann `host_buffer` 默认 false（补丁 6）试图稳定双工 LLM offload。

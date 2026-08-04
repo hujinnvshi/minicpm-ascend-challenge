@@ -473,6 +473,7 @@ int main(int argc, char ** argv) {
     params.tts_model    = paths.tts;
     params.n_ctx        = n_ctx;
     params.n_gpu_layers = n_gpu_layers;
+    params.use_mmap     = false;  // P1.6: 关 mmap 强制 copy 权重到 device(双工 LLM 上 NPU)
     if (vision_backend == "coreml") {
         params.vision_coreml_model_path = paths.vision_coreml;
     }

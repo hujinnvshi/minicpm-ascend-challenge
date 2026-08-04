@@ -60,6 +60,21 @@
   - 下阶段：深查 duplex_llm_thread_func（见 cann-patches 已知问题 3）
 - 结论：补丁 6 修复**单工** offload（有价值），**双工**是独立 duplex 路径问题
 
+### 实验 P1.6：双工 LLM 上 device（use_mmap=false 突破）+ compute/流水线新瓶颈
+- 时间：2026-08-04
+- 改动：perf-duplex `use_mmap=false`（强制 eager copy 权重到 device）+ 双探针（LLAMA ngl + CANN alloc）
+- **突破**：双工 LLM model **上 device**
+  - LLAMA_PROBE：双工 n_gpu_layers=99（传对，非 params 问题）
+  - CANN_PROBE：14.4G device alloc **成功**（err=0，dev_ptr=0x12c... 有效 HBM 地址）
+  - npu-smi（加载后）：**HBM 23.6G + AICore 峰值 66% + Power 168W**
+  - 之前"HBM 3481=model CPU"是**采样时机误判**（加载前/早期），实际 model 在 device
+- **TTS RTF 0.80 PASS**（双工流水线，比 P1.5 的 0.99 好，接近 4090 0.75）
+- **新瓶颈（复合问题）**：
+  - decode 中 AICore 仅 4%（model 在 device 但 NPU 几乎没算 LLM）
+  - LLM P50 8840ms / avg decode 1448ms（含大量等待，疑似 audio encoder/流水线瓶颈，非 LLM 本身慢）
+  - model 后续释放（t=160 HBM 降到 3481，原因待查）
+- 结论：**offload 成功**（model 上 NPU），但 **LLM compute 没真走 NPU**（AICore 4%）+ duplex 流水线有瓶颈。超出 offload 范围，下阶段查 compute 路径 / 流水线
+
 ---
 
 > 2026-07-31 补充：llama-omni-server 启动日志确认两条 ctx 告警
