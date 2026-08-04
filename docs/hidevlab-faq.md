@@ -2,7 +2,7 @@
 
 > 来源：面壁大赛群官方 QA 整理文档。全部问题 + 官方回答 + 排查建议。
 > 影响我们准备的关键点：
-> 1. 环境路径 /home/ma-user/work/user_data/（挂载目录，持久化）
+> 1. 环境路径 /workspace/user_data（挂载目录，持久化；实测，旧文档 /home/ma-user/work/user_data/ 已废弃）
 > 2. shared_assets/ 官方共享空间——重要数据建议双备份
 > 3. CANN 可能预装 9.0.0，需自行升级 9.1.0-beta1（run 包 --upgrade）
 > 4. SSH 直连存在（管理页面拿环境 IP，ssh user@<IP>）——scp/rsync 可能可用
@@ -10,9 +10,9 @@
 
 ## 环境关键信息
 
-- user_data 路径：/home/ma-user/work/user_data/
+- user_data 路径：/workspace/user_data（实测）
 - shared_assets 路径：官方共享空间（重要数据备份推荐位置）
-- CANN 版本确认：cat /usr/local/Ascend/ascend-toolkit/latest/version.cfg
+- CANN 版本确认：echo $ASCEND_TOOLKIT_HOME（实测 cann-9.1.0-beta.3）；或 cat $ASCEND_TOOLKIT_HOME/version.cfg
 - 架构确认：uname -a（aarch64 / x86_64）
 - 环境状态：管理页面查看（运行中/创建中/异常/已删除）
 - 卡时：1NPU=100h、2NPU=50h、4NPU=25h（Q15 再次确认）
@@ -30,7 +30,7 @@
 
 | 症状 | 处理 |
 |---|---|
-| user_data 丢失/空 | df -h 查挂载；ls -la /home/ma-user/work/user_data/；确认环境未被删除；dmesg 查存储错误；联系官方（记录环境名+公网IP） |
+| user_data 丢失/空 | df -h 查挂载；ls -la /workspace/user_data/；确认环境未被删除；dmesg 查存储错误；联系官方（记录环境名+公网IP） |
 | GlusterFS 故障 | mount | grep gluster；docker ps -a；mount -a 重挂载；联系官方 |
 | WebIDE 403 | 确认外网/蓝区访问；无痕模式；清缓存；关代理/VPN；换浏览器；提供公网IP+参赛信息 |
 | 418 | 提供公网IP+环境名联系官方 |

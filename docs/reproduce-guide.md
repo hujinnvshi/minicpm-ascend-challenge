@@ -1,12 +1,13 @@
 # 复现说明（初稿）
 
-目标：评审人员按本文档在官方统一昇腾环境（单卡 910C + CANN 9.1.0-beta1
-镜像）中 30 分钟内复现本方案的全部结果。
+目标：评审人员按本文档在官方统一昇腾环境（单卡 910B3 + CANN 9.1.0-beta.3
+镜像；厂家授权 910B3 替代 910C，见 docs/env-scan.md）中 30 分钟内复现本方案的全部结果。
 
 ## 1. 环境要求
 
-- 硬件：昇腾 910C 单卡
-- 系统：官方统一镜像（CANN 9.1.0-beta1）
+- 硬件：昇腾 910B3 单卡（厂家授权替代 910C，64GB HBM）
+- 系统：官方统一镜像（CANN 9.1.0-beta.3，兼容官方 beta1 要求）
+- 预置权重（只读）：/workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/（全套 11 档+全模块，免下载）
 - 依赖：cmake ≥3.24、g++ ≥11、python3（analyze 脚本）
 
 ## 2. 代码获取
@@ -22,33 +23,34 @@
 ```bash
 git clone https://github.com/tc-mb/llama.cpp-omni.git
 cd llama.cpp-omni
-# CANN 后端构建（910C）
+# CANN 后端构建（910B3；图模式 USE_ACL_GRAPH 在 910B 不支持，故不开启）
 cmake -B build -DCMAKE_BUILD_TYPE=Release \
       -DGGML_CANN=ON \
-      -DCANN_INSTALL_DIR=<CANN路径> \
-      -DUSE_ACL_GRAPH=ON
+      -DCANN_INSTALL_DIR=$ASCEND_TOOLKIT_HOME
 cmake --build build --target llama-omni-cli llama-omni-perf-duplex -j
+# 或直接用脚本: bash scripts/build-cann.sh
 ```
 
 ## 4. 模型权重
 
-- 来源：ModelScope openbmb/MiniCPM-o-4_5-gguf
-- 文件：MiniCPM-o-4_5-Q4_K_M.gguf + audio/tts/vision/token2wav 全模块
-- 放置：/user_data/MiniCPM-o-4_5-gguf/（官方大容量目录）
+- 来源：官方环境预置（只读，免下载）：/workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/
+- 文件：MiniCPM-o-4_5-Q4_K_M.gguf + audio/tts/vision/token2wav 全模块（另有 11 档可选）
+- 备选：bash scripts/sync-weights.sh pull 从 ModelScope 下载到 /workspace/user_data/
 
 ## 5. 评测（RTF）
 
 ```bash
 cd llama.cpp-omni
 BUILD_DIR=$PWD/build tools/omni/perf/run_perf.sh \
-  -m /user_data/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf \
+  -m /workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf \
   -ngl 99 -c 8192
 # 输出：tools/omni/output/perf_report.md（含 TTS RTF、P95 等全部指标）
 ```
 
 ## 6. 精度验证
 
-- 待官方 starter kit 提供 Daily-Omni 等 benchmark 脚本后补充
+- Daily-Omni：cd code/daily-omni && python run_pipeline.py（脚本与 baseline/ 官方基线对照已就位）
+- TTS-Seed / Video-MME：待官方 starter kit 补充（Daily-Omni 可先行）
 
 ## 7. 复现检查清单
 

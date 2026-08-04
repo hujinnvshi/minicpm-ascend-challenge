@@ -10,14 +10,15 @@
 cmake -B build-cann -DCMAKE_BUILD_TYPE=Release \
       -DGGML_CANN=ON \
       -DCANN_INSTALL_DIR=<CANN路径>   # 或设环境变量 ASCEND_TOOLKIT_HOME
-      -DUSE_ACL_GRAPH=ON              # ACL 图模式，默认 OFF，910C 支持
+      -DUSE_ACL_GRAPH=ON              # ACL 图模式，默认 OFF；910C 支持，910B 实测不支持(头文件缺失)
 
 cmake --build build-cann --target llama-omni-cli -j
 ```
 
 - 编译时自动检测 SoC 类型（npu-smi info 解析 → Ascend910C）
-- USE_ACL_GRAPH 是最大杠杆：图编译 + 算子融合，减少 kernel 启动开销
-- 310P 不支持图模式（编译会 FATAL_ERROR），910C 支持
+- USE_ACL_GRAPH 图编译 + 算子融合，减 kernel 启动开销（910C 上的大杠杆）
+- ⚠️ 910B3 实测不支持图模式（acl_graph 头文件缺失，编译 FATAL_ERROR）→ 本环境不用
+- 310P 同样不支持图模式；仅 910C 完整支持
 
 ## 二、运行时配置
 

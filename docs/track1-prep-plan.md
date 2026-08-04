@@ -4,10 +4,10 @@
 
 - 指定模型：MiniCPM-o 4.5（9B 全模态）
 - 指定框架：llama.cpp-omni
-- 镜像版本：CANN 9.1.0-beta1
+- 镜像版本：CANN 9.1.0-beta.3（官方要求 beta1，环境预装 beta.3 兼容）
 - 核心指标：音频 chunk RTF（RTF = chunk 生成耗时 ÷ chunk 时长，越低越好）
 - 约束：保证模型精度（降幅 ≤2pp）与 Demo 可用性
-- 算力：HiDevLab 单卡 910C
+- 算力：HiDevLab 910B3（厂家授权替代 910C）
 
 ## 技术架构（来自 llama.cpp-omni README）
 
@@ -108,4 +108,4 @@ cmake --build build --target llama-omni-server --target llama-omni-cli -j
 - 7/31-8/03 本地编译 CPU 版跑通 + secs 下载权重 + 精读 docs/ops.md CANN 部分
 - 8/04-8/10 910C 基线 + 量化档位扫描
 - 8/11-8/14 参数深度优化 + benchmark 完整数据
-- 8/15-8/17 性能报告 + 提交材料（8/17 截止）
+- 8/26-8/31 性能报告 + 提交材料（8/31 截止，赛事方调整后）

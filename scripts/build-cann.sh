@@ -9,12 +9,15 @@ BUILD_DIR="${BUILD_DIR:-$REPO/build-cann}"
 JOBS="$(nproc)"
 
 echo "[1/3] 检查 CANN 环境..."
-# CANN 版本检查（官方 QA：环境可能预装 9.0.0，需自行升级 9.1.0-beta1）
-VERSION_CFG="/usr/local/Ascend/ascend-toolkit/latest/version.cfg"
+# CANN 版本检查：优先用 ASCEND_TOOLKIT_HOME（实测 /usr/local/Ascend/cann-9.1.0-beta.3）
+#   注：旧版用 /usr/local/Ascend/ascend-toolkit/latest/version.cfg，新版镜像该文件可能缺失
+CANN_HOME="${ASCEND_TOOLKIT_HOME:-/usr/local/Ascend/ascend-toolkit/latest}"
+VERSION_CFG="$CANN_HOME/version.cfg"
 if [ -f "$VERSION_CFG" ]; then
-    echo "    当前 CANN: $(cat "$VERSION_CFG" | grep -i version | head -1)"
+    echo "    当前 CANN: $(grep -i version "$VERSION_CFG" | head -1)"
 else
-    echo "    WARN: $VERSION_CFG 不存在（CANN 未安装或路径不同）"
+    # version.cfg 缺失时从目录名推断（如 cann-9.1.0-beta.3）
+    echo "    当前 CANN(路径推断): $(basename "$CANN_HOME")"
 fi
 echo "    架构: $(uname -m)"
 # 升级方法（如需 9.0.0→9.1.0-beta1，见 docs/hidevlab-faq.md）:
@@ -45,7 +48,9 @@ npu-smi info 2>/dev/null | head -3 || { echo "WARN: npu-smi 不可用（容器�
 
 CMAKE_ARGS=(-B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release -DGGML_CANN=ON -DCANN_INSTALL_DIR="$CANN_INSTALL_DIR")
 if [ "${1:-}" = "--graph" ]; then
-    echo "    启用 USE_ACL_GRAPH（图模式）"
+    # ⚠️ 910B3 实测：acl_graph 头文件缺失，图模式大概率不支持（编不过或 FATAL_ERROR）
+    #     910C 才完整支持图模式。910B 上默认编译即可，--graph 仅作验证性尝试。
+    echo "    启用 USE_ACL_GRAPH（图模式）—— 910B 可能不支持，编译失败属预期"
     CMAKE_ARGS+=(-DUSE_ACL_GRAPH=ON)
 fi
 

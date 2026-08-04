@@ -18,7 +18,7 @@
 | 提交物 | 状态 | 说明 |
 |---|---|---|
 | 代码/配置 | 绿 | llama.cpp-omni patch + build-cann.sh + 配置齐 |
-| Benchmark 结果 | 红 | 3 benchmark 零数据，脚本未写（等 starter kit） |
+| Benchmark 结果 | 红→黄 | 3 benchmark 仍零数据，但 Daily-Omni 脚本已在 code/daily-omni/（待跑） |
 | 性能报告 | 黄 | 8 字段骨架初稿，缺 910C 正式数据 |
 | Demo | 黄 | 后端验证 + Demo 仓库就位，缺演示视频 + 全链路 |
 | 复现说明 | 黄 | 初稿有，缺 910C 实测验证 |
@@ -35,6 +35,6 @@
 
 ## 五、风险
 
-- 910C 一直拿不到（最大）：备选方案 = 找任何昇腾机器（910B 也行）先验证 CANN 链路
-- starter kit 未发布：Benchmark 脚本只能按开源口径预写
-- 8/17 截止：每早一天进 910C 多一分从容
+- ~~910C 一直拿不到（最大）~~ → ✅ 已解除：厂家授权 910B3 替代，环境就位（见 env-scan.md）
+- benchmark 代码：✅ code/daily-omni/ 已提供 Daily-Omni 完整脚本，不再等 starter kit
+- 8/31 截止（赛事方调整后）：时间窗口宽裕，按计划推进
