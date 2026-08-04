@@ -53,3 +53,20 @@ context is a null pointer / current device: -1`。
 - **device 覆盖**：`grep -c ggml_cann_set_device ggml-cann.cpp = 24`（backend 接口全覆盖，无盲点）
 - **全链路**：`llama-omni-cli -m Q4_K_M --omni --test 9`，9 输入全 prefill，退出 0，23 wav，T2W RTF mean=0.861（87% chunk 实时），wav RMS 无静音，LLM 视觉语义正常
 - 详见 [experiments.md](experiments.md) P0 实验条目
+
+---
+
+## 已知问题（P1 诊断发现，非代码 patch）
+
+### 1. cann host_buffer cap 致 LLM 落 CPU（offload 失败根因）
+- **现象**：llama 标准 offload（ngl=99）把 LLM 权重放 cann host buffer（=CPU pinned RAM），compute 回退 CPU——推理时 AICore=0、HBM 仅 3.4G（LLM 4.7G 不在 NPU），prefill 7.9s / decode 350ms（4090 是 65ms / 38ms）
+- **根因**：`ggml-cann.cpp:2826` `device_get_props` 中 `host_buffer = getenv("GGML_CANN_NO_PINNED")==nullptr` → 默认 true，llama `make_gpu_buft_list` 据此优先用 host buffer type（`ggml_backend_cann_host_buffer_type`，其 alloc 走 CPU：ggml-cann.cpp:1726）
+- **配置绕过**：`GGML_CANN_NO_PINNED=1`（host_buffer=false，LLM 用 device buffer 上 HBM）。**单工生效**（F16 prefill 0.58s、HBM 8996），**双工 perf-duplex 不稳**（时而 HBM 3482 仍 CPU）
+- **诊断证据**：device 枚举正确（dev_count=2，CANN0 type=GPU 进 gpus，devices 不空，ngl=99）；alloc 探针确认 LLM 无 ~4.7G cann device alloc（走 host buffer）
+- **待修**：稳定双工 offload（改 cann `host_buffer` 默认 / 查双工 omni_init 的 buffer 选择路径）
+
+### 2. cann 量化算子缺失（Q4_K_M）
+- **现象**：Q4_K_M LLM 在 cann 上 compute 回退 CPU（AICore=0）；F16 LLM 在 cann 上正常（NPU，prefill 0.58s，13x）。vision/audio/tts/token2wav 均 F16 故一直正常
+- **结论**：cann 后端对 Q4_K_M 量化算子不支持/缺，对 F16 支持
+- **影响**：910B 上"量化优化"失效（4090 最优的 Q4_K_M 在 910B fallback CPU）→ LLM 改用 F16
+- **待评估**：Q6_K/Q5/Q8_0 等其他量化档在 cann 的支持情况（P2 重扫；Q8_0 在 CUDA 是乱码 bug，cann 可能正常且支持）

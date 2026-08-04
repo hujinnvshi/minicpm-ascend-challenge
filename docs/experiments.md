@@ -23,6 +23,31 @@
 - 意义：910B3 全链路首次跑通 + 首批可信 RTF；cann 补丁是关键（否则 T2W 必崩）
 - 原始 log：tools/omni/output/p0_run9.log（gitignored，含完整 23 条 RTF）
 
+### 实验 P1：910B3 perf-duplex 双工基线 + LLM offload 诊断（Q4_K_M / F16, build-cann）
+- 时间：2026-08-04
+- 目标：出 perf-duplex 双工基线（与 4090 实验002/016 同口径横向比）
+- **关键发现：cann 后端量化算子缺失，LLM offload 失败**
+
+诊断链（代码追踪 + 运行时探针 + npu-smi 确认）：
+1. perf-duplex Q4_K_M 全 FAIL（TTS RTF 7.97、LLM 判定 P50 150s）→ LLM 在 CPU
+2. npu-smi：推理时 **AICore=0%、HBM 3.4G**（LLM 4.7G 不在 NPU）
+3. cann device 注册完整（dev_count=2、CANN0 type=GPU、进 gpus、devices 不空），ngl 链路正确（99/LAYER/main_gpu=0）
+4. 真因：cann `device_get_props` 报 `host_buffer=true`（默认），llama 把 LLM 权重放 **cann host buffer（CPU pinned）**，compute 回退 CPU
+5. **cann 量化算子缺失**：Q4_K_M 不支持（CPU，prefill 7.9s）；**F16 支持**（NPU，prefill 0.58s，13x）
+
+结果对照（Q4_K_M vs F16 perf-duplex）：
+
+| 指标 | Q4_K_M | **F16** | 4090(Q4_K_M) |
+|---|---|---|---|
+| TTS RTF | 7.97 FAIL | **0.99 PASS** ✅ | 0.75 |
+| LLM 判定 P50 | 150000ms | 9133ms（仍 CPU） | 144ms |
+| LLM prefill | 7.9s(CPU) | 0.58s(NPU,单工) | 0.065s |
+
+- ✅ **F16 TTS RTF 0.99 = 首个可与 4090 横向比的有效基线**（910B F16 TTS 0.99 vs 4090 0.75，同量级实时）
+- ⚠️ 残留：**F16 双工模式 LLM 仍 CPU**（单工 F16 prefill 0.58s 上 NPU、双工不上；`GGML_CANN_NO_PINNED=1` 双工不稳）→ LLM 双工 offload 待解
+- 配置：`GGML_CANN_NO_PINNED=1` 让 LLM 用 device buffer（单工生效），详见 [cann-patches.md](cann-patches.md) 已知问题
+- 原始 log：tools/omni/output/perf_f16.log（gitignored）
+
 ---
 
 > 2026-07-31 补充：llama-omni-server 启动日志确认两条 ctx 告警

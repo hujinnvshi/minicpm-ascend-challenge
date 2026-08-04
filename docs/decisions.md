@@ -2,6 +2,16 @@
 
 记录参赛过程中的关键决策与依据。时间倒序。
 
+## 2026-08-04 决策（P1 诊断）：910B cann 量化算子缺失 → LLM 改用 F16
+
+**背景**：perf-duplex 双工基线全 FAIL，诊断确认 LLM 在 CPU（AICore=0、HBM 3.4G）。深查发现 cann 后端对 Q4_K_M 量化算子不支持（fallback CPU，prefill 7.9s），对 F16 支持（prefill 0.58s、NPU）；且 cann host_buffer cap 默认让 LLM 落 host buffer（CPU）。
+**结论**：
+1. 910B 上 LLM 必须用 **F16**（cann 支持、上 NPU），非 Q4_K_M（cann 不支持、CPU）
+2. 4090 上"量化是 RTF 主杠杆"在 910B **失效**——量化优化策略需重估（P2 重扫各档 cann 支持）
+3. F16 perf-duplex **TTS RTF 0.99**（首个与 4090 实验002/016 的 0.75 横向比的有效基线，同量级实时）
+**残留**：F16 **双工模式** LLM 仍未稳定上 NPU（单工 F16 上 NPU、双工不上；`GGML_CANN_NO_PINNED=1` 双工不稳）。下阶段攻克双工 offload。
+**详见**：[cann-patches.md](cann-patches.md) 已知问题、[experiments.md](experiments.md) P1
+
 ## 2026-08-04 决策：910B3 作为正式评测环境（厂家授权替代 910C）
 
 **背景**：厂家 HiDevLab 910C 资源紧张，通知用 910B3 替代；厂家说明"1 颗 910C 本质就是 2 颗 910B"。
