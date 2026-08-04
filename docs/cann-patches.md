@@ -45,6 +45,14 @@ context is a null pointer / current device: -1`。
 - **修复**：删断言，保留 `dst->src[1] = dst->src[0]`（与原 hack 意图一致，仅放宽前置）
 - **可选改进（本轮未做）**：改用 `aclnnPowTensorScalar`（`aclnn_pow.h`，exponent=2.0）作干净实现，避免 compute 阶段改图拓扑。后续优化时考虑。
 
+## 补丁 6 · host_buffer 默认 false（让 LLM 权重上 NPU device buffer）
+
+- **位置**：`ggml-cann.cpp:2825`（`ggml_backend_cann_device_get_props`）
+- **现象**：llama 标准 offload 把 LLM 权重放 cann host buffer（=CPU pinned RAM），compute 回退 CPU（AICore=0）
+- **原因**：`host_buffer = getenv("GGML_CANN_NO_PINNED")==nullptr` 默认 true，llama `make_gpu_buft_list` 据此把 host buffer 加入 buft_list 作权重 fallback
+- **修复**：翻转默认——`host_buffer = getenv("GGML_CANN_FORCE_PINNED") != nullptr`（默认 false），LLM 权重用 device buffer 上 NPU HBM。运行时 pinned 传输仍由 `ggml_cann_host_malloc`(1693) 的 `GGML_CANN_NO_PINNED` 控制（未动）
+- **验证**：单工 F16 LLM 稳定上 NPU（HBM 23.6G + AICore 66% + prefill 0.77s，不需 env）。**双工 perf-duplex 仍 CPU**（见已知问题 3）
+
 ---
 
 ## 验证
@@ -58,12 +66,17 @@ context is a null pointer / current device: -1`。
 
 ## 已知问题（P1 诊断发现，非代码 patch）
 
-### 1. cann host_buffer cap 致 LLM 落 CPU（offload 失败根因）
-- **现象**：llama 标准 offload（ngl=99）把 LLM 权重放 cann host buffer（=CPU pinned RAM），compute 回退 CPU——推理时 AICore=0、HBM 仅 3.4G（LLM 4.7G 不在 NPU），prefill 7.9s / decode 350ms（4090 是 65ms / 38ms）
-- **根因**：`ggml-cann.cpp:2826` `device_get_props` 中 `host_buffer = getenv("GGML_CANN_NO_PINNED")==nullptr` → 默认 true，llama `make_gpu_buft_list` 据此优先用 host buffer type（`ggml_backend_cann_host_buffer_type`，其 alloc 走 CPU：ggml-cann.cpp:1726）
-- **配置绕过**：`GGML_CANN_NO_PINNED=1`（host_buffer=false，LLM 用 device buffer 上 HBM）。**单工生效**（F16 prefill 0.58s、HBM 8996），**双工 perf-duplex 不稳**（时而 HBM 3482 仍 CPU）
-- **诊断证据**：device 枚举正确（dev_count=2，CANN0 type=GPU 进 gpus，devices 不空，ngl=99）；alloc 探针确认 LLM 无 ~4.7G cann device alloc（走 host buffer）
-- **待修**：稳定双工 offload（改 cann `host_buffer` 默认 / 查双工 omni_init 的 buffer 选择路径）
+### 1. cann host_buffer cap 致 LLM 落 CPU（**单工已修，见补丁 6**）
+- **现象**：llama 标准 offload（ngl=99）把 LLM 权重放 cann host buffer（=CPU pinned RAM），compute 回退 CPU（AICore=0、HBM 3.4G）
+- **根因**：`device_get_props` 的 `host_buffer` 默认 true，llama 据此把 host buffer 加入 buft_list 作权重 fallback
+- **修复（补丁 6）**：`host_buffer` 默认 false → **单工 LLM 稳定上 NPU**（HBM 23.6G + AICore 66% + prefill 0.77s，不需 env）
+- **残留**：**双工 perf-duplex LLM 仍 CPU**（见已知问题 3，duplex 计算路径问题）
+
+### 3. 双工 LLM 未上 NPU（duplex 计算路径，P1.5 未解）
+- **现象**：perf-duplex 双工模式 LLM 仍 CPU（HBM 3482 + AICore=0），即使补丁 6 修了 host_buffer。单工同配置 LLM 上 NPU（HBM 23.6G）
+- **推断根因**：双工用 `duplex_llm_thread_func`（独立 LLM 计算线程），其 buffer/device 绑定路径与单工（`llm_thread_func`）不同，LLM 计算未走 cann device
+- **影响**：双工 perf-duplex 全 FAIL（LLM 判定 9133ms），双工评测基线暂无效
+- **下阶段**：深查 `duplex_llm_thread_func` 的 buffer/device 绑定（omni.cpp 双工 LLM 计算路径）
 
 ### 2. cann 量化算子缺失（Q4_K_M）
 - **现象**：Q4_K_M LLM 在 cann 上 compute 回退 CPU（AICore=0）；F16 LLM 在 cann 上正常（NPU，prefill 0.58s，13x）。vision/audio/tts/token2wav 均 F16 故一直正常

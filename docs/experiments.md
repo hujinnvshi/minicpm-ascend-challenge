@@ -48,6 +48,18 @@
 - 配置：`GGML_CANN_NO_PINNED=1` 让 LLM 用 device buffer（单工生效），详见 [cann-patches.md](cann-patches.md) 已知问题
 - 原始 log：tools/omni/output/perf_f16.log（gitignored）
 
+### 实验 P1.5：host_buffer 默认 false 修复（单工 LLM 上 NPU，双工待解）
+- 时间：2026-08-04
+- 改动：补丁 6（ggml-cann.cpp:2825 host_buffer 默认 false，env 翻转 GGML_CANN_NO_PINNED→GGML_CANN_FORCE_PINNED）
+- **单工 F16 验证（成功）**：omni-cli --test 1（不带 env）
+  - npu-smi：**HBM 23674MB（23.6G）+ AICore 66% + Power 186W** = LLM 全上 NPU ✅
+  - prefill 0.773s（NPU 快，vs host_buffer=true 时 7.9s CPU）
+  - 意义：单工 LLM 稳定 offload NPU（不需 env），omni-cli 单工模式可用
+- **双工 perf-duplex F16 验证（失败）**：HBM 3482 + AICore=0（LLM 仍 CPU），全 FAIL（TTS RTF 1.01）
+  - 根因：双工 `duplex_llm_thread_func` 计算路径未走 cann device（host_buffer 修复不覆盖双工）
+  - 下阶段：深查 duplex_llm_thread_func（见 cann-patches 已知问题 3）
+- 结论：补丁 6 修复**单工** offload（有价值），**双工**是独立 duplex 路径问题
+
 ---
 
 > 2026-07-31 补充：llama-omni-server 启动日志确认两条 ctx 告警

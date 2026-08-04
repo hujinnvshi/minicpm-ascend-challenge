@@ -2822,7 +2822,7 @@ static void ggml_backend_cann_device_get_props(ggml_backend_dev_t dev, ggml_back
     props->type        = ggml_backend_cann_device_get_type(dev);
     ggml_backend_cann_device_get_memory(dev, &props->memory_free, &props->memory_total);
 
-    bool host_buffer = getenv("GGML_CANN_NO_PINNED") == nullptr;
+    bool host_buffer = getenv("GGML_CANN_FORCE_PINNED") != nullptr;  // 默认 false：LLM 权重用 device buffer 上 NPU（翻转原 NO_PINNED 语义；运行时 pinned 传输仍由 ggml_cann_host_malloc 的 GGML_CANN_NO_PINNED 控制）
 
     props->caps = {
         /* .async                 = */ false,

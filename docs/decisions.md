@@ -2,6 +2,15 @@
 
 记录参赛过程中的关键决策与依据。时间倒序。
 
+## 2026-08-04 决策（P1.5）：host_buffer 默认 false——单工 LLM 上 NPU，双工待 duplex 修复
+
+**背景**：P1.5 改 cann `host_buffer` 默认 false（补丁 6）试图稳定双工 LLM offload。
+**结论**：
+1. **单工成功**：host_buffer 默认 false 让 omni-cli 单工 F16 LLM 稳定上 NPU（HBM 23.6G + AICore 66% + prefill 0.77s，不需 env）
+2. **双工未解**：perf-duplex 双工 LLM 仍 CPU（HBM 3482），根因在 `duplex_llm_thread_func` 计算路径（非 host_buffer）
+**下阶段**：深查 `duplex_llm_thread_func` 让双工 LLM 上 NPU（双工评测基线前提）
+**详见**：[cann-patches.md](cann-patches.md) 补丁 6 + 已知问题 3、[experiments.md](experiments.md) P1.5
+
 ## 2026-08-04 决策（P1 诊断）：910B cann 量化算子缺失 → LLM 改用 F16
 
 **背景**：perf-duplex 双工基线全 FAIL，诊断确认 LLM 在 CPU（AICore=0、HBM 3.4G）。深查发现 cann 后端对 Q4_K_M 量化算子不支持（fallback CPU，prefill 7.9s），对 F16 支持（prefill 0.58s、NPU）；且 cann host_buffer cap 默认让 LLM 落 host buffer（CPU）。
