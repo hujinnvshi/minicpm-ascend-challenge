@@ -33,8 +33,13 @@
 
 - docs/competition-research.md  比赛调研（赛道/奖项/时间线/规则/报名）
 - docs/env-scan.md             910B3 云环境扫描报告（当前真实环境基线，权威）
+- docs/cann-patches.md         ggml-cann 6 补丁 + 已知问题（优化必读）
+- docs/experiments.md          实验记录（P0-P1.6 数据，4090/910B3）
+- docs/decisions.md            决策链（时间倒序，技术路线演变）
+- docs/optimization-methodology.md  RTF 优化方法论（思维链 + 检查清单）
+- docs/session-2026-08-04.md   0804 工作日志
+- docs/reproduce-guide.md      复现说明（评审用）
 - docs/api-test.md              官方 API 实测记录 + 注册入口
-- docs/decisions.md             决策记录（赛道选择/技术路线/场景推荐）
 - docs/ops-guide.md             操作手册（注册步骤/API 调用速查/风险清单）
 - assets/                       官方资料（海报、时间线、奖项、飞书群二维码）
 - notes/                        筹备过程记录（可选）
