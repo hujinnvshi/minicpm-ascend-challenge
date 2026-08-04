@@ -1922,7 +1922,8 @@ static bool ggml_cann_compute_forward(ggml_backend_cann_context & ctx, struct gg
             ggml_cann_scale(ctx, dst);
             break;
         case GGML_OP_SQR:
-            GGML_ASSERT(dst->src[1] == nullptr);
+            // SQR(x)=x*x via aclnn_mul. Newer ggml graph layouts may leave
+            // src[1] non-null; overwrite it (SQR has no real 2nd operand).
             dst->src[1] = dst->src[0];
             ggml_cann_binary_op<aclnn_mul>(ctx, dst);
             break;
@@ -2081,6 +2082,11 @@ static void ggml_backend_cann_set_tensor_async(ggml_backend_t backend,
     ggml_backend_cann_context * cann_ctx = (ggml_backend_cann_context *) backend->context;
     ggml_backend_buffer_t       buf      = tensor->view_src ? tensor->view_src->buffer : tensor->buffer;
 
+    // Bind the device to the current thread before the async copy. Token2Wav runs
+    // in its own thread; without this, aclrtMemcpyAsync fails with a null context
+    // (current device: -1) on CANN, since aclrtSetDevice is per-thread.
+    ggml_cann_set_device(cann_ctx->device);
+
     GGML_ASSERT(buf->buft == ggml_backend_cann_buffer_type(cann_ctx->device) && "unsupported buffer type");
     GGML_ASSERT(!ggml_is_quantized(tensor->type));
 
@@ -2106,6 +2112,9 @@ static void ggml_backend_cann_get_tensor_async(ggml_backend_t      backend,
                                                size_t              size) {
     ggml_backend_cann_context * cann_ctx = (ggml_backend_cann_context *) backend->context;
     ggml_backend_buffer_t       buf      = tensor->view_src ? tensor->view_src->buffer : tensor->buffer;
+
+    // Bind device to current thread (mirrors set_tensor_async; see note above).
+    ggml_cann_set_device(cann_ctx->device);
 
     GGML_ASSERT(buf->buft == ggml_backend_cann_buffer_type(cann_ctx->device) && "unsupported buffer type");
     GGML_ASSERT(!ggml_is_quantized(tensor->type));
@@ -2712,6 +2721,9 @@ static bool ggml_backend_cann_supports_op(ggml_backend_dev_t dev, const ggml_ten
  */
 static void ggml_backend_cann_event_record(ggml_backend_t backend, ggml_backend_event_t event) {
     ggml_backend_cann_context * cann_ctx = (ggml_backend_cann_context *) backend->context;
+    // Bind device to current thread (events may be recorded from worker threads
+    // like Token2Wav; aclrtRecordEvent requires a bound device context).
+    ggml_cann_set_device(cann_ctx->device);
     ACL_CHECK(aclrtRecordEvent((aclrtEvent) event->context, cann_ctx->stream()));
 }
 
@@ -2727,6 +2739,8 @@ static void ggml_backend_cann_event_record(ggml_backend_t backend, ggml_backend_
  */
 static void ggml_backend_cann_event_wait(ggml_backend_t backend, ggml_backend_event_t event) {
     ggml_backend_cann_context * cann_ctx = (ggml_backend_cann_context *) backend->context;
+    // Bind device to current thread (mirrors event_record; see note above).
+    ggml_cann_set_device(cann_ctx->device);
     if (ggml_backend_is_cann(backend)) {
         ACL_CHECK(aclrtStreamWaitEvent(cann_ctx->stream(), (aclrtEvent) event->context));
     } else {

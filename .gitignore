@@ -41,3 +41,9 @@ dist/
 
 # ===== 工具索引（CodeGraph 等本地生成，不入库） =====
 .codegraph/
+
+# ===== omni-cli 运行输出副产品（项目根，含 wav/log） =====
+/tools/
+
+# ===== capture-env 资源快照（运行副产品） =====
+resource-*/

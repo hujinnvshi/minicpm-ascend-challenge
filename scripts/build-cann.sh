@@ -55,7 +55,7 @@ if [ "${1:-}" = "--graph" ]; then
 fi
 
 echo "[3/3] 构建 llama-omni-cli / llama-omni-perf-duplex"
-cmake "${CMAKE_ARGS[@]}"
+cmake -S "$REPO" "${CMAKE_ARGS[@]}"
 cmake --build "$BUILD_DIR" --target llama-omni-cli llama-omni-perf-duplex -j"$JOBS"
 
 echo "DONE: $BUILD_DIR/bin/llama-omni-cli"

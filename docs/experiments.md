@@ -1,5 +1,30 @@
 # 实验记录
 
+## 910B3 云环境（2026-08-04 起）
+
+- 硬件：昇腾 910B3 单卡 64GB HBM（厂家授权替代 910C）+ 鲲鹏 920 256 核 + 2TB 内存
+- 构建：build-cann（GGML_CANN=ON, CANN 9.1.0-beta.3, aarch64）
+- 权重：/workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/（官方预置，只读直用）
+- cann 补丁：见 [cann-patches.md](cann-patches.md)（5 处修复：T2W 线程 device 绑定 + event 接口 + SQR 断言）
+
+### 实验 P0：910B3 全链路跑通（Q4_K_M, --omni --test 9, build-cann）
+- 时间：2026-08-04
+- 输入：omni_test_case_0000~0008（9 图片+语音，拼接 prefill 后单次 decode）
+- 构建：build-cann + 5 处 cann 补丁
+- 结果：退出 0，9 输入全 prefill（26 次），生成 23 wav（round_000）
+  - T2W RTF：mean **0.861** | P50 0.850 | P95 1.040 | min 0.72 | max 1.11（23 chunk）
+  - 实时占比：**87%（20/23 chunk RTF<1.0）**
+  - wav 质量：24kHz/16bit/mono，RMS mean 2562 / min 1606，**0 静音**
+  - LLM 输出：对 omni_test_case_0000.jpg（滑雪图）准确英文描述 → Q4_K_M 视觉+语义精度正常
+- 观察：
+  - 这是 **T2W 单段 RTF**（token2wav 推理），不含 LLM+TTS；e2e RTF 待 P1 perf-duplex
+  - queue_wait 仍显著（T2W 等 TTS 产 token）→ 瓶颈在 TTS 段（与 4090 结论一致）
+  - `--test N` 语义：N 个输入拼接 prefill + 单次 decode（非 N 轮独立对话）
+- 意义：910B3 全链路首次跑通 + 首批可信 RTF；cann 补丁是关键（否则 T2W 必崩）
+- 原始 log：tools/omni/output/p0_run9.log（gitignored，含完整 23 条 RTF）
+
+---
+
 > 2026-07-31 补充：llama-omni-server 启动日志确认两条 ctx 告警
 > - LLM: n_ctx_seq 8192 < n_ctx_train 40960（只用 1/5，910C 显存够可加大）
 > - TTS: n_ctx_seq 8192 > n_ctx_train 4096（官方 demo 默认 -c 8192 超出 TTS 训练长度！

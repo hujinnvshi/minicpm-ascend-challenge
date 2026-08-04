@@ -28,7 +28,7 @@ snapshot() {
     {
         echo "=== $tag $(date '+%F %T') ==="
         echo "--- host ---"
-        hostname; uname -r; nproc; free -h | head -2
+        (hostname 2>/dev/null || uname -n); uname -r; nproc; free -h | head -2
         echo "--- cpu ---"
         uptime
         echo "--- disk ---"
