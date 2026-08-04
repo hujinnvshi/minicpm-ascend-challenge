@@ -2,6 +2,30 @@
 
 记录参赛过程中的关键决策与依据。时间倒序。
 
+## 2026-08-04 决策：本地 ↔ 910B 同步通道 = Git（GitHub 中转）
+
+**背景**：星宇 910B（无公网入站地址）原计划 Cloudflare Tunnel 打通本地 SSH。
+实施中发现华为云封了 cloudflared 出站端口（UDP 7844 QUIC 不通，TCP 443 到
+边缘也可能受限），隧道方案受阻。
+
+**结论**：放弃 SSH 隧道，改用 Git 仓库（GitHub 远端）作为本地 ↔ 910B 的
+唯一同步通道。
+
+**理由**：
+1. 910B 出站 443 已验证可达（curl github.com 通），git clone/push 走 HTTPS/SSH 443 无阻碍
+2. 不依赖任何隧道/端口放行，平台无感知
+3. 项目本就全部版本化在 git 仓库（/opt/minicpm-ascend-challenge，已推 GitHub）
+4. 同步内容即仓库内容：代码、脚本、文档、实验结果——天然一致
+
+**工作流**：
+- 本地：编辑 → commit → push origin main
+- 910B：git pull → 执行/测试 → 结果写回 docs/、benchmark_results/ → commit → push
+- 冲突处理：各端改不同文件；同文件冲突以本地为准，手动合并
+- 大文件（权重 GGUF）：不走 git，走 ModelScope/对象存储（git 只同步代码与文档）
+
+**隧道后续**：Cloudflare Tunnel 方案保留为备选（端口放行后可复用已建好的
+asc-910b 隧道 8eb69525 + ssh.asc910b.opengood.cc CNAME），当前不依赖。
+
 ## 2026-07-31 决策：放弃赛道二，专注赛道一（llama.cpp-omni）
 
 **背景**：时间紧（提交 8/17），双赛道并行稀释精力。
