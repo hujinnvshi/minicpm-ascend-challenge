@@ -488,8 +488,12 @@ int main(int argc, char ** argv) {
 
     common_init();
 
+    // [P1.7] TTS 模型 offload 层数可由环境变量覆盖（-1=全 offload NPU，0=CPU）。
+    int tts_ngl = -1;
+    if (const char * e = std::getenv("OMNI_TTS_GPU_LAYERS")) { if (*e) tts_ngl = std::atoi(e); }
+
     auto ctx_omni = omni_init(&params, media_type, use_tts, tts_bin_dir,
-                              /*tts_gpu_layers=*/-1, /*token2wav_device=*/token2wav_device,
+                              /*tts_gpu_layers=*/tts_ngl, /*token2wav_device=*/token2wav_device,
                               /*duplex_mode=*/true,
                               /*existing_model=*/nullptr, /*existing_ctx=*/nullptr,
                               /*base_output_dir=*/output_dir);

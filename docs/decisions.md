@@ -2,6 +2,22 @@
 
 记录参赛过程中的关键决策与依据。时间倒序。
 
+## 2026-08-05 决策（P1.7）：诊断先行 + AICore 当 offload 代理 + LLM→TTS 队列解耦
+
+**背景**：P1.6 把双工 LLM model 上 device 后，docs 记"decode AICore 仅 4% / compute 没真走 NPU"，下阶段 P1.7 目标"双工 LLM compute 真走 NPU + LLM P50 <1000ms"。三个诊断方向（device 绑定 / audio encoder / model 释放）嫌疑未定。
+
+**过程**：
+1. **走 plan 流程**（EnterPlanMode + Explore duplex compute 路径）。三个 Explore agent 对根因各执一词（device 绑定 / host_buffer / encoder），**第一手日志分析（p16_final.log）推翻全部**：perf-duplex 用 session API（`stream_decode`，与单工同函数、同 ctx_llama、同 CANN backend），decode 本应上 NPU。
+2. **AskUserQuestion 两点确认**：① AICore>30% 当 **offload 代理**（非硬门槛；batch=1 自回归 decode 天然低 util）② **先实测诊断再定点修**。
+3. **6 组对照实验 + micro-probe 实测**（C-1…C-8）：C-1 证 decode 真在 NPU（burst 60–84%）；C-2（--no-tts）证 LLM 单独 P50 304ms PASS；C-4 Q8_0 不降速（非带宽主导）；C-6/7 TTS 子系统不能下 CPU；**定位真因 = LLM↔TTS 队列容量 1 锁步**。
+
+**结论 / 决策**：
+1. **AICore>30% 当 offload 代理**，不当地对门槛——batch=1 decode memory-bound 天然 util 低，用"decode 期 AICore burst + HBMbw 高"证明 NPU 在算即可（P1.6"AICore 4%"是采样伪影，纠正 docs）。
+2. **诊断先行**（runtime 实测 > 静态推理）——三个 agent 的静态结论全错，npu-smi 实测 + micro-probe 才定位真因。沉淀为方法论（rigor-verify-loop）。
+3. **修复 = LLM→TTS 队列 1→16 解耦**（`tools/omni/omni.cpp` omni_init，env `OMNI_TTS_QUEUE` 可覆盖）——一行改动，**LLM P50 8295→977ms（8.5×，<1000 达标）**，TTS RTF 0.80 不回归，quality-neutral。
+4. **未达 exit 0 诚实记录**：LLM P95 1014ms（临界）+ 首响 1493ms（T2W ~700ms floor）→ exit 2。冲 exit 0 的下阶段方向 = **T2W 提速（n_timesteps，破 prompt_cache 绑定）或 NPU 多流并发**（decode 期 NPU 平均仅 ~23%，硬件 85% 空闲——是执行串行，非算力不足）。
+**详见**：[experiments.md](experiments.md) P1.7、[cann-patches.md](cann-patches.md) 已知问题3（已纠正）
+
 ## 2026-08-04 决策：本地 ↔ 910B 同步通道 = Git（GitHub 中转）
 
 **背景**：星宇 910B（无公网入站地址）原计划 Cloudflare Tunnel 打通本地 SSH。

@@ -72,11 +72,16 @@ context is a null pointer / current device: -1`。
 - **修复（补丁 6）**：`host_buffer` 默认 false → **单工 LLM 稳定上 NPU**（HBM 23.6G + AICore 66% + prefill 0.77s，不需 env）
 - **残留**：双工 LLM compute 未真走 NPU（见已知问题 3，P1.6 已让 model 上 device 但 compute AICore 仅 4%）
 
-### 3. 双工 LLM compute 未走 NPU（model 已上 device，P1.6 部分解）
-- **现象**：perf-duplex 双工 LLM model **已上 device**（use_mmap=false，HBM 23.6G + alloc 14.4G 成功 err=0 + AICore 峰值 66%），但 decode 中 **AICore 仅 4%**（compute 没真走 NPU），LLM P50 8840ms
-- **进展（P1.6）**：perf-duplex `use_mmap=false` + 补丁6 host_buffer → 双工 model 上 device；之前"HBM 3481=model CPU"是**采样时机误判**（加载前/早期），实际 model 在 device
-- **残留**：① decode AICore 仅 4%（compute 路径，graph_compute 没真 NPU）② LLM P50 8840ms 含大量等待（疑似 audio encoder/流水线瓶颈）③ model 后续释放（t=160 HBM 降 3481）
-- **下阶段 P1.7**：查 duplex compute 路径（AICore 为何仅 4%）+ 流水线瓶颈（audio encoder）
+### 3. ~~双工 LLM compute 未走 NPU~~ → **P1.7 澄清：一直在 NPU，AICore 4% 是采样伪影；真因是 LLM↔TTS 队列锁步**
+
+- **P1.6 误判**：以为 decode 中 AICore 仅 4% = "compute 没真走 NPU / graph_compute 路径问题"。
+- **P1.7 实测推翻**：复跑 P1.6 + npu-smi 0.5s 细粒度采样，decode 活跃窗口 **AICore 峰值 60–84%、HBM 带宽 50%** —— decode **一直在 NPU**（memory-bound，权重流式）。"AICore 4%" 是 2min 窗口时间均值伪影（含 prefill 空闲 + 帧间等待 + drain 阶段）。**offload 从未失败**，graph_compute / device 绑定均正常。
+- **P50 8840ms 真因**：`omni.cpp` LLM→TTS-model 队列 `TTSThreadInfo(1)`（容量=1）强制 LLM 与 TTS-model（同 NPU 上的第二个自回归 decoder）严格 1:1 锁步 → 每帧 decode 墙钟叠加 TTS-model decode 时间 → 1.4s/帧 > 1s → 积压 → P50 8.3s。**非 compute 路径、非 audio encoder、非 model 释放**（model 维持 HBM 36%，未释放）。
+- **P1.7 修复**：队列 1→16（`tools/omni/omni.cpp` omni_init，env `OMNI_TTS_QUEUE` 可覆盖）→ **LLM P50 8295→977ms（8.5×，<1000 达标）**，TTS RTF 0.80 不回归，quality-neutral（token 序列逐字相同）。
+- **残留（非 LLM compute）**：LLM P95 1014ms（临界）+ 首响 1493ms（T2W ~700ms floor）。冲 exit 0 需 T2W 提速或 NPU 多流并发（decode 期 NPU 平均仅 ~23%，硬件有余量但当前串行）。
+- **详见**：[experiments.md](experiments.md) P1.7、[decisions.md](decisions.md) P1.7 决策
+
+> ⚠️ 提醒（给后续诊断）：判断"NPU 是否在算"必须用**细粒度 npu-smi 采样（≤0.5s）+ 与 [prof] decode 时间戳对照**，不能看单次或粗均值；`npu-smi info -t usages -i 1` 的 `Aicore Usage Rate` + `HBM Bandwidth Usage Rate` 是决定性指标（HBMbw 高=真在 NPU 算）。
 
 ### 2. cann 量化算子缺失（Q4_K_M）
 - **现象**：Q4_K_M LLM 在 cann 上 compute 回退 CPU（AICore=0）；F16 LLM 在 cann 上正常（NPU，prefill 0.58s，13x）。vision/audio/tts/token2wav 均 F16 故一直正常
