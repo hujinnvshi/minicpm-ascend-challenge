@@ -41,5 +41,6 @@
 - docs/reproduce-guide.md      复现说明（评审用）
 - docs/api-test.md              官方 API 实测记录 + 注册入口
 - docs/ops-guide.md             操作手册（注册步骤/API 调用速查/风险清单）
+- docs/ops-handoff.md           运维交接文档（环境/账号位置/运行服务/操作速查/TODO，2026-08-05）
 - assets/                       官方资料（海报、时间线、奖项、飞书群二维码）
 - notes/                        筹备过程记录（可选）
