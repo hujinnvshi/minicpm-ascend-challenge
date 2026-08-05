@@ -57,7 +57,7 @@ python3 code/llama.cpp-omni/tools/omni/perf/analyze_perf.py \
   code/llama.cpp-omni/tools/omni/output/perf_report.json --interval-ms 1000
 
 # 2) RTF 独立复核（我写的，交叉验证 analyze_perf.py）
-python3 tools/verify_rtf.py code/llama.cpp-omni/tools/omni/output/*.json
+python3 scripts/verify_rtf.py code/llama.cpp-omni/tools/omni/output/*.json
 
 # 3) 重编译（改 ggml-cann.cpp / omni.cpp 后）
 cmake --build code/llama.cpp-omni/build-cann -j$(nproc)
