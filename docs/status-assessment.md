@@ -15,6 +15,23 @@ TTS RTF 0.80 不回归。残留 exit 2：P95 1014ms（临界）+ 首响 1493ms�
 
 > 下文 08-04 版的"AICore 4% / compute 未走 NPU / model 释放"三处判断以此为准作废。
 
+## ⚠️ 框架纠正（2026-08-05）：对比基线不当，真瓶颈是 CANN 后端而非 910B 硬件
+
+下文（含 P1.7/P2 段及 08-04 版）多处用"910B vs 4090 → 910B 是瓶颈、要追 4090 实时"框架，**此框架有两个混淆，需纠正**：
+
+1. **硬件档位不对等**：910B 是**数据中心级 NPU**（对标 A100/H100 档），4090 是**消费/工作站 GPU**（Nvidia 高端算力是 H100/H200/B200，非 4090）。纸面 910B 的 HBM 带宽（1.3TB/s）**高于** 4090（1TB/s），INT8 算力是其强项——**同精度下 910B 本应胜出**，不应是"追赶方"。
+2. **精度不对等（更致命）**：4090 跑 **Q4_K_M**（~5GB 权重，贴 floor ~8ms/token）；910B 跑 **F16**（~16GB）——**被迫**，因 CANN 不支持 Q4_K_M 量化算子（P1 发现）。这 **3.2× 权重大小差**不是硬件差，是 **CANN 后端缺量化支持**，占了大半性能 gap。
+
+**证据：910B NPU 算子本身高效**——`llama_decode` 实测 13ms/token，而 F16 8B 理论 floor = 15.25GB/1.3TB/s = **12ms**（贴 floor）。但 llama-bench 实测 36ms/token，多出的 ~23ms 是 **ggml/CANN per-token 管线开销**（scheduler dispatch + KV + logits 处理），非 NPU 算力也非纯带宽。即：**4090 跑在 ~1.5× floor、910B 跑在 ~3× floor**——910B 离自己 floor 更远的这部分，是 CANN 后端开销，不是硬件。
+
+**纠正后的真瓶颈** = **CANN 后端两个 gap**：① 不支持量化算子（被迫 F16，多 3.2× 带宽）；② per-token 管线开销大（~3× floor）。**不是 910B 硬件不行。**
+
+**公平 baseline 与优化目标（纠正）**：不是"追 4090"，而是"**逼近 910B 自身 floor（12ms/token）**"——这样 910B 作为数据中心卡本应稳过双工实时门槛，exit-0 自然达成，而非靠 T2W 首块手术硬抠。重新打开两条更对档位的杠杆：
+- **A. 砍 per-token CANN/ggml 管线开销**（36ms→贴近 13ms floor）：scheduler/KV/logits 路径。同精度下即可反超 4090，且首响/P95 一起下来（它们卡住的根因也是 per-token 开销）。
+- **B. 让量化在 CANN 上真正工作**（非 gguf Q8_0 那种 on-the-fly dequant——P1.7 实测无效；而是 CANN 原生 INT8/W8A8 通路，发挥 910B INT8 强项）。P1.7 未探，待重估。
+
+> 下文 P2"接受天花板"结论按此重述：天花板是 **CANN 后端**（有 backend 工作可做），非硬件绝路；exit-0 可达性比原结论更乐观。
+
 ## P1.7 完成状态（2026-08-05）+ P2 优化空间
 
 **P1.7 成果**：双工 LLM P50 **8295→977ms（8.5×，<1000 达标）**，TTS RTF **0.80**（不回归），quality-neutral（queue=1 vs 16 token 序列逐字相同）。offload 证实在 NPU（burst AICore 60–84% + HBMbw 50%）。修复 = `tools/omni/omni.cpp` LLM→TTS 队列 1→16 解耦（env `OMNI_TTS_QUEUE`）。**未达 exit 0（exit 2）**：LLM P95 1014ms（临界超 14ms）+ 首响 e2e 1493ms（T2W ~700ms floor）。
