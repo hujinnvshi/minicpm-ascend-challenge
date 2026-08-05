@@ -129,6 +129,22 @@
 
 **结论**：plan 的两个"易"杠杆（T2W 减步、首块缩小 via step_size）**Stage 0 全证伪**。剩余可行杠杆：① emb 清理（小，安全）+ 并发（Stage 3，稳态 LLM P95，backend 手术）——不碰首响；② T2W 首块 `T_chunk_token` resize（侵入式，唯一 exit-0 路径）。需决策是否为 exit 0 投入侵入式 T2W 改动，或接受首响 floor（exit 2）只拿稳态收益。
 
+### 实验 P2-Stage3（诊断）：NPU 并发可行性 —— 证伪（runtime-capped 1.24×）
+- 时间：2026-08-05
+- 目标：诊断式验证"单 NPU 能否并发跑多个 CANN stream"（决定并发杠杆值不值得投 T2W async 手术）。
+- 方法：`llama-bench`（纯 LLM decode，F16 8B，-ngl 99，tg128）单跑 vs 2 进程并发，npu-smi 采样 AICore + HBM 带宽。
+
+| 配置 | tg128 单进程 | 总吞吐 | AICore max/avg | HBMbw max/avg |
+|---|---|---|---|---|
+| 单进程 | 27.65 t/s（36ms/tok） | 27.65 | 41 / 22.4% | 32 / 28% |
+| 2 进程并发 | 17.2 t/s each | 34.4（**1.24×**） | 45 / 17% | 40 / 36% |
+
+- **关键**：2 并发仅 1.24×（全串行应 1×、全并发应 2×），且 **AICore（22–45%）和 HBM 带宽（28–40%）均未饱和** —— 说明 "85% 空闲 AICore" **不是可榨取的免费算力**：某层 runtime/driver/per-token-overhead 把并发 LLM 吞吐封顶在 ~1.24×（两 decode 抢同一执行资源但无一项饱和）。
+- **理论 floor**：F16 8B decode = 15.25GB / 1.3TB/s ≈ 12ms/tok；实测 36ms（llama-bench）/ 22ms（duplex）均高于 floor → per-token 开销主导（非纯带宽）。
+- **结论**：**并发杠杆证伪** —— 不值得为 1.24× 投 T2W async backend 手术（且不帮首响）。idle AICore 是 bandwidth/overhead-bound 空闲，非并发可利用。
+
+**P2 综合天花板**：exit 0 三"易"杠杆（T2W 减步 / step_size 首块 / 2nd device）Stage 0 全证伪；并发杠杆 Stage 3 诊断证伪（runtime-capped 1.24×）。**exit 0 在当前 910B/F16 配置下不可达**，唯一剩余路径是侵入式 T2W 首块 `T_chunk_token` resize（解首响 floor，高工作量/风险）。否则现实天花板 = P1.7 成果（LLM P50 977ms <1000、TTS RTF 0.80、exit 2，首响 ~1500ms floor）。
+
 ---
 
 > 2026-07-31 补充：llama-omni-server 启动日志确认两条 ctx 告警
