@@ -106,6 +106,29 @@
 
 **结论**：P1.6 的"compute 没真走 NPU"是采样误判，offload 一直正常；P50 8.3s 的真因是 **LLM↔TTS-model 队列锁步**使单 NPU 上 LLM+TTS 串行。一行队列解耦（1→16）把 **LLM P50 砍到 977ms（<1000 达标，8.5×）** 且 TTS RTF 0.80 不回归。下阶段（P2）冲 exit 0 需攻 T2W 提速或 NPU 多流并发（decode 期 NPU 平均仅 ~23%，85% 空闲，硬件有余量但当前串行）。
 
+### 实验 P2-Stage0：exit-0 优化空间验证（三"易"杠杆全证伪，首响天花板澄清）
+- 时间：2026-08-05（P1.7 后）
+- 目标：验证 exit-0 路径上三个"易"杠杆的可行性（plan Stage 0），定方向。
+
+**三组对照（全证伪）**：
+
+| 杠杆 | 结果 | 机制/证据 |
+|---|---|---|
+| 2nd NPU device（T2W→dev1） | ❌ 死 | npu-smi `Total Count=1, Chip Count=1, 20 AICores, 64GB` —— **单 compute NPU**；CANN `dev_count=2` 是软件枚举假象 |
+| T2W `OMNI_FLOW_STEPS=4`（5→4 减步） | ❌ 死（崩溃） | 放宽 `init_from_host_caches` 的 n_timesteps 硬拒(token2wav-impl.cpp:8308)后，cache 张量本身按 5 步 shape 存 → `ggml_cast` 触发 `GGML_ASSERT(nelements)` 崩溃(ggml.c:3485)。prompt_cache.gguf 需按 4 步重导，而 prompt_bundle 无生成工具（experiment 020 死路复现） |
+| `OMNI_STEP_SIZE=5`（首块缩小） | ❌ 无效且更差 | 音频块尺寸由 T2W `T_chunk_token=28`(≈1s) 决定，**与 LLM step_size 无关**；减 step_size 只增 TTS-model 调用开销 → 首响 1493→**1545ms**(更差)、TTS RTF 0.80→**0.88**(更差)、LLM P95 1014→1040。wav dur 仍 1.00s 证实块未缩。 |
+
+**首响 1493ms 真分解（C-8 实测）**：LLM 首解码 ~359ms + TTS-model 产 28 音频token ~430ms + T2W 首wav(1s块) ~700ms ≈ 1489ms，**首块串行**。
+
+**澄清的天花板**：
+- 真·首响杠杆 = **T2W `T_chunk_token` 首块专门缩小**（token2wav-impl.cpp:8326，session 常量 28；改首块更小如 8 token≈0.3s → T2W 首wav ~210ms + TTS 首块更短 → 首响可<1000）。但这是**侵入式 T2W session 改动**（变长 chunk + 音频输出适配），高工作量/中高风险，是 exit-0 的唯一路径。
+- **稳态 LLM P95<1000 可达**（并发 Stage 3 + emb 清理），但**不帮首响**（首块串行）。
+- exit 0 = 首响<1000，**需侵入式 T2W 首块 resize**；否则 exit 2 由首响 floor 锁定。
+
+**副产物**：`OMNI_STEP_SIZE` env 旋钮（step_size 可调，默认 10 不变；实测减值无益但保留为可调）；token2wav cache 硬拒注释更新（说明为何减步不可行）。
+
+**结论**：plan 的两个"易"杠杆（T2W 减步、首块缩小 via step_size）**Stage 0 全证伪**。剩余可行杠杆：① emb 清理（小，安全）+ 并发（Stage 3，稳态 LLM P95，backend 手术）——不碰首响；② T2W 首块 `T_chunk_token` resize（侵入式，唯一 exit-0 路径）。需决策是否为 exit 0 投入侵入式 T2W 改动，或接受首响 floor（exit 2）只拿稳态收益。
+
 ---
 
 > 2026-07-31 补充：llama-omni-server 启动日志确认两条 ctx 告警

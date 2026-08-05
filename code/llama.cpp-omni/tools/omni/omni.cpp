@@ -9885,7 +9885,11 @@ static bool duplex_do_decode(omni_context * ctx_omni, common_params * params,
 
     // ---- 采样主循环（搬自老 stream_decode duplex 分支） ----
     const int max_tgt_len = params->n_predict < 0 ? params->n_ctx : params->n_predict;
-    const int step_size   = 10;   // chunk 推送给 TTS 的 LLM token 数量
+    // [P2] step_size（每 chunk 推给 TTS 的 LLM token 数）可由 OMNI_STEP_SIZE 覆盖（默认10）。
+    // 减小 → 首块更小 → 首响更快（simplex 实测 step5 首响 612ms vs step10 791ms），但可能影响音质。
+    int step_size_env = 10;
+    if (const char * e = std::getenv("OMNI_STEP_SIZE")) { if (*e) step_size_env = std::atoi(e); }
+    const int step_size   = step_size_env;   // chunk 推送给 TTS 的 LLM token 数量
     bool llm_finish                  = false;
     bool local_is_end_of_turn        = false;
     int  current_chunk_tokens        = 0;

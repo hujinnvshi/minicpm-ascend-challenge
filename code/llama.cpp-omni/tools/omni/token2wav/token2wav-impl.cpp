@@ -8306,6 +8306,10 @@ bool flowGGUFModelRunner::init_from_host_caches(const flowStreamCacheHost & cach
         return false;
     }
     if (cache_host.n_timesteps != 0 && cache_host.n_timesteps != n_timesteps) {
+        // [P2 实测] n_timesteps 减步（OMNI_FLOW_STEPS<5）被此处封死是“真”的：cache 张量本身
+        // 是按 5 步形状存的，放宽此处后会在后续 ggml_cast 触发 GGML_ASSERT(nelements) 崩溃
+        // （prompt_cache.gguf 需按新步数重新导出，而 prompt_bundle 无生成工具，见 experiments 020）。
+        // 故保留硬拒。T2W 提速改走并发（Stage 3）而非减步。
         LOG_ERROR( "flowGGUFModelRunner.init_from_host_caches: n_timesteps mismatch (cache=%d, got=%d)\n",
                      cache_host.n_timesteps, n_timesteps);
         return false;
