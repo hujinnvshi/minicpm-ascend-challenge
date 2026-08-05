@@ -15,6 +15,30 @@ TTS RTF 0.80 不回归。残留 exit 2：P95 1014ms（临界）+ 首响 1493ms�
 
 > 下文 08-04 版的"AICore 4% / compute 未走 NPU / model 释放"三处判断以此为准作废。
 
+## P1.7 完成状态（2026-08-05）+ P2 优化空间
+
+**P1.7 成果**：双工 LLM P50 **8295→977ms（8.5×，<1000 达标）**，TTS RTF **0.80**（不回归），quality-neutral（queue=1 vs 16 token 序列逐字相同）。offload 证实在 NPU（burst AICore 60–84% + HBMbw 50%）。修复 = `tools/omni/omni.cpp` LLM→TTS 队列 1→16 解耦（env `OMNI_TTS_QUEUE`）。**未达 exit 0（exit 2）**：LLM P95 1014ms（临界超 14ms）+ 首响 e2e 1493ms（T2W ~700ms floor）。
+
+**P2 优化空间**（按 P1.7 实测证据排序，分三角度；冲 exit 0 = 解 P95 + 首响）：
+
+### 角度一：硬件算力流程（最大杠杆，直击 exit-0 阻塞）
+1. **NPU 多流并发** 🔥（首选）：P1.7 npu-smi 证 decode 期 **NPU 平均仅 ~23%（85% 空闲）** —— LLM decode + TTS-model + T2W 三者在单 NPU 上**时间片串行**（队列解耦消除了锁步阻塞，但三者仍共享 NPU 调度，未真并行）。若 CANN 多流让三者真并发 → 吞吐叠加 → P95 与首响同降。待查：`ggml-cann` 是否单 stream / 设备级锁导致串行；910B 多 stream 并发能力。
+2. **T2W 提速**（解首响 floor）：首响 1493ms 的 T2W ~700ms floor 来自 Flow ODE 5 步（`n_timesteps`，experiment 020 被 `prompt_cache.gguf` 绑定）。破绑定减步数 → T2W 线性降 → 首响降。待查：prompt_cache 重新导出路径 / CANN 侧 cache 校验可否绕过。
+3. **decode per-token dispatch**：dec=13ms/token 中可能含 per-token graph dispatch。ACL graph 缓存可减，但 910B `USE_ACL_GRAPH` 头文件缺失（不支持）→ 受限，次选。
+
+### 角度二：数据结构（per-token 下探）
+1. **embeddings 回拷**：`eval_tokens_with_hidden` 每 token `malloc` + `memcpy` hidden_states（n_embd=4096 floats）= **emb 8ms/token（36% intrinsic）**。改预分配 buffer + 异步/批量 device→host 回拷 → 省 per-token sync。待查：CANN 异步回拷可行性。
+2. **KV cache 量化**：KV 当前 F16。若 CANN 支持量化 KV（Q8_0）→ KV 内存/带宽减半 → attention 提速。待查：CANN KV 量化算子。
+3. **LLMOut/队列对象零拷贝**：`hidden_states` 用 `std::vector::insert` 拷贝（omni.cpp:9902），可改 move / 预分配。
+
+### 角度三：存储空间（多为非瓶颈，剔除伪杠杆）
+1. **权重量化 = 伪杠杆（已证）**：P1.7 C-4 证 **Q8_0 decode 速度 = F16**（per-token 开销主导，非带宽）→ 量化对 910B 双工 decode **无收益**，不再追求（纠正 track1-optimization-space.md 的 Q8_0 假设）。
+2. **HBM 余量足**：64G 用 ~36%，非吞吐瓶颈（瓶颈是串行调度，见角度一）。
+3. **prompt_cache.gguf**：T2W `n_timesteps` 绑定属角度一 T2W 提速项。
+4. **磁盘 GGUF**：全套只读预置，非瓶颈。
+
+**推进顺序**：角度一.1（NPU 多流并发）→ 角度一.2（T2W 提速）→ 角度二.1（emb 回拷）。下阶段进 plan 模式对角度一.1 深挖（ggml-cann 调度/并发模型）定方案。详见 [experiments.md](experiments.md) P1.7、[cann-patches.md](cann-patches.md) 已知问题3。
+
 ## 结论（2026-08-04 更新）
 
 **910B3 环境就位 + 全链路跑通 + 双工 TTS RTF 0.80 基线成立**（首个 <1，
