@@ -75,6 +75,37 @@
   - model 后续释放（t=160 HBM 降到 3481，原因待查）
 - 结论：**offload 成功**（model 上 NPU），但 **LLM compute 没真走 NPU**（AICore 4%）+ duplex 流水线有瓶颈。超出 offload 范围，下阶段查 compute 路径 / 流水线
 
+### 实验 P1.7：双工 LLM compute 路径实测诊断 + LLM→TTS 队列解耦（P50 8295→977ms，8.5×）
+- 时间：2026-08-05
+- 目标：双工 LLM compute 真走 NPU + LLM P50 <1000ms（双工实时）
+
+**第一手日志分析推翻 P1.6 的 "compute 没真走 NPU / AICore 4%" 误判**：复跑 P1.6（F16 perf-duplex 36 帧）+ 后台 npu-smi 0.5s 细粒度采样，decode 活跃窗口 AICore **峰值 60–84%、HBM 带宽 50%** —— decode **确在 NPU**（memory-bound，权重流式），"AICore 4%" 是**采样时机/时间均值伪影**（2min 窗口含 prefill 空闲 + 帧间等待 + drain 阶段，平均 14.5% 但实际 compute burst 到 72%）。**offload 一直正常**，原 cann-patches 已知问题3 的"compute 未走 NPU"前提**不成立**。
+
+**真因定位（6 组对照实验 + micro-probe）**：
+
+| 实验 | 配置 | LLM P50 | ms/token(30帧) | 结论 |
+|---|---|---|---|---|
+| C-1 | F16 + TTS（=P1.6 基线） | **8295ms** | 49 | decode 在 NPU（burst 72%）但 1.4s/帧 > 1s → 积压 |
+| C-2 | F16 `--no-tts`（仅 LLM） | **304ms** | 22 | **LLM 单独 P95 872ms PASS** —— NPU compute 本就够实时 |
+| C-5 | F16 + ETH_PROBE | — | dec 13 + emb 8 + 外层≈0 = 22 | per-token 拆解：13ms NPU compute、8ms embeddings 回拷 |
+| C-4 | Q8_0 + TTS | 9266ms | 49 | **量化不降速**（Q8_0=F16）→ 非 memory-bandwidth 主导，per-token 开销主导 |
+| C-6 | F16 T2W→CPU | — | — | T2W CPU RTF **8.6–10.3**（12× 太慢）→ T2W 不能下 CPU |
+| C-7 | F16 TTS-model→CPU | — | 114（更差） | CPU TTS 反压（队列阻塞 LLM）→ TTS-model 不能下 CPU |
+| C-8 | **F16 队列 1→16 解耦** | **977ms** | 24.5 | **P50<1000 达标**，复现 976.5 |
+
+- **关键根因**：`omni.cpp:4292` LLM→TTS-model 队列 `TTSThreadInfo(1)`（容量=1）强制 **LLM 与 TTS-model 严格 1:1 锁步**——LLM 每产 10 token（step_size）即 `cv.wait` 等 TTS-model 消费（omni.cpp:10035）。于是每帧 decode 墙钟**叠加了 TTS-model 的 NPU decode 时间**（两者同 NPU 串行）→ 1.4s/帧 > 1s 进帧间隔 → decode_worker 串行积压 → ms_total 无界膨胀到 8.3s（2× per-token 放大成 27× P50 的积压效应）。
+- **修复**：队列 1→16（env `OMNI_TTS_QUEUE` 可覆盖），LLM 可 burst、不每 chunk 阻塞，`ms_decode` 回归纯 LLM 时间 → per-token 49→24.5ms（接近 intrinsic 22ms），**P50 8295→977ms**。
+- **验证三件套**：
+  - npu-smi：解耦后 decode 期 AICore 峰值 68%、HBMbw 53%（compute 真在 NPU，无 CPU fallback）；HBM 维持 36%（model 不释放）✅
+  - 质量：文本"没问题，我"正常；wav RMS 2005–2288（非静音，P0 同量级）；**queue=1 vs 16 token 序列逐字相同**（修复 quality-neutral，非回归）✅
+  - 同口径：**LLM P50 977ms <1000 达标**（8.5×）；TTS RTF 0.80 PASS（维持/更优）✅
+- **残留（exit 2，非 LLM compute 问题）**：① LLM P95 1014–1044ms（临界超 1000 ~14–44ms，per-token 已近 22ms floor）② 首响 e2e 1493–1557ms（T2W ~700ms floor + 首响应 LLM+TTS 路径，与 LLM compute 解耦）。两者达 exit 0 需 T2W 提速（n_timesteps，被 prompt_cache 绑定）或 NPU 多流并发（backend 级）。
+- **副产物**：micro-probe（`eval_tokens_with_hidden` 计时 dec vs emb，env `OMNI_ETH_PROBE` 开）；`OMNI_TTS_GPU_LAYERS`/`OMNI_TTS_QUEUE` env 旋钮。
+- 配置：F16 / n_ctx 4096 / ngl 99 / use_mmap=false（P1.6）/ stream-interval 1000 / 队列 16
+- 原始 log：tools/omni/output/p17_{c1,c2,c4,c5,c6,c7,c8,c8b}.log + npu_c1.log（gitignored）
+
+**结论**：P1.6 的"compute 没真走 NPU"是采样误判，offload 一直正常；P50 8.3s 的真因是 **LLM↔TTS-model 队列锁步**使单 NPU 上 LLM+TTS 串行。一行队列解耦（1→16）把 **LLM P50 砍到 977ms（<1000 达标，8.5×）** 且 TTS RTF 0.80 不回归。下阶段（P2）冲 exit 0 需攻 T2W 提速或 NPU 多流并发（decode 期 NPU 平均仅 ~23%，85% 空闲，硬件有余量但当前串行）。
+
 ---
 
 > 2026-07-31 补充：llama-omni-server 启动日志确认两条 ctx 告警

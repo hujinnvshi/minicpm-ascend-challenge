@@ -1220,6 +1220,11 @@ static bool eval_tokens_with_hidden(struct omni_context* ctx_omni, common_params
 
     int tokens_processed = 0;
 
+    // [P1.7 micro-probe] 把 per-token 墙钟拆成 llama_decode(NPU compute+sync) vs embeddings 回拷
+    static thread_local int    eth_n      = 0;
+    static thread_local double eth_dec_ms = 0.0;
+    static thread_local double eth_emb_ms = 0.0;
+
     for (int i = 0; i < N; i += n_batch) {
         int n_eval = (int) tokens.size() - i;
         if (n_eval > n_batch) {
@@ -1241,6 +1246,7 @@ static bool eval_tokens_with_hidden(struct omni_context* ctx_omni, common_params
             batch.pos[j] = *n_past + j;  // 从当前 n_past 位置开始
         }
 
+        auto _t_dec0 = std::chrono::high_resolution_clock::now();
         if (llama_decode(ctx_omni->ctx_llama, batch)) {
             LOG_ERR("%s : failed to eval. token %d/%d (batch size %d, n_past %d)\n", __func__, i, N, n_batch, *n_past);
             llama_set_embeddings(ctx_omni->ctx_llama, false);
@@ -1248,12 +1254,25 @@ static bool eval_tokens_with_hidden(struct omni_context* ctx_omni, common_params
             hidden_states = nullptr;
             return false;
         }
+        auto _t_dec1 = std::chrono::high_resolution_clock::now();
 
         // 获取当前 batch 的 embeddings 并复制到 hidden_states
         float * emb = llama_get_embeddings(ctx_omni->ctx_llama);
         if (emb != nullptr) {
             // 将当前 batch 的 embeddings 复制到 hidden_states 的对应位置
             memcpy(hidden_states + tokens_processed * n_embd, emb, n_eval * n_embd * sizeof(float));
+        }
+        auto _t_emb1 = std::chrono::high_resolution_clock::now();
+
+        // [P1.7 micro-probe] dec = llama_decode(NPU compute+sync), emb = get_embeddings+memcpy(host 回拷)
+        {
+            double d_dec = std::chrono::duration<double, std::milli>(_t_dec1 - _t_dec0).count();
+            double d_emb = std::chrono::duration<double, std::milli>(_t_emb1 - _t_dec1).count();
+            eth_dec_ms += d_dec; eth_emb_ms += d_emb; eth_n++;
+            if (std::getenv("OMNI_ETH_PROBE") && (eth_n <= 5 || eth_n % 30 == 0)) {
+                print_with_timestamp("[ETH_PROBE] #%d n_past=%d dec=%.2fms emb=%.2fms | cum dec=%.0fms emb=%.0fms over %d calls\n",
+                                     eth_n, *n_past, d_dec, d_emb, eth_dec_ms, eth_emb_ms, eth_n);
+            }
         }
 
         llama_set_embeddings(ctx_omni->ctx_llama, false);
@@ -4270,7 +4289,13 @@ struct omni_context * omni_init(struct common_params * params, int media_type, b
     ctx_omni->llm_thread_info = new LLMThreadInfo(1000);
     if (ctx_omni->use_tts) {
         LOG_INF("init tts....");
-        ctx_omni->tts_thread_info = new TTSThreadInfo(1);
+        // [P1.7] LLM→TTS-model 队列容量。原值=1 强制 LLM 与 TTS-model 严格 1:1 锁步
+        // （LLM 每 10 token 一 chunk 即阻塞等 TTS-model 消费），使双工每帧 decode 墙钟
+        // 叠加了 TTS-model 的 NPU decode 时间 → 单 NPU 上 LLM+TTS 串行 → 1.4s/帧 > 1s 进帧
+        // → 积压 → P50 8.3s。改大让 LLM 可 burst、不每 chunk 阻塞，ms_decode 回归纯 LLM 时间。
+        int tts_queue_cap = 16;
+        if (const char * e = std::getenv("OMNI_TTS_QUEUE")) { if (*e) tts_queue_cap = std::atoi(e); }
+        ctx_omni->tts_thread_info = new TTSThreadInfo(tts_queue_cap);
         ctx_omni->omni_output = new omni_output();
         ctx_omni->tts_bin_dir = tts_bin_dir;
         
