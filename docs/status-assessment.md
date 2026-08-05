@@ -27,10 +27,10 @@ TTS RTF 0.80 不回归。残留 exit 2：P95 1014ms（临界）+ 首响 1493ms�
 **纠正后的真瓶颈** = **CANN 后端两个 gap**：① 不支持量化算子（被迫 F16，多 3.2× 带宽）；② per-token 管线开销大（~3× floor）。**不是 910B 硬件不行。**
 
 **公平 baseline 与优化目标（纠正）**：不是"追 4090"，而是"**逼近 910B 自身 floor（12ms/token）**"——这样 910B 作为数据中心卡本应稳过双工实时门槛，exit-0 自然达成，而非靠 T2W 首块手术硬抠。重新打开两条更对档位的杠杆：
-- **A. 砍 per-token CANN/ggml 管线开销**（36ms→贴近 13ms floor）：scheduler/KV/logits 路径。同精度下即可反超 4090，且首响/P95 一起下来（它们卡住的根因也是 per-token 开销）。
-- **B. 让量化在 CANN 上真正工作**（非 gguf Q8_0 那种 on-the-fly dequant——P1.7 实测无效；而是 CANN 原生 INT8/W8A8 通路，发挥 910B INT8 强项）。P1.7 未探，待重估。
+- **A. 砍 per-token CANN/ggml 管线开销**（36ms→贴近 13ms floor）：scheduler/KV/logits 路径。同精度下即可反超 4090，且首响/P95 一起下来（它们卡住的根因也是 per-token 开销）。**【2026-08-05 复盘】实测 910B LLM decode 已贴 F16 floor（llama_decode 13ms vs 12ms 理论），per-token 可减开销有限（emb 回拷 ~8ms + scheduler/logits 几 ms），非大杠杆。**
+- **B. 让量化在 CANN 上真正工作**（非 gguf Q8_0 那种 on-the-fly dequant——P1.7 实测无效；而是 CANN 原生 INT8/W8A8 通路，发挥 910B INT8 强项）。**【2026-08-05 实测证伪】llama-bench 纯 decode：Q8_0 = 25.57 t/s，比 F16(27.65) 还慢 ~7%（aclnnWeightQuantBatchMatmul 是 dequant-bound，未用 910B INT8 单元）；Q4_K_M CPU fallback。CANN 此 build 无原生 INT8/W8A8 路径，量化杠杆死。**
 
-> 下文 P2"接受天花板"结论按此重述：天花板是 **CANN 后端**（有 backend 工作可做），非硬件绝路；exit-0 可达性比原结论更乐观。
+> **复盘结论（2026-08-05）**：910B LLM decode 已贴 F16 floor（硬件高效），量化不提速（CANN 限制），per-token 开销可减有限。**exit-0 的真阻塞是架构性的**：首响 1493ms 的 T2W ~700ms 首块 floor（需侵入式 T2W 首块 resize）+ P95 临界（贴 floor）。原"框架纠正→CANN 开销是大杠杆"的乐观**部分收回**——CANN 后端确是真瓶颈（量化缺），但在当前 build 上**不可低成本闭合**（需自研 W8A8/INT8 路径，大工程）。现实天花板仍是 P1.7 成果。
 
 ## P1.7 完成状态（2026-08-05）+ P2 优化空间
 

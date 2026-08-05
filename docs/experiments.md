@@ -145,6 +145,21 @@
 
 **P2 综合天花板**：exit 0 三"易"杠杆（T2W 减步 / step_size 首块 / 2nd device）Stage 0 全证伪；并发杠杆 Stage 3 诊断证伪（runtime-capped 1.24×）。**exit 0 在当前 910B/F16 配置下不可达**，唯一剩余路径是侵入式 T2W 首块 `T_chunk_token` resize（解首响 floor，高工作量/风险）。否则现实天花板 = P1.7 成果（LLM P50 977ms <1000、TTS RTF 0.80、exit 2，首响 ~1500ms floor）。
 
+### 实验 P2-量化复核：Q8_0 在 CANN 上更慢（量化杠杆终结核伪）+ 910B 贴 F16 floor
+- 时间：2026-08-05
+- 背景：框架纠正后重估"量化能否闭合 vs 4090(Q4_K_M) 的精度差"。Agent 查 CANN 后端：Q8_0 "support" = `aclnnWeightQuantBatchMatmulV2`（dequant INT8×F16→F16 再 F16 matmul），非硬件 INT8；无 `aclnnInt8Matmul`/W8A8 路径。
+- **实测（llama-bench 纯 decode，隔离 duplex 开销）**：
+
+  | model | tg128 | pp512 |
+  |---|---|---|
+  | F16 | 27.65 t/s（36ms/tok） | 1196 t/s |
+  | Q8_0 | **25.57 t/s（39ms/tok，慢 ~7%）** | 1184 t/s |
+  | Q4_K_M | CPU fallback（超时） | — |
+
+- **结论**：Q8_0 即使在纯 decode（无 duplex 开销掩盖）也比 F16 **慢** —— `aclnnWeightQuantBatchMatmul` 是 dequant-bound，未用 910B INT8 单元，dequant 开销 > 带宽节省。**量化杠杆终结核伪**（CANN 此 build 无原生 INT8/W8A8；要真 INT8 需自研 W8A8 type + aclnn 通路 + loader，大工程）。
+- **910B LLM decode 已贴 F16 floor**：`llama_decode` 13ms/token vs 理论 12ms（15.25GB/1.3TB/s）→ 硬件高效，per-token 可减开销有限（emb ~8ms + scheduler/logits 几 ms），非大杠杆。
+- **exit-0 真阻塞定性为架构性**：首响 T2W ~700ms 首块 floor（需侵入式 T2W 首块 resize）+ P95 临界（贴 floor）。非"CANN 低效可低成本修"。
+
 ---
 
 > 2026-07-31 补充：llama-omni-server 启动日志确认两条 ctx 告警
