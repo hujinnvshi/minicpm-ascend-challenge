@@ -47,3 +47,9 @@ dist/
 
 # ===== capture-env 资源快照（运行副产品） =====
 resource-*/
+
+# G2 benchmark: extracted datasets + generated outputs (large, not for git)
+benchmark/seed-tts-eval/seedtts_testset/
+benchmark/seed-tts-eval/gen/
+benchmark/**/tts_wav/
+# demo runtime self-regenerated certs (keep committed originals only)
