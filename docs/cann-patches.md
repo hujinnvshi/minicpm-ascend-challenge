@@ -88,3 +88,52 @@ context is a null pointer / current device: -1`。
 - **结论**：cann 后端对 Q4_K_M 量化算子不支持/缺，对 F16 支持
 - **影响**：910B 上"量化优化"失效（4090 最优的 Q4_K_M 在 910B fallback CPU）→ LLM 改用 F16
 - **待评估**：Q6_K/Q5/Q8_0 等其他量化档在 cann 的支持情况（P2 重扫；Q8_0 在 CUDA 是乱码 bug，cann 可能正常且支持）
+
+---
+
+## 观测工具与硬件细节（来自平台 dev_info，供 RTF 深挖）
+
+> 来源：`/workspace/user_data/dev_info/{ascend_system_info,inference_serving_observability}.md`（平台预置，采集 2026-08-04）。
+> ⚠️ dev_info 原文面向通用推理服务（MindIE/vllm-ascend + 连续 batching/W8A8 量化）。**引擎部署/量化部分不适用我们**（走 C++ llama.cpp-omni F16 路线，且 910B 量化无收益见 CLAUDE.md 红线）。**仅取观测工具与判读方法论**（通用）。
+
+### 硬件细节（ascend_system_info.md）
+
+- 整机 Atlas 800T A2（标准 8×910B + HCCS 互联），**容器只透传 1 颗 NPU（NPU1=`/dev/davinci1`）** → 印证"单 compute NPU"红线（CLAUDE.md）。
+- 910B3，64GB HBM2e（1600MHz），PCI Device ID `0xD802`，板卡 IT21HMDC_Bin6；固件 9.0.10.0.b057 / 驱动 25.2.0 / npu-smi 25.2.0。
+- **CPU 亲和 = NUMA node6（CPU 192–223）** → 绑核候选杠杆：`taskset -c 192-223 <cmd>`（**taskset 已装** `/usr/bin/taskset`，2026-08-06 实测；**numactl 本机未装**，需先 `yum install numactl` 才能用 `numactl --cpunodebind=6 --membind=6`）。未实测收益。
+- CANN 9.1.0-beta.3 + ATB 9.1.0-beta.3（ATB 提供加速库，我们 C++ 路线未直接用）。
+
+### 观测工具（inference_serving_observability.md）
+
+工具路径：
+- `npu-smi`：`/usr/local/bin/npu-smi`（v25.2.0）
+- `msprof`：`/usr/local/Ascend/cann-9.1.0-beta.3/bin/msprof`
+- 内存/排错：`msmemscope` / `mssanitizer` / `msdebug`（cann tools）
+- `ms_service_profiler`：Python 模块 26.0.0（需 import，CLI 未入 PATH）
+- 环境：`source /usr/local/Ascend/cann-9.1.0-beta.3/set_env.sh`
+
+**实时细粒度监控**（比手敲 `npu-smi info -t usages -i 1` 更省事，连续采样）：
+
+```bash
+npu-smi info watch -i 1 -c 0 -s ptaicmb -d 1   # 1s 采样：p功率/t温度/a AICore/i AICpu/c CtrlCpu/m显存/b带宽
+```
+
+**msprof 包住引擎进程**（事后看 top-N 慢算子/timeline；**首迭代含编译耗时，必须与稳态分开判读**；下方命令已适配本路线但**尚未实测跑通**，跑前需 `source /usr/local/Ascend/cann-9.1.0-beta.3/set_env.sh`）：
+
+```bash
+msprof --application="build-cann/bin/llama-omni-perf-duplex -m <MODEL> -c 4096 -ngl 99 --test <PREFIX> 36" \
+       --output=./prof_out \
+       --ai-core=on --task-time=l2 --task-memory=on \
+       --runtime-api=on --ge-api=l0 \
+       --aic-mode=task-based --aic-freq=100
+# 产物可在 MindStudio 看 timeline/flamegraph（本机未装 MindStudio，可读 prof_out 文本表）
+```
+
+**mstx 自定义打点**（把 prefill/decode/队列等待对齐到硬件 timeline，定位"decode 在等什么"最有效）：在 `tools/omni/omni.cpp` 关键阶段插 `mstx` 区间段 + `msprof --msproftx=on` 采集。
+
+### Golden Signals 判读（关键，避免误判）
+
+- **decode 阶段 AICore 低 + HBM 带宽高 = 正常**（memory-bound）→ **不要误判为算力瓶颈去优化算子**。印证 CLAUDE.md"Q8_0 不提速/dequant-bound"与"看 HBM Bandwidth 判断真在 NPU 算"。
+- prefill 才 compute-bound，该看 AICore 是否打满；AICore 低=查算子/权重加载。
+- 通信占比 >30%（多卡场景）→ 上通信计算重叠；**单卡不适用**（我们单卡）。
+- 首 token 慢 → 先排除首迭代编译耗时，再查 prefill 算力与队列等待。

@@ -60,6 +60,8 @@ npu-smi info -t usages -i 1
 - **构建产物**：`code/llama.cpp-omni/build-cann/bin/{llama-omni-cli,llama-omni-perf-duplex,llama-omni-server,llama-bench}`。
 - **venv**：`/workspace/venv-g23`（含 ffmpeg 二进制 `lib/.../imageio_ffmpeg/binaries/ffmpeg-linux-aarch64-*`）。
 - **CANN**：`$ASCEND_TOOLKIT_HOME`（/usr/local/Ascend/cann-9.1.0-beta.3）；`npu-smi` 在 `/usr/local/bin/`。
+- **Benchmark 数据（只读预置，三项全齐）**：`/workspace/shared_assets/datasets/` → Video-MME `lmms-lab/Video-MME/`（2700 题 parquet + 20 videos_chunked zip + subtitle）；Daily-Omni `MTEB/Daily-Omni/`（1196 条 parquet，video+audio 内嵌）；TTS-Seed `CowboyZ/seed-tts-eval/`。**不再缺数据，仅缺官方评测脚本**。
+- **平台工程参考（只读）**：`/workspace/user_data/dev_info/` → `ascend_system_info.md`（硬件全貌：Atlas 800T A2 容器透传 1 卡 / 910B3 / 64GB / NUMA node6 CPU192-223 / PCI 0xD802）+ `inference_serving_observability.md`（msprof/mstx/npu-smi watch 观测命令模板 + Golden Signals 判读；摘要见 `docs/cann-patches.md`）。
 
 ## 文档导航（先读这些）
 
