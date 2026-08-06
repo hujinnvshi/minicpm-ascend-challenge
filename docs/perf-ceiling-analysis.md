@@ -38,19 +38,16 @@ TTS RTF = (末wav - LLM t_done)/音频 = TTS-model(NPU) + T2W(Flow NPU + vocoder
 |---|---|---|
 | **当前（串行，24+NUMA）** | TTS-model 24 + Flow 102 + vocoder 346 ≈ 472ms | **0.57**（实测，含开销） |
 | **红线内极限（C 重叠 NPU‖vocoder）** | max(TTS-model+Flow=126ms, vocoder 346ms) = 346ms | **~0.34**（vocoder CPU 346ms 锁死） |
-| **理论极限（vocoder NPU化）** | vocoder 42M→NPU ~20ms + Flow 102 + TTS-model 24 ≈ 146ms（NPU 串行） | **~0.15** |
-| **理论极限（NPU化 + Flow 算子优化）** | vocoder NPU 20 + Flow 优化 ~50 + TTS-model 24 ≈ 94ms | **~0.10** |
+| ~~理论极限（vocoder NPU化）~~ | **❌ 不可行**：CANN backend 不支持 CONV_2D/CONV_1D（`docs/ops/CANN.csv` 全 support=0），HiFiGAN 核心是 CNN（Conv1D im2col→CONV_2D）→ 算子缺失，需移植 500-1000 行 ACLNN + 完整测试 + 数值风险 | **—** |
 
 ### 终极目标
 
-- **红线内（仅调度重叠，CPU vocoder 不动）：RTF ~0.34**（当前 0.57，gap **0.23**）
+- **红线内极限（仅调度重叠，CPU vocoder 不动）：RTF ~0.34**（当前 0.57，gap **0.23**）
   - 突破口：候选 C（vocoder ‖ NPU 段重叠），受 vocoder CPU 346ms 物理限锁死
   - 风险：C 需跨 window 重构（拆 push_tokens_window + t2w_thread 双缓冲 + Flow/voc cache 双缓冲），复杂 + 质量 bug 风险
-- **理论极限（vocoder NPU化）：RTF ~0.10-0.15**（gap 0.42-0.47）
-  - 突破口：vocoder hifigan 上 NPU（解除 CPU 阻塞）
-  - 风险：大工程（hifigan NPU 移植）+ 红线风险（后端改，不改数学但改实现）+ NPU 与 Flow 串行（单 NPU）
+- ~~**理论极限（vocoder NPU化）：RTF ~0.10-0.15**~~ **❌ 不可行**（实测评估 2026-08-06）：CANN backend **不支持 CNN 算子**（CONV_2D/CONV_1D，`docs/ops/CANN.csv` 全 support=0），HiFiGAN 核心是 CNN → 算子缺失阻断。需 CANN CNN 算子移植（500-1000 行 ACLNN + 完整回归测试）+ NPU/CPU 数值差异风险。
 
-**关键瓶颈**：红线内 0.34 被 **vocoder CPU 346ms** 锁死。要突破 0.34 **必须 vocoder NPU化**（无第三选项——threads/NUMA/算法已在红线内穷尽）。
+**关键瓶颈**：**真实硬极限 = 0.34**（vocoder CPU 346ms 物理锁 + NPU化不可行）。要突破 0.34 唯一路径 = CANN CNN 算子移植（大工程 + 数值风险，非"不改数学"能覆盖的实现层改动）。
 
 ## 四、量化方法（怎么测/评估极限）
 
@@ -89,7 +86,7 @@ TTS RTF = (末wav - LLM t_done)/音频 = TTS-model(NPU) + T2W(Flow NPU + vocoder
 ## 七、结论
 
 **终极目标 RTF**：
-- **红线内（不改数学/后端）：~0.34**（vocoder CPU 346ms 物理限锁死，当前 0.57，C 重叠可达但风险）
-- **理论（vocoder NPU化）：~0.10-0.15**（需越红线 + 大工程）
+- **真实硬极限 ~0.34**（C 重叠，vocoder CPU 346ms 物理锁；当前 0.57，gap 0.23）
+- ~~vocoder NPU化（理论 0.10-0.15）~~ **❌ 不可行**（CANN 不支持 CNN 算子 CONV_2D/CONV_1D，HiFiGAN 核心阻断；需 CANN 算子移植，大工程 + 数值风险）
 
-当前 0.57（24+NUMA）处于**红线内合理高位**——LLM 已近极限、vocoder CPU 接近物理限；进一步降需 C 重叠（边际 0.34）或 vocoder NPU化（越红线）。**0.34 是"不改推理数学"下的硬极限**。
+当前 0.57（24+NUMA）处于**红线内合理高位**——LLM 已近极限、vocoder CPU 接近物理限、NPU化被 CANN 算子缺失阻断。**0.34 是真实硬极限**（C 重叠可达但跨 window 重构风险）；突破需 CANN CNN 算子移植（非纯调度，大工程）。
