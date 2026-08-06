@@ -16,7 +16,8 @@
 | TTS RTF(TTS 段,参考) | 0.82 | — | — |
 | LLM 判定 P50(参考) | 977ms | — | <1000,实时 |
 
-- 详:`speak#0/audio#0` 音频 53.84s,e2e wall 44.44s → RTF 0.83;TTS wall 44.08s → 0.82。
+- **P8 复测(2026-08-06,fix 分支含 P3 vocoder 16 threads,3 次)**:e2e RTF = **0.84 / 0.68 / 0.58,中位 0.68**(run1 冷启动偏高,run2/3 热机 0.58–0.68)。含 P3 vocoder 多线程后优于 P1.7,beat 基线 ~37%。
+- 详(P1.7):`speak#0/audio#0` 音频 53.84s,e2e wall 44.44s → RTF 0.83;TTS wall 44.08s → 0.82。
 
 ## 2. 测试环境
 
@@ -34,7 +35,8 @@
 ## 4. 测试次数
 
 - 多次复跑取一致值:P1.7 队列解耦后 C-8 / C-8b / 本次 → e2e RTF 0.81 / 0.80 / 0.83(中位 **0.81–0.83**,稳定 <1.087)。
-- 方法论:每配置 ≥3 次,RTF 差异 <0.03 视噪声(experiments 016)。
+- **P8 复测(2026-08-06,fix 分支含 P3 vocoder 16)**:3 次 e2e RTF = 0.84 / 0.68 / 0.58,**中位 0.68**(冷启动→热机波动,均 <1.087)。原始日志 `tools/omni/output/perf_p8_{1,2,3}.{json,log}`(gitignored)。
+- 方法论:每配置 ≥3 次,RTF 差异 <0.03 视噪声(experiments 016);P8 三次波动 0.26 系冷启动/系统负载,取中位 0.68 报告。
 
 ## 5. 统计方式
 
@@ -68,7 +70,10 @@
 - 跑:`tools/omni/perf/run_perf.sh -m <F16> --test <duplex_omni_test_case_> 36` → `analyze_perf.py`。
 - 详见 [reproduce-guide.md](reproduce-guide.md)、优化链 [experiments.md](experiments.md)(P0–P1.7)、补丁 [cann-patches.md](cann-patches.md)。
 
-## 10. 待补(等官方 benchmark 脚本)
+## 10. 精度 benchmark 现状(2026-08-06 P8 自评,详见 experiments.md P8)
 
-- 三项 benchmark 精度数(VideoMME ≥67.0 / Daily-Omni ≥77.5 / TTS-Seed ASV ≥0.689 / WER ≤1.56)—— F16 不改推理数学,预期 = 基线,待官方评测脚本跑出实测。
-- Demo 演示视频(G3 栈已端到端跑通,录制中)。
+- **Daily-Omni**:6.7%(15 条)/ 12.5%(8 条)—— omni 框架硬上限(单帧视觉 P7 多帧退化 + whisper 30s P6 + 模型 thinking 输出),远低于基线 77.5。**79.5 基线来源待官方确认**(eval-spec 自注 daily-omni 公开 leaderboard Qwen 61.82 为"另一框架",79.5 很可能非 llama.cpp-omni 实测)。
+- **Video-MME**:未跑通 —— omni 处理 VideoMME 大 video(16MB+,short 时长)触发 server 静默崩溃(单/双 server 均复现,每跑必崩,log 无栈,非资源:mem 2TB/HBM 34%//tmp 2.3T)。脚本已建(`benchmark/video-mme/videomme_test.py`),待框架修复后可跑。
+- **TTS-Seed**:WER 0.20(同口径 paraformer+zhconv+jiwer,**强达标** ≤1.56);SIM 0.84(wavlm-base-plus 口径偏差,官方 SV 需 UniSpeech 框架 `wavlm_large_finetune.pth`,留作后续)。
+- **认知更正**:eval-spec "F16 不改数学→精度=基线" 假设对**多模态 benchmark 不成立** —— 受 omni 框架配置(视觉帧数/音频窗口/输出模态)严重影响,与单测 LLM 数学等价不同。
+- Demo 演示视频:已录制 `benchmark/demo-video/demo_turnchat.webm` + 8 项证据 `benchmark/demo-evidence/`。

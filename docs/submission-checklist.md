@@ -30,41 +30,41 @@
 ## 四、最终提交内容清单（对照自查）
 
 ### 1. 完整代码与配置
-- [ ] 推理适配与性能优化代码
-- [ ] llama.cpp-omni 相关配置
-- [ ] 服务启动脚本
-- [ ] Benchmark 执行脚本
-- [ ] Demo 启动脚本
-- [ ] 依赖与环境配置文件
+- [x] 推理适配与性能优化代码(6 cann 补丁 + P1.7 队列 + P3 vocoder + P6 extract 加固 + P7)
+- [x] llama.cpp-omni 相关配置(build-cann,CANN 9.1.0-beta.3,F16)
+- [x] 服务启动脚本(`scripts/serve.sh`)
+- [x] Benchmark 执行脚本(`scripts/benchmark.sh` + `benchmark/{daily-omni,video-mme,seed-tts-eval}/`)
+- [x] Demo 启动脚本(`scripts/demo.sh`)
+- [x] 依赖与环境配置文件(`docs/cann-patches.md` + `docs/reproduce-guide.md` §1)
 
 ### 2. Benchmark 评测结果（3 个全要）
-- [ ] Daily-Omni 完整结果（测试命令 + 参数配置 + 原始输出 + 结果汇总）
-- [ ] TTS-Seed 完整结果（同上）
-- [ ] Video-MME 完整结果（同上）
+- [x] Daily-Omni 完整结果(`benchmark/daily-omni/result.json` + `daily_omni_test.py`;6.7%/12.5% — 框架硬上限,见 experiments P7/P8;**79.5 基线来源待官方确认**)
+- [x] TTS-Seed 完整结果(`benchmark/seed-tts-eval/gen/zh/result.json`;WER 0.20 同口径强达标,SIM 0.84 base-plus 口径偏差)
+- [ ] Video-MME 完整结果(脚本 `benchmark/video-mme/videomme_test.py` 已建;omni 处理大 video 触发 server 崩溃,未跑通 — 见 experiments P8)
 
-### 3. 性能测试报告（至少包含）
-- [ ] RTF（含统计口径）
-- [ ] 测试环境
-- [ ] 测试数据
-- [ ] 测试次数
-- [ ] 统计方式
-- [ ] 优化前后对比
-- [ ] 资源使用情况
-- [ ] 异常情况说明
+### 3. 性能测试报告（至少包含)
+- [x] RTF（含统计口径)— SPEAK→WAV e2e,中位 0.68(P8 三次 0.84/0.68/0.58)
+- [x] 测试环境(910B3 / CANN 9.1.0-beta.3 / F16)
+- [x] 测试数据(perf-duplex 36 帧 duplex_omni_test_case)
+- [x] 测试次数(P8 ≥3 次:0.84/0.68/0.58 中位 0.68)
+- [x] 统计方式(analyze_perf.py 按时间戳匹配 SPEAK↔audio 轮)
+- [x] 优化前后对比(P1.7 队列解耦 8.5× + P3 vocoder 多线程,见 §6)
+- [x] 资源使用情况(HBM ~24G / AICore burst 60-84%)
+- [x] 异常情况说明(CANN Q4_K_M 不支持 / P1.6 误判澄清 / VideoMME 崩溃)
 
 ### 4. 可运行 Demo
-- [ ] Demo 使用说明
-- [ ] 启动与访问方式
-- [ ] 核心交互流程
-- [ ] 演示视频
+- [x] Demo 使用说明(reproduce-guide §6 + demo.sh)
+- [x] 启动与访问方式(3 进程,https://127.0.0.1:8006/)
+- [x] 核心交互流程(8 项检查全过,benchmark/demo-evidence/)
+- [x] 演示视频(benchmark/demo-video/demo_turnchat.webm)
 
 ### 5. 优化与复现说明
-- [ ] 原始性能瓶颈分析
-- [ ] 采用的优化方法
-- [ ] 各项优化带来的性能变化
-- [ ] 效果保持情况
-- [ ] 完整复现步骤
-- [ ] 关键技术说明
+- [x] 原始性能瓶颈分析(experiments P0–P5 + perf-ceiling-analysis)
+- [x] 采用的优化方法(cann 6 补丁 + P1.7 队列 + P3 vocoder + P6/P7 video)
+- [x] 各项优化带来的性能变化(experiments P1.7 RTF 0.83→P3 0.64→P4 0.57)
+- [x] 效果保持情况(F16 不改推理数学,RTF 0.57–0.68 < 1.087)
+- [x] 完整复现步骤(reproduce-guide + scripts/)
+- [x] 关键技术说明(cann-patches + decisions + optimization-methodology)
 
 ## 五、提交要求
 

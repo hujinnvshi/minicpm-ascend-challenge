@@ -28,14 +28,15 @@ REPO = Path(__file__).resolve().parents[2]
 DATA_ROOT = Path("/workspace/shared_assets/datasets/MTEB/Daily-Omni/data")
 
 SYSTEM_PROMPT = (
-    "Your task is to accurately answer multiple-choice questions based on the given video. "
-    "Select the single most accurate answer from the given choices. "
-    "Your answer should be a capital letter representing your choice: A, B, C, or D. "
-    "Don't generate any other text."
+    "You are a multiple-choice question answering assistant. Based on the given video and its audio, "
+    "select the single most accurate answer from the given choices. "
+    "Output ONLY a single capital letter representing your choice: A, B, C, or D. "
+    "Do NOT generate any explanation, reasoning, or other text. "
+    "Your entire response must be exactly one character: the letter."
 )
 
 
-# ---- 答案提取(复制自 daily_omni_eval.py L41-84,绕开 vllm) ----
+# ---- 答案提取(对齐官方 testmodel.py + 对 thinking 输出更宽容) ----
 def extract_choice_letter(text):
     if not text:
         return None
@@ -44,12 +45,15 @@ def extract_choice_letter(text):
         return None
     match = re.search(r"assistant\s*([\s\S]*)$", raw, re.IGNORECASE)
     candidate = match.group(1).strip() if match else raw
+    # 1) 开头直接 [A-D](理想:模型只输出字母)
     direct = re.match(r"(?i)^\s*([A-D])(?:[\s.\):：]|$)", candidate)
     if direct:
         return direct.group(1).upper()
-    fallback = re.search(r"\b([A-D])\b", candidate.upper())
-    if fallback:
-        return fallback.group(1)
+    # 2) "answer/choice/option is X" / "X is correct"(thinking 后的明确答案)
+    ans = re.search(r"(?i)(?:answer|choice|option|correct\s+answer)\s*(?:is|:)\s*[\*\(]{0,2}\s*([A-D])\b", candidate)
+    if ans:
+        return ans.group(1).upper()
+    # 3) 末尾独立 [A-D](最终答案常在末尾;避免误提 choices 里的选项字母)
     loose = list(re.finditer(r"(?:[^A-Za-z]|^)([A-D])(?:[^A-Za-z]|$)", candidate, re.IGNORECASE))
     if loose:
         return loose[-1].group(1).upper()
