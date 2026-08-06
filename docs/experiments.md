@@ -299,3 +299,25 @@ init_from_host_caches 校验 cache_host.n_timesteps != n_timesteps → 拒绝
 
 结论：n_timesteps 是真实杠杆但被 cache 绑定封死；本次 env 改动保留（默认 5 无副作用）；
 910C 上如 CANN 后端无此校验可复用。后续优先级：图模式 → 量化重扫 → 大 ctx。
+
+---
+
+### 实验 P3：vocoder CPU 多线程（kDefaultThreads 8→16，OMNI_T2W_THREADS）
+
+- 时间：2026-08-06
+- 目标：降 SPEAK→WAV RTF（P1.7 后 TTS RTF 0.83）。
+- 诊断（阶段1，诊断先行，plan 模式）：
+  - **OMNI_T2W_PROFILE=1 量化 T2W 分段**：`vocoder`(CPU hifigan) p50=**591ms 占 T2W 80%**；`token2mel`(Flow NPU) p50=144ms 占 20%；total p50=735ms（T2W RTF 0.79）。
+  - ETH_PROBE（OMNI_ETH_PROBE=1）：LLM dec=14ms + emb=7ms（33% LLM 周期）。**关键修正：emb 在 LLM t_done 前，不在 TTS RTF 0.83 内** —— 初判"emb 是主因"错误。
+  - npu-smi 占空比：AICore 中位 0%，占空比（AI>5 且 HB>5）仅 29%（空泡 62-71%）；decode 期 AI 低+HB 高=正常 memory-bound（不误判）。
+  - 候选 E（OMNI_TTS_QUEUE 24/32）证伪：ΔRTF<0.03 → 队列非瓶颈（P1.7 已解耦 q=16）。
+  - msprof 跑通（PROF_ 产物）但 --export 未生成 csv（output 目录问题）；非必需（OMNI_T2W_PROFILE 已定位）。
+  - **定位真因**：T2W vocoder CPU 591ms 是 RTF 主因（8 threads，910B 256 核仅用 8，hifigan 非自回归 mel→wave 可并行）。
+- 修复（红线内）：`token2wav-impl.cpp:9658` `kDefaultThreads` 8→16（+ env `OMNI_T2W_THREADS` 可覆盖，默认 16）。**仅 CPU 线程数，不改推理数学**（LLM NPU token 序列不变 + vocoder 同权重，threads 仅并行）。
+- 三重校验：
+  - 性能：vocoder p50 591→395ms（-33%）；**TTS RTF 0.83→0.62（5 次中位，0.59-0.69，降 25%）**；e2e RTF 同降；token2mel 不变（144ms，NPU 段不受 CPU threads 影响）。
+  - 质量：wav RMS 0.05-0.068（非静音，量级同基线 ~0.07）；threads 不改数学（逻辑保证 + RMS 一致）。
+  - 红线：未触 ggml-cann 6 补丁；无量化 / 无 n_timesteps 改 / 无 logits 改。
+- 残留：threads=32 不稳（RTF 0.59/0.90，vocoder 292/494ms 抖动，CPU 调度/NUMA 跨 node）→ 16 为最优。候选 C（vocoder 异步重叠 Flow）边际（vocoder 395 仍 >> Flow 144，重叠仅省 Flow 144ms）。
+- 累计：P1.7（队列解耦）+P3（vocoder 16 threads）→ TTS RTF **0.62**（基线 1.087，beat 43%）。
+- 原始日志：`tools/omni/output/p3_*.{json,log,analyze}`（gitignored）。

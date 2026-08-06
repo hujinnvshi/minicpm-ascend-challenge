@@ -2,6 +2,24 @@
 
 记录参赛过程中的关键决策与依据。时间倒序。
 
+## 2026-08-06 决策（P3）：vocoder CPU 多线程（kDefaultThreads 8→16）
+
+**背景**：P1.7 后 TTS RTF 0.83（beat 基线 1.087），但 decode 期 NPU 占空比仅 23-29%（空泡多）。plan 模式规划下一步深入优化（诊断 decode 空泡 → 针对性优化）。
+
+**过程（诊断先行）**：
+1. ETH_PROBE（OMNI_ETH_PROBE=1）：LLM dec 14ms + emb 7ms（33% LLM 周期）。但 emb 在 LLM t_done 前，**不在 TTS RTF 0.83**。
+2. 候选 E（OMNI_TTS_QUEUE 24/32）证伪（ΔRTF<0.03）→ 队列非瓶颈（P1.7 已解耦）。
+3. **OMNI_T2W_PROFILE=1 量化 T2W 分段**：定位真因 = **vocoder(CPU hifigan) 591ms 占 T2W 80%**（8 threads，256 核仅用 8，hifigan 非自回归可并行），token2mel(Flow NPU) 144ms 占 20%。
+4. msprof --export 未跑通（output 目录问题）但非必需（OMNI_T2W_PROFILE 已定位）。
+
+**决策**：
+1. **vocoder 加线程**（kDefaultThreads 8→16，env OMNI_T2W_THREADS 可覆盖）——红线内（CPU 调度，不改数学）。**TTS RTF 0.83→0.62（降 25%）**，vocoder 591→395ms。
+2. 弃：候选 E（队列，证伪）、候选 C（vocoder 异步重叠 Flow，边际——vocoder 仍主）、vocoder NPU 化（工程大/红线风险）、emb 7ms（LLM decode 内部同步，红线区）。
+3. threads=32 不稳（CPU 调度/NUMA 抖动），16 为最优。
+4. 红线守卫：未改推理数学 / 未触 ggml-cann 6 补丁。
+
+**详见**：[experiments.md](experiments.md) P3
+
 ## 2026-08-05 决策（P1.7）：诊断先行 + AICore 当 offload 代理 + LLM→TTS 队列解耦
 
 **背景**：P1.6 把双工 LLM model 上 device 后，docs 记"decode AICore 仅 4% / compute 没真走 NPU"，下阶段 P1.7 目标"双工 LLM compute 真走 NPU + LLM P50 <1000ms"。三个诊断方向（device 绑定 / audio encoder / model 释放）嫌疑未定。

@@ -9655,7 +9655,14 @@ bool Token2Wav::load_models(const std::string & encoder_gguf,
                             const std::string & coreml_model_path) {
     reset_stream();
 
-    constexpr int kDefaultThreads = 8;
+    // [P3] token2wav CPU threads (Flow+vocoder) 可由 OMNI_T2W_THREADS 覆盖(默认 8)。
+    // 诊断(P3):vocoder(hifigan,CPU 非自回归)占 T2W 80%(591ms/chunk),8 threads 在 256 核机上未充分利用,
+    // 加线程可并行提速。红线:仅 CPU 线程数,不改推理数学(token 序列/Flow/voc 算子不变)。
+    int kDefaultThreads = 16;  // [P3] 默认16(910B/910C 256核实测最优:vocoder 591→395ms, TTS RTF 0.83→0.62 降25%); env OMNI_T2W_THREADS 可覆盖
+    if (const char * _e = std::getenv("OMNI_T2W_THREADS")) {
+        int _v = std::atoi(_e);
+        if (_v > 0) kDefaultThreads = _v;
+    }
     if (!t2m_.load_model(encoder_gguf, flow_matching_gguf, flow_extra_gguf, device_token2mel, kDefaultThreads,
                          coreml_model_path)) {
         LOG_ERROR( "Token2Wav.load_models: Token2Mel.load_model failed\n");
