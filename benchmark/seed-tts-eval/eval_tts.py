@@ -172,6 +172,54 @@ def _transcribe_zh_wav_path(wav_path: str) -> str:  # seed_tts_eval.py:478
     return zhconv.convert(transcription, "zh-cn").strip()
 
 
+# 英文 ASR: whisper-large-v3（seed_tts_eval.py:394-475；本地用 SEED_TTS_HF_WHISPER_MODEL 指向 modelscope 缓存）
+_en_processor = None
+_en_model = None
+_en_device: str | None = None
+
+
+def _ensure_en_asr() -> None:
+    global _en_processor, _en_model, _en_device
+    with _lock:
+        if _en_model is not None:
+            return
+        import torch
+        from transformers import WhisperForConditionalGeneration, WhisperProcessor
+        _en_device = _get_eval_device()
+        mid = os.environ.get("SEED_TTS_HF_WHISPER_MODEL", "openai/whisper-large-v3").strip() or "openai/whisper-large-v3"
+        print(f"[en-asr] loading whisper {mid!r} on {_en_device}", flush=True)
+        _en_processor = WhisperProcessor.from_pretrained(mid)
+        _en_model = WhisperForConditionalGeneration.from_pretrained(mid, torch_dtype=torch.float32).to(_en_device)
+        _en_model.eval()
+
+
+def _transcribe_en_f32_16k(wav_f32) -> str:  # seed_tts_eval.py:439
+    import torch
+    _ensure_en_asr()
+    if len(wav_f32) == 0:
+        return ""
+    with _lock:
+        try:
+            inputs = _en_processor(wav_f32, sampling_rate=16000, return_tensors="pt", return_attention_mask=True)
+        except TypeError:
+            inputs = _en_processor(wav_f32, sampling_rate=16000, return_tensors="pt")
+        input_features = inputs.input_features.to(_en_device)
+        attention_mask = getattr(inputs, "attention_mask", None)
+        if attention_mask is None and isinstance(inputs, dict):
+            attention_mask = inputs.get("attention_mask")
+        gk = {}
+        if attention_mask is not None:
+            gk["attention_mask"] = attention_mask.to(_en_device)
+        with torch.no_grad():
+            try:
+                forced = _en_processor.get_decoder_prompt_ids(language="english", task="transcribe")
+                ids = _en_model.generate(input_features, forced_decoder_ids=forced, **gk)
+            except Exception:
+                ids = _en_model.generate(input_features, language="english", task="transcribe", **gk)
+        text = _en_processor.batch_decode(ids, skip_special_tokens=True)[0]
+    return (text or "").strip()
+
+
 # =============================================================================
 # 主逻辑
 # =============================================================================
@@ -188,7 +236,7 @@ def main() -> None:
     args = ap.parse_args()
 
     sim_on = not args.no_sim
-    wer_on = not args.no_wer and args.locale == "zh"
+    wer_on = not args.no_wer  # zh→paraformer, en→whisper
     rows = [json.loads(l) for l in Path(args.manifest).read_text(encoding="utf-8").splitlines() if l.strip()]
     print(f"manifest: {len(rows)} rows | SIM={sim_on} WER={wer_on}", flush=True)
 
@@ -212,8 +260,12 @@ def main() -> None:
                 out_rec["sim_error"] = f"{type(e).__name__}: {e}"
         if wer_on:
             try:
-                hyp = _transcribe_zh_wav_path(gen_path)
-                wer, _, _ = process_one_official(hyp, rec["target"], "zh")
+                if args.locale == "en":
+                    hyp = _transcribe_en_f32_16k(_audio_path_to_f32_16k(gen_path))
+                    wer, _, _ = process_one_official(hyp, rec["target"], "en")
+                else:
+                    hyp = _transcribe_zh_wav_path(gen_path)
+                    wer, _, _ = process_one_official(hyp, rec["target"], "zh")
                 out_rec["asr"] = hyp
                 out_rec["wer"] = round(wer, 4)
             except Exception as e:

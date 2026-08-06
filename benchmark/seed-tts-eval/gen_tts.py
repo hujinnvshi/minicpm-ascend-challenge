@@ -66,11 +66,11 @@ class WSClient:
         self.ws = None
         self.session_id: str | None = None
 
-    async def connect_init(self, payload: dict) -> dict:
+    async def connect_init(self, payload: dict, timeout: float = 120.0) -> dict:
         self.ws = await websockets.connect(_ws_url(self.base), max_size=128 * 1024 * 1024,
                                            ping_interval=None, ping_timeout=None)
         await self.ws.send(json.dumps({"type": "session.init", "payload": payload}))
-        ev = await self._recv()
+        ev = await asyncio.wait_for(self._recv(), timeout=timeout)  # omni 首次加载可能 1-2min
         if ev.get("type") not in ("session.created", "initialized"):
             raise RuntimeError(f"init failed: {ev}")
         self.session_id = ev.get("session_id")
@@ -116,8 +116,8 @@ async def run_one(base_url: str, target: str, ref_b64: str):
         raise
     try:
         await cli.push({"messages": [{"role": "user", "content": target}],
-                        "streaming": False, "use_tts_template": True})
-        text, audio_b64, metrics, err = await cli.wait_done()
+                        "streaming": False, "use_tts_template": True, "max_new_tokens": 256})
+        text, audio_b64, metrics, err = await cli.wait_done(timeout=60.0)  # 卡条(无限decode)60s超时
     except Exception as e:
         text, audio_b64, metrics, err = None, None, None, {"error": f"{type(e).__name__}: {e}"}
     # HTTP close：server-omni.cpp 该端点同步 omni_prepare_for_reuse + session_mgr.close（释放 active session）
@@ -153,7 +153,7 @@ async def main() -> None:
         try:
             rp0 = SEED_ROOT / args.locale / rows[0]["wav_rel"]
             rb0, _ = ref_to_b64_f32_16k(rp0)
-            await run_one(base_url, "你好，这是预热。", rb0)
+            await run_one(base_url, rows[0]["target"][:80], rb0)  # locale 一致 target,避免中英混合触发不收敛
             print("warmup done", flush=True)
         except Exception as e:
             print(f"warmup err (ignored): {e}", flush=True)
