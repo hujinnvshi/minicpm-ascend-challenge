@@ -49,14 +49,15 @@ BIN=build-cann/bin/llama-omni-perf-duplex
 MODEL=/workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-F16.gguf
 PREFIX=$PWD/tools/omni/assets/test_case/duplex_omni_test_case/duplex_omni_test_case_
 REF=$PWD/tools/omni/assets/default_ref_audio/default_ref_audio.wav
-$BIN -m "$MODEL" -c 4096 -ngl 99 --ref-audio "$REF" --test "$PREFIX" 36 \
+# [P3+P4] 推荐: vocoder 24 threads + NUMA node6 绑核(CPU192-223) → RTF 0.57 (默认 16 不绑核 0.64)
+taskset -c 192-223 env OMNI_T2W_THREADS=24 $BIN -m "$MODEL" -c 4096 -ngl 99 --ref-audio "$REF" --test "$PREFIX" 36 \
   -o tools/omni/output --out-json tools/omni/output/perf_report.json
 python3 tools/omni/perf/analyze_perf.py tools/omni/output/perf_report.json --interval-ms 1000
 ```
 
 **预期结果(本方案)**:
-- **SPEAK→WAV e2e RTF ≈ 0.81–0.83**(官方基线 1.087,beat ~24%)。
-- TTS RTF ≈ 0.82;LLM 判定 P50 ≈ 977ms。
+- **SPEAK→WAV e2e RTF ≈ 0.57**(推荐 24 vocoder threads + NUMA node6 绑核) / 0.64(默认 16 不绑核)(官方基线 1.087,beat 48%/41%)。
+- TTS RTF ≈ 0.57/0.64;LLM 判定 P50 ≈ 977ms。
 - 多次跑取中位(RTF 差异 <0.03 视噪声)。
 - 并发采样(证 compute 在 NPU):`while sleep 0.5; do npu-smi info -t usages -i 1 | grep -i 'Aicore\|HBM Bandwidth'; done` → decode 期 AICore burst 60–84%、HBM 带宽 50%。
 

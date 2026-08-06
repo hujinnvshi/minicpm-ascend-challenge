@@ -321,3 +321,21 @@ init_from_host_caches 校验 cache_host.n_timesteps != n_timesteps → 拒绝
 - 残留：threads=32 不稳（RTF 0.59/0.90，vocoder 292/494ms 抖动，CPU 调度/NUMA 跨 node）→ 16 为最优。候选 C（vocoder 异步重叠 Flow）边际（vocoder 395 仍 >> Flow 144，重叠仅省 Flow 144ms）。
 - 累计：P1.7（队列解耦）+P3（vocoder 16 threads）→ TTS RTF **0.62**（基线 1.087，beat 43%）。
 - 原始日志：`tools/omni/output/p3_*.{json,log,analyze}`（gitignored）。
+
+---
+
+### 实验 P4：threads 24 + NUMA node6 绑核（运行时配置优化，RTF 0.64→0.57）
+
+- 时间：2026-08-06
+- 目标：P3（vocoder 16 threads）后 RTF 0.64，继续优化（逐个击破，从大到小）。
+- 方法（系统扫描常用方案）：
+  - **NUMA 绑核 node6（CPU192-223）**：vocoder 16 threads 绑核本地内存。RTF 0.64→0.61（中位，Δ-0.03，略有效 + 更稳定）。
+  - **threads 微调 + NUMA 叠加**：12/16/20/24 × NUMA。**24+NUMA 最优 RTF 0.57**（5 次 0.55-0.62 中位）；20+NUMA 0.59；16+NUMA 0.61；12+NUMA 0.63。
+  - **NUMA 必需性**：24 不绑核 RTF 0.72/0.75（差！跨 node remote 内存 + 抢核抖动）→ **taskset 是必需**。
+  - **C（异步重叠）评估**：vocoder ‖ token2mel 需跨 window 重构（拆 push_tokens_window 接口 + t2w_thread 双缓冲 + Flow/voc cache 双缓冲），复杂 + 质量风险；24+NUMA 同收益（0.57）且不改代码 → **弃 C**。
+- 结果：**24+NUMA RTF 0.57**（vs P3 默认 0.64，降 11%；vs 基线 1.087，beat 48%）。vocoder p50 371→~340ms。
+- 质量：wav RMS 0.05-0.066（非静音，量级同基线，不改数学）。
+- 红线：仅 CPU 线程数 + NUMA 绑核（运行时配置），不改推理数学 / 不改代码默认。
+- 策略：**不改默认 kDefaultThreads（16）**——避免不绑核场景 24→0.72（差）风险；reproduce-guide 推荐 `OMNI_T2W_THREADS=24 + taskset -c 192-223`。
+- 累计：P1.7 + P3 + P4 → RTF **0.57**（24+NUMA 配置）/ 0.64（默认 16）。
+- 原始日志：`tools/omni/output/p4_*.{json,log,analyze}`（gitignored）。

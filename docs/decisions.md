@@ -2,6 +2,23 @@
 
 记录参赛过程中的关键决策与依据。时间倒序。
 
+## 2026-08-06 决策（P4）：threads 24 + NUMA node6 绑核（运行时配置，RTF 0.64→0.57）
+
+**背景**：P3（vocoder 16 threads）后 RTF 0.64。逐个击破优化方向（NUMA / threads 微调 / C 异步 / NPU化）。
+
+**过程**：
+1. **NUMA 绑核 node6（CPU192-223）**：vocoder 本地内存，RTF 0.64→0.61（略有效 + 稳定）。
+2. **threads 微调 + NUMA 叠加**：24+NUMA 最优 RTF 0.57（vs 16+NUMA 0.61 / 20+NUMA 0.59）。
+3. **NUMA 必需性**：24 不绑核 0.72（差，跨 node remote + 抢核）→ taskset 必需。
+4. **C（异步重叠）评估**：需跨 window 重构（拆接口 + 双缓冲 + Flow/voc cache 同步），复杂/质量风险；24+NUMA 同收益且不改代码 → 弃 C。
+
+**决策**：
+1. **推荐运行时配置 `OMNI_T2W_THREADS=24 + taskset -c 192-223`**（node6）→ RTF 0.57（beat 基线 48%）。
+2. **不改默认 kDefaultThreads（16）**——避免不绑核场景 24→0.72（差于默认 16 的 0.64）风险；reproduce-guide 更新推荐配置。
+3. 红线：仅 CPU 线程 + NUMA 绑核，不改推理数学 / 不改代码默认。
+
+**详见**：[experiments.md](experiments.md) P4
+
 ## 2026-08-06 决策（P3）：vocoder CPU 多线程（kDefaultThreads 8→16）
 
 **背景**：P1.7 后 TTS RTF 0.83（beat 基线 1.087），但 decode 期 NPU 占空比仅 23-29%（空泡多）。plan 模式规划下一步深入优化（诊断 decode 空泡 → 针对性优化）。
