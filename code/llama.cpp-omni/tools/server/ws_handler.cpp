@@ -7,6 +7,7 @@
 #include <fstream>
 #include <thread>
 #include <vector>
+#include <sys/wait.h>   // WEXITSTATUS
 
 #include <cpp-httplib/httplib.h>
 
@@ -344,10 +345,46 @@ static bool file_nonempty(const std::string & path) {
     return fs::exists(path, ec) && fs::file_size(path, ec) > 0;
 }
 
+static std::string truncate_for_prompt(const std::string & text, size_t max_chars); // defined below
+
+// Run a shell command via popen, merging stdout+stderr into *capture (up to
+// cap_max bytes), and return the exit code (WEXITSTATUS). Returns -1 on popen
+// failure or abnormal termination (e.g. killed by signal). Used instead of
+// std::system so we can capture ffmpeg stderr for diagnostics and obtain a
+// reliable exit code; the 2>&1 merge does not affect the exit code. The caller
+// is responsible for shell-quoting any paths embedded in cmd.
+static int run_cmd_capture(const std::string & cmd, std::string * capture, size_t cap_max = 4096) {
+    if (capture) {
+        capture->clear();
+    }
+    FILE * pipe = popen(("(" + cmd + ") 2>&1").c_str(), "r");
+    if (!pipe) {
+        return -1;
+    }
+    char buf[512];
+    size_t got = 0;
+    while (fgets(buf, sizeof(buf), pipe)) {
+        if (capture && got < cap_max) {
+            std::string piece(buf);
+            if (piece.size() > cap_max - got) {
+                piece.resize(cap_max - got);
+            }
+            capture->append(piece);
+            got += piece.size();
+        }
+    }
+    int status = pclose(pipe);
+    if (status == -1 || !WIFEXITED(status)) {
+        return -1;
+    }
+    return WEXITSTATUS(status);
+}
+
 struct ExtractedVideoMedia {
     std::string video_path;
     std::string audio_path;
     std::vector<std::string> frame_paths;
+    std::string last_error; // ffmpeg stderr summary on failure; empty on success
 };
 
 // Decode a base64 MP4 (turn_based `video` content item) to a temp file and use
@@ -378,27 +415,72 @@ static ExtractedVideoMedia extract_video_mp4_media(const std::string & video_b64
         return out;
     }
 
+    // Audio extraction: ffmpeg -> mono 16k PCM WAV. Retry once on transient
+    // subprocess failure (startup races); audio failure is non-fatal (some
+    // clips have no audio) — matches prior behavior of leaving audio_path empty.
+    // timeout(1) guards against a hung ffmpeg demuxer. ffmpeg params unchanged
+    // vs. original (bit-identical output on the success path).
     std::string audio_path = (dir / "audio.wav").string();
+    // Cap audio at 29.9s so mel frames <= 3000 -> whisper encoder tokens <= 1500
+    // (n_audio_ctx). Audio > 30.0s overflows the position-encoding buffer in
+    // build_whisper (audition.cpp) and aborts the whole server (SIGABRT). 29.9s
+    // leaves a small margin under the hard 1500-token whisper window.
+    // (Daily-Omni audio is 30~60s, so this cap is what makes the clip encodable
+    //  at all within omni's whisper ASR path; see docs/daily-omni-notes.md.)
     std::string audio_cmd =
-        "ffmpeg -y -hide_banner -loglevel error -i " + shell_quote(out.video_path) +
-        " -vn -ac 1 -ar 16000 -c:a pcm_f32le " + shell_quote(audio_path);
-    if (std::system(audio_cmd.c_str()) == 0 && file_nonempty(audio_path)) {
-        out.audio_path = audio_path;
+        "timeout -k 5 30 ffmpeg -y -hide_banner -loglevel error -i " + shell_quote(out.video_path) +
+        " -vn -ac 1 -ar 16000 -c:a pcm_f32le -t 29.9 " + shell_quote(audio_path);
+    {
+        std::string cap;
+        int rc = -1;
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            rc = run_cmd_capture(audio_cmd, &cap);
+            if (rc == 0 && file_nonempty(audio_path)) {
+                break;
+            }
+            if (attempt == 0) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            }
+        }
+        if (rc == 0 && file_nonempty(audio_path)) {
+            out.audio_path = audio_path;
+        } else {
+            out.last_error += "audio_extract rc=" + std::to_string(rc) +
+                              ": " + truncate_for_prompt(cap, 512) + " | ";
+        }
     }
 
+    // Frame extraction: ffmpeg -> up to n_frames JPEGs. Retry once on transient
+    // failure; frame failure IS fatal (caller checks frame_paths.empty()).
     std::string frame_pattern = (dir / "frame_%03d.jpg").string();
     std::string frame_cmd =
-        "ffmpeg -y -hide_banner -loglevel error -i " + shell_quote(out.video_path) +
+        "timeout -k 5 30 ffmpeg -y -hide_banner -loglevel error -i " + shell_quote(out.video_path) +
         " -an -frames:v " + std::to_string(n_frames) +
         " -q:v 2 " + shell_quote(frame_pattern);
-    if (std::system(frame_cmd.c_str()) == 0) {
-        for (int i = 1; i <= n_frames; ++i) {
-            char name[32];
-            snprintf(name, sizeof(name), "frame_%03d.jpg", i);
-            std::string frame_path = (dir / name).string();
-            if (file_nonempty(frame_path)) {
-                out.frame_paths.push_back(frame_path);
+    {
+        std::string cap;
+        int rc = -1;
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            rc = run_cmd_capture(frame_cmd, &cap);
+            if (rc == 0) {
+                break;
             }
+            if (attempt == 0) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            }
+        }
+        if (rc == 0) {
+            for (int i = 1; i <= n_frames; ++i) {
+                char name[32];
+                snprintf(name, sizeof(name), "frame_%03d.jpg", i);
+                std::string frame_path = (dir / name).string();
+                if (file_nonempty(frame_path)) {
+                    out.frame_paths.push_back(frame_path);
+                }
+            }
+        } else {
+            out.last_error += "frame_extract rc=" + std::to_string(rc) +
+                              ": " + truncate_for_prompt(cap, 512);
         }
     }
 
@@ -591,10 +673,18 @@ void handle_ws_backend(httplib::ws::WebSocket & ws,
     int msg_counter = 0;
     std::vector<std::string> retained_media_files;
 
-    // Helper: fail-fast — send session.closed and close WS
-    auto fail_fast = [&](const std::string & session_id, const std::string & reason) {
+    // Helper: fail-fast — send session.closed (optional diagnostic) and close WS.
+    // The diagnostic is surfaced to the client via session.closed.diagnostic and
+    // always logged via LOG_WRN (default verbosity already shows WARN).
+    auto fail_fast = [&](const std::string & session_id,
+                         const std::string & reason,
+                         const std::string & diagnostic = "") {
+        LOG_WRN("WS /backend: fail_fast session=%s reason=%s%s%s\n",
+                session_id.c_str(), reason.c_str(),
+                diagnostic.empty() ? "" : " diag=",
+                diagnostic.empty() ? "" : diagnostic.c_str());
         if (!session_id.empty()) {
-            std::string ev = make_session_closed(session_id, reason).dump();
+            std::string ev = make_session_closed(session_id, reason, diagnostic).dump();
             ws.send(ev);
         }
         session_mgr.close(session_id);
@@ -875,7 +965,7 @@ void handle_ws_backend(httplib::ws::WebSocket & ws,
                     if (video.frame_paths.empty()) {
                         tmp_files.cleanup();
                         for (const auto & path : turn_temp_paths) fs::remove(path);
-                        fail_fast(session_id, "video_decode_failed");
+                        fail_fast(session_id, "video_decode_failed", video.last_error);
                         return;
                     }
                 }

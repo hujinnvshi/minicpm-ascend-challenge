@@ -357,3 +357,27 @@ init_from_host_caches 校验 cache_host.n_timesteps != n_timesteps → 拒绝
 - 决策：**不 merge**（p3-safe-opt/main 保持 P3/P4 RTF 0.57 不破坏）。p5 实验 commit `eb93d70` 保留（未来 CPU 亲和优化参考）。
 - 认知更新：**0.34 是理论值（完全 overlap），P5 实测 CPU 竞争下不可达**。RTF 0.57（P3/P4）是红线内 + CPU 物理的实际高位。
 - 原始日志：`tools/omni/output/p5b_*.{json,log,analyze}`（gitignored）。
+
+### 实验 P6：Daily-Omni video 接入加固 + 连环根因定位（2026-08-06，分支 fix/video-extract-harden）
+
+**起点**：`benchmark/daily-omni/` 跑 Daily-Omni 评测，5/5 `video_decode_failed`，准确率 0%。
+
+**诊断闭环（runtime 实测 + 物证，非静态推断）**：
+
+1. **video_decode_failed 真因 = 瞬态，非赛事方安排**：数据标准 MP4（`ftypisom`）；ffmpeg 7.0.2 在 PATH；用 server 原命令精确复现能产出 frame+audio；`/tmp/omni_ws/video_2/` 物证证明 server 曾成功 extract。裸 `std::system("ffmpeg")` 无重试/无 stderr 捕获 + omni_context 懒加载（`/health` 恒 ok 不反映就绪）→ 启动初期瞬态硬 fail。**这道 fail 其实是"防火墙"**——在 extract 阶段提前返回，阻止了下游崩溃（见 3）。
+
+2. **加固 extract**（`ws_handler.cpp`）：新增 `run_cmd_capture`（popen+pclose→WEXITSTATUS 捕获 stderr）；audio/frame 各重试 1 次 + `timeout -k 5 30` 防 hang；`ExtractedVideoMedia.last_error` 带 ffmpeg stderr；`fail_fast` 加默认 `diagnostic` 参数 + `LOG_WRN`，`video_decode_failed` 回传 diagnostic（`make_session_closed` protocol.cpp:163 已支持第三参数，16 处 fail_fast 调用点零改动）。红线：ffmpeg 参数一字不动，成功路径 bit-identical。
+
+3. **加固暴露 whisper 30s 崩溃**（omni 既有 bug，被 video_decode_failed 掩盖两月）：extract 成功后流程首次走到 audio prefill → `build_whisper`（audition.cpp:342-428）位置编码缓冲区（按 `n_audio_ctx=1500` = 标准 whisper 30s 窗口预分配）溢出 → `throw std::runtime_error` → 整个 server **SIGABRT（exit 134）**。Daily-Omni 音频全量 1196 条 WAV 头解析：96.7% >30s（半数 60.0s），几乎每条必崩。`docs/daily-omni-notes.md:33` 早已记录"whisper 对 30s 支持有限"。
+
+4. **修复**：extract 的 audio_cmd 加 `-t 29.9`（mel ≤3000 → conv token ≤1500 不溢出）。验证：日志 `n_tokens=1495 < max_tokens=1500`，server 不崩，8 帧视觉 + audio prefill 正常完成（n_past ~851，n_ctx 8192）。
+
+5. **加固 client**（`daily_omni_test.py`）：`wait_ready`（WS session.init 探针，触发 omni_context 懒加载，替代恒 ok 的 /health）+ `run_one_with_retry`（仅瞬态错误重试，max 3，线性退避 2s/4s）+ `stack_frames` 参数化（默认 8，多采视觉帧；框架视觉只看这些帧）。
+
+**结果**：加固全部生效（server 不崩、diagnostic 通道工作、client 处理瞬态）。**但暴露独立根本问题**——
+
+6. **turn_based 文本输出乱码（纯文本就复现，与本次加固无关）**：发 "What is 2+2? A.3 B.4 C.5 D.6" 纯文本（无 video/audio）→ server 回 `??????????`。最可能机制：MiniCPM-o 全模态模型（6562 audio token vocab，omni.cpp emb_code/head_code）在 `<|im_start|>assistant` 后倾向输出**音频 token 流**，经文本 detokenize（`common_token_to_piece`）成 `?`。Demo turnchat（commit 9ca99d6 有正常文本回答视频）→ 某配置下能强制文本；直连 WS 乱码 vs 经 gateway/worker 正常的差异待定位（可能在前端 system_prompt 或 mode 字段）。
+
+**Daily-Omni 在 omni server 的双重框架限制**：① whisper 30s 窗口（已修不崩，但 60s 样本截断丢半）② turn_based 文本输出乱码（拿不到 ABCD）。两者均非"加固 extract"范畴，是 omni 框架对 daily-omni（60s 音视频 QA）的能力上限。官方基线 79.5% 是 Qwen-Omni 类原生音视频模型，框架代际差不可由 bug 修复跨越。
+
+**决策**：加固（extract 重试/diagnostic/whisper 修复/client）为净增益，commit 到 `fix/video-extract-harden`。文本乱码深挖另议（demo 能工作 → 可能有解，但需起 demo 对比 / 改 omni 模态控制，ROI 待估）。
