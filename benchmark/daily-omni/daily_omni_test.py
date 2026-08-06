@@ -116,7 +116,7 @@ class WSClient:
             self.ws = None
 
 
-async def run_one(base_url, video_bytes, question, candidates, stack_frames=8):
+async def run_one(base_url, video_bytes, question, candidates, stack_frames=1):
     """单条: server WS turn_based(video mp4 base64 + question/choices) → generated_text。"""
     video_b64 = base64.b64encode(video_bytes).decode("ascii")
     choices_text = "\n".join(str(c) for c in candidates)
@@ -193,7 +193,7 @@ async def wait_ready(base_url, deadline_s=180):
 
 
 async def run_one_with_retry(base_url, video_bytes, question, candidates,
-                             max_attempts=3, backoff=2.0, stack_frames=8):
+                             max_attempts=3, backoff=2.0, stack_frames=1):
     """run_one with transient-only retry. Each attempt uses a fresh WSClient + session.
 
     Returns (text, err, attempts); err is None on success.
@@ -221,8 +221,8 @@ async def main():
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=22500)
     ap.add_argument("--out", default=str(REPO / "benchmark" / "daily-omni" / "result.json"))
-    ap.add_argument("--stack-frames", type=int, default=8,
-                    help="视频采帧数 (server cap 8); 框架视觉只看这些帧,多采覆盖更多时序")
+    ap.add_argument("--stack-frames", type=int, default=1,
+                    help="视频采帧数; 默认1 —— 实测 stack_frames>=2 触发 omni 输出 audio token 流(乱码),见 experiments.md P7")
     args = ap.parse_args()
 
     base_url = f"http://{args.host}:{args.port}"

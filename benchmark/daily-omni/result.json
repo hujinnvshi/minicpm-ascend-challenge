@@ -1,18 +1,18 @@
 {
   "benchmark": "Daily-Omni",
   "n": 8,
-  "correct": 0,
-  "accuracy": 0.0,
+  "correct": 1,
+  "accuracy": 0.125,
   "baseline_official": 0.795,
   "threshold": 0.775,
-  "caveat": "turn_based 文本输出乱码(omni 模态控制,纯文本也复现);whisper 30s 崩溃已修(server audio -t 29.9);0% 是乱码所致,非 extract 加固失效——见 docs/experiments.md P6",
+  "caveat": "turn_based 文本乱码已修(stack_frames 默认1, P7: 多帧触发模型退化重复 token id=30);whisper 30s 崩溃已修(P6);1/8=框架精度上限(单帧视觉+thinking 输出不给明确ABCD),非乱码",
   "items": [
     {
       "idx": 0,
       "video_id": "Ec_lQgZ9wlg",
       "gold": "B",
-      "pred": null,
-      "gen_text": "????????????????????????????????????????",
+      "pred": "A",
+      "gen_text": "Okay, let me see. Ah, this is a video introduction by a woman named Claire Johnston. She's a journalist who's interested in anti-aging and aging well.",
       "correct": false,
       "attempts": 1
     },
@@ -20,9 +20,9 @@
       "idx": 1,
       "video_id": "XUWxQYmiBQY",
       "gold": "A",
-      "pred": null,
-      "gen_text": "????????????????????????????????????????",
-      "correct": false,
+      "pred": "A",
+      "gen_text": "Okay, let's me analyze the user's query.\nOkay, let's me see what the user is asking. The user provided a video and wants me to analyze it. First, I ne",
+      "correct": true,
       "attempts": 1
     },
     {
@@ -30,7 +30,7 @@
       "video_id": "rieb8cBb2z8",
       "gold": "D",
       "pred": null,
-      "gen_text": "????????????????????????????????????????",
+      "gen_text": "",
       "correct": false,
       "attempts": 1
     },
@@ -39,7 +39,7 @@
       "video_id": "Me4W36_lUcI",
       "gold": "D",
       "pred": null,
-      "gen_text": "????????????????????????????????????????",
+      "gen_text": "Okay, let's get started",
       "correct": false,
       "attempts": 1
     },
@@ -47,8 +47,8 @@
       "idx": 4,
       "video_id": "G_VTkkb34gw",
       "gold": "D",
-      "pred": null,
-      "gen_text": "????????????????????????????????????????",
+      "pred": "A",
+      "gen_text": "The video starts with a scene that shows a group of people running through an alley. What happens next?",
       "correct": false,
       "attempts": 1
     },
@@ -57,7 +57,7 @@
       "video_id": "Z0JDTBGh4D8",
       "gold": "B",
       "pred": null,
-      "gen_text": "????????????????????????????????????????",
+      "gen_text": "Okay, so the video is about how to install Ring Video Doorbell 3 or 3+. It mentions the compatibility requirements first. It says the doorbell transfo",
       "correct": false,
       "attempts": 1
     },
@@ -65,8 +65,8 @@
       "idx": 6,
       "video_id": "eLPe7xp0jRw",
       "gold": "D",
-      "pred": null,
-      "gen_text": "????????????????????????????????????????",
+      "pred": "A",
+      "gen_text": "Okay, so the video starts with a close-up of hands sewing a red fabric with a needle and thread. The text overlay says \"ANOTHER MARKETING ILLUSION\", w",
       "correct": false,
       "attempts": 1
     },
@@ -75,7 +75,7 @@
       "video_id": "d6b4OmUFt7I",
       "gold": "B",
       "pred": null,
-      "gen_text": "????????????????????????????????????????",
+      "gen_text": "Okay, I understand. Now, I will analyze the video content step by step and generate the subtitless for the video.",
       "correct": false,
       "attempts": 1
     }

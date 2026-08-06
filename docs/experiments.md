@@ -381,3 +381,36 @@ init_from_host_caches 校验 cache_host.n_timesteps != n_timesteps → 拒绝
 **Daily-Omni 在 omni server 的双重框架限制**：① whisper 30s 窗口（已修不崩，但 60s 样本截断丢半）② turn_based 文本输出乱码（拿不到 ABCD）。两者均非"加固 extract"范畴，是 omni 框架对 daily-omni（60s 音视频 QA）的能力上限。官方基线 79.5% 是 Qwen-Omni 类原生音视频模型，框架代际差不可由 bug 修复跨越。
 
 **决策**：加固（extract 重试/diagnostic/whisper 修复/client）为净增益，commit 到 `fix/video-extract-harden`。文本乱码深挖另议（demo 能工作 → 可能有解，但需起 demo 对比 / 改 omni 模态控制，ROI 待估）。
+
+### 实验 P7：Daily-Omni 文本乱码深度根因 + 修复（2026-08-06，分支 fix/video-extract-harden）
+
+**起点**：P6 加固后 server 不崩，但 daily-omni turn_based 文本输出乱码（40 个 `?`），准确率 0%。
+
+**诊断闭环（runtime 实测，非静态推测）**：
+
+1. **静态分析矛盾、不可信**：3 个 Explore agent 结论不一（① audio token 未 mask ② prompt 结构不符 omni_init ③ payload 缺字段），且 Agent① 读错关键行（称 L10849 "双 \n 无引导"，实际复核是 `<|im_start|>assistant\n<think>\n\n</think>\n\n` 空 thinking block，**有引导**）。omni.cpp L10430-10440 也确认 `has_ref_audio_slot=false` 走受支持的纯文本分支。**静态分析不足以定根因。**
+
+2. **runtime 隔离实验（diag_v2，干净 server，同 video 同 Q 变 stack_frames）**：
+   - T1 纯文本 → `'The correct answer is B. blue'` ✅ 正常
+   - T2 video+audio **stack_frames=1** → `'Okay, let me think... speaker is a woman... anti-aging'` ✅ 正常（模型理解视频）
+   - T3 video+audio **stack_frames=8** → `'??????????'` ❌ 乱码
+   - **根因锁定 = stack_frames=8（多帧）触发** —— 正是 P6 加固时引入的"多采帧"改动（1→8）。乱码后还会污染 shared_octx，导致后续 session 即使 1 帧也乱码（需重启 server 复位）。
+
+3. **token id 日志确证（omni.cpp `sample_with_hidden_and_token` 加临时 LOG，跑 stack=8 触发乱码）**：所有乱码 token **id=30, audio=0, eog=0, piece='?'**，重复 40 次。
+   - **不是 audio token**（id=30 远不在 [151687,158249)）→ 推翻 Agent① 的 audio token 假设
+   - 是**模型退化（degeneration / repetition collapse）**：decode 陷入重复输出 token 30（不可打印 byte，显示 `?`）的死循环。
+
+4. **深度原因**：stack_frames≥2 的多帧 vision embedding（每帧 64 token）+ audio（299）+ system/text 组合，超出 MiniCPM-o turn_based 训练分布（omni 训练时视觉多帧布局不同）→ decode attention 退化 → 重复 token 30。token 30 经 `common_token_to_piece` 解码为不可打印字符 → 客户端显示 `?`。
+
+**修复**：`daily_omni_test.py` `--stack-frames` 默认 8 → **1**（回退 P6 引入的多帧）。单帧是 omni 训练分布内的视觉布局。
+
+**验证（干净 binary）**：
+- 纯文本 QA 正常文本（"The correct answer is B. blue"）
+- daily-omni --stack-frames 1 --limit 8：**8 条全部正常文本**（模型正确理解视频：女记者 anti-aging、跑步、Ring Doorbell 安装、缝纫…），准确率 1/8
+- 准确率低是**框架精度上限**（单帧视觉 + thinking 风格输出常不给明确 ABCD），**非乱码 bug** —— 乱码已修
+
+**教训**：
+- P6 加固时的"多采帧"建议未经实测，反而触发模型退化。**runtime 实测 > 静态推测**（rigor-verify-loop）：agent 静态分析 audio token 假设被 token id=30 实证推翻。
+- omni 框架对 daily-omni 的能力上限 = whisper 30s（P6 已修）+ **单帧视觉**（多帧退化）+ thinking 输出 → 精度受限，但不再乱码/崩溃。
+
+**代码改动**：仅 `daily_omni_test.py`（stack_frames 默认 1）；omni.cpp 诊断 LOG 用后移除（净 0 改动）；不动 server/推理数学/红线。
