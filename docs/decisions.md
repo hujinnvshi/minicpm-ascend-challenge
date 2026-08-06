@@ -2,6 +2,24 @@
 
 记录参赛过程中的关键决策与依据。时间倒序。
 
+## 2026-08-06 决策（P5）：vocoder overlap 流水线实验 — 未达 0.34，回退
+
+**背景**：极限分析理论下限 0.34（C 重叠）。尝试冲 0.34（不破坏 P3/P4）。
+
+**过程**：
+1. P5-1 拆 push_tokens_window → push_tokens_only/vocoder_only（保留原函数，bit-精确）。
+2. P5-2 t2w_thread 流水线（t2m N ‖ vocoder N-1 async + future + 写 wav lambda + 循环尾/break）。
+3. 顺序修正（t2m 先 ‖ vocoder async，future.get 后）。
+4. 校验：overlap 生效但 T2W 仅 540→500ms（-40ms），RTF 0.58 = off 0.58（没达 0.34）。
+
+**决策**：
+1. **不 merge**（p3-safe-opt/main 保持 P3/P4 RTF 0.57 不破坏）。
+2. 根因：vocoder 24 threads(CPU) 与 t2m NPU(CPU 调度) **CPU 竞争** → 弱 overlap。极限 0.34 假设"完全并行"实测不成立。
+3. p5 实验 commit `eb93d70` 保留（未来 CPU 亲和细分参考：vocoder 独占 NUMA node + t2m 调度别核）。
+4. **RTF 0.57 是红线内 + CPU 物理实际高位**（P5 + NPU化两条突破路均受阻：CPU 竞争 / CANN 无 CNN）。
+
+**详见**：[experiments.md](experiments.md) P5、[perf-ceiling-analysis.md](perf-ceiling-analysis.md)（0.34 理论 → P5 实测 CPU 竞争）
+
 ## 2026-08-06 决策（P4）：threads 24 + NUMA node6 绑核（运行时配置，RTF 0.64→0.57）
 
 **背景**：P3（vocoder 16 threads）后 RTF 0.64。逐个击破优化方向（NUMA / threads 微调 / C 异步 / NPU化）。

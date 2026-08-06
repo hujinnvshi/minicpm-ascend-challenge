@@ -339,3 +339,21 @@ init_from_host_caches 校验 cache_host.n_timesteps != n_timesteps → 拒绝
 - 策略：**不改默认 kDefaultThreads（16）**——避免不绑核场景 24→0.72（差）风险；reproduce-guide 推荐 `OMNI_T2W_THREADS=24 + taskset -c 192-223`。
 - 累计：P1.7 + P3 + P4 → RTF **0.57**（24+NUMA 配置）/ 0.64（默认 16）。
 - 原始日志：`tools/omni/output/p4_*.{json,log,analyze}`（gitignored）。
+
+---
+
+### 实验 P5：vocoder overlap 流水线（t2m N ‖ vocoder N-1）— 尝试冲 0.34，未达，回退
+
+- 时间：2026-08-06
+- 目标：极限分析理论下限 0.34（C 重叠，vocoder CPU 346ms 锁），尝试冲 0.34（不破坏 P3/P4）。
+- 实施（p5-vocoder-overlap 分支）：
+  - **P5-1**：拆 `push_tokens_window` → `push_tokens_only`(t2m) + `vocoder_only`(voc+cache)，**保留原函数**（env 关默认不变，bit-精确）。token2wav-impl.h/.cpp。
+  - **P5-2**：`t2w_thread` if-else（env `OMNI_VOC_OVERLAP`）：t2m N(主,NPU) ‖ vocoder N-1(async,CPU) + future.get 写 wav + 循环尾等 last + 写 wav lambda 提取。
+  - 顺序修正：t2m N 先（与 vocoder N-1 async 并行）→ future.get（等 vocoder N-1）→ vocoder N async。
+- 三重校验：
+  - **性能**：overlap 生效（on log 134× push_tokens_only 调用），但 T2W 540→**500ms**（仅降 40ms），**RTF 0.58 = off 0.58（没达理论 0.34）**。
+  - 质量：on/off wav 数 58/57（尾分割微异），bit-精确 diff 因 wav 路径未完成（overlap 已证不改数学：t2m/vocoder 算子零共享 + 提取原逻辑）。
+  - 根因：**vocoder 24 threads（CPU 重）与 t2m NPU（CPU 调度）CPU 资源竞争** → 没充分并行。极限分析 0.34 假设"完全并行"不成立（实测 CPU 抢占）。
+- 决策：**不 merge**（p3-safe-opt/main 保持 P3/P4 RTF 0.57 不破坏）。p5 实验 commit `eb93d70` 保留（未来 CPU 亲和优化参考）。
+- 认知更新：**0.34 是理论值（完全 overlap），P5 实测 CPU 竞争下不可达**。RTF 0.57（P3/P4）是红线内 + CPU 物理的实际高位。
+- 原始日志：`tools/omni/output/p5b_*.{json,log,analyze}`（gitignored）。

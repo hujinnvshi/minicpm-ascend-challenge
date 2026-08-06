@@ -85,8 +85,8 @@ TTS RTF = (末wav - LLM t_done)/音频 = TTS-model(NPU) + T2W(Flow NPU + vocoder
 
 ## 七、结论
 
-**终极目标 RTF**：
-- **真实硬极限 ~0.34**（C 重叠，vocoder CPU 346ms 物理锁；当前 0.57，gap 0.23）
-- ~~vocoder NPU化（理论 0.10-0.15）~~ **❌ 不可行**（CANN 不支持 CNN 算子 CONV_2D/CONV_1D，HiFiGAN 核心阻断；需 CANN 算子移植，大工程 + 数值风险）
+**终极目标 RTF**（P5 实测修正 2026-08-06）：
+- ~~红线内极限 ~0.34（C 重叠）~~ **P5 实测推翻**：vocoder overlap 流水线实施（t2m N ‖ vocoder N-1 async），overlap 生效（on log 134× push_tokens_only）但 T2W 仅 540→500ms（-40ms），RTF 0.58 = off 0.58（没达 0.34）。根因：**vocoder 24 threads（CPU 重）与 t2m NPU（CPU 调度）CPU 资源竞争** → 弱 overlap。**0.34 是理论值（完全并行假设），实测 CPU 竞争下不可达**。
+- ~~vocoder NPU化（理论 0.10-0.15）~~ **❌ 不可行**（CANN 不支持 CNN 算子 CONV_2D/CONV_1D，HiFiGAN 核心阻断）。
 
-当前 0.57（24+NUMA）处于**红线内合理高位**——LLM 已近极限、vocoder CPU 接近物理限、NPU化被 CANN 算子缺失阻断。**0.34 是真实硬极限**（C 重叠可达但跨 window 重构风险）；突破需 CANN CNN 算子移植（非纯调度，大工程）。
+**RTF 0.57（24+NUMA）是红线内 + CPU 物理的实际高位**——LLM 近极限、vocoder CPU 近物理限、overlap 受 CPU 竞争限（P5 证）、NPU化受 CANN CNN 缺失阻断。突破 0.57 需 CANN CNN 算子移植（大工程 + 数值风险）或 CPU 亲和细分（vocoder 独占 NUMA node + t2m 调度别核，实验性，p5 分支 `eb93d70` 参考）。
