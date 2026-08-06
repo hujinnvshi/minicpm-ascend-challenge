@@ -52,4 +52,5 @@ resource-*/
 benchmark/seed-tts-eval/seedtts_testset/
 benchmark/seed-tts-eval/gen/
 benchmark/**/tts_wav/
+benchmark/demo-evidence/video_*/
 # demo runtime self-regenerated certs (keep committed originals only)

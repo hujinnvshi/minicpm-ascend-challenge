@@ -1,0 +1,11 @@
+=== 检查1: 3 进程端口(服务启动) ===
+  port 8006: LISTEN
+  port 22500: LISTEN
+  port 22400: LISTEN
+=== backend /health ===
+{"engine":"comni","status":"ok"}
+=== 检查2: worker 注册(Demo 连接推理) ===
+{"detail":"Not Found"}
+=== HBM(模型加载) ===
+	HBM Usage Rate(%)              : 5
+=== 检查6: log 异常(应无 fatal) ===

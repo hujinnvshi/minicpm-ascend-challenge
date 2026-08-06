@@ -1,0 +1,31 @@
+init tts....init t2w....flowGGUFModelLoader: init_backend device=gpu:0, gpu_idx=0, backend=CANN0
+7.31.372.483 I WS /backend: session b0c9b4e67e3a2bc2c41fb384f811e748 activated, mode=turn_based
+<assistant>05:42:46.039 === omni_init start
+05:42:46.039 === omni_init: loading new LLM model
+05:43:02.347 === omni_init: loading TTS model
+05:43:04.369 === omni_init: loading APM model
+05:43:05.317 Token2Wav: found models in /workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/token2wav-gguf
+05:43:05.319 Token2Wav: all model files found, initializing session...
+05:43:05.319 Token2Wav: non-CUDA backend, vocoder using CPU for better performance
+05:43:05.321 Token2Wav: using prompt_cache from /workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/token2wav-gguf/prompt_cache.gguf
+05:43:08.528 Token2Wav: initialized successfully
+05:43:08.529 Python T2W: script_dir=./tools/omni/pyt2w, model_dir=./tools/omni/pyt2w/token2wav
+05:43:08.529 Token2Wav: 使用 C++ 实现
+05:43:08.529 === omni_init success: ctx_llama = 0xfffed0a28dc0
+05:43:08.684 stream_prefill: n_past = 0
+05:43:09.427 stream_prefill(index=0): system prompt 初始化完成，ref_audio 已在其中 prefill
+c++ finish stream_prefill(index=0). n_past=53, n_keep=53, n_ctx=8192
+c++ finish stream_prefill(index=1). n_past=53, n_keep=53, n_ctx=8192
+05:43:09.478 LLM decode: max_tgt_len = 1024, n_predict = 1024, n_ctx = 8192
+05:43:09.960 LLM: detected end token, set llm_generation_done=true
+7.32.871.428 I Close session requested: b0c9b4e67e3a2bc2c41fb384f811e748
+7.48.884.581 I WS /backend: session b0c9b4e67e3a2bc2c41fb384f811e748 disconnected
+10.24.715.349 I WS /backend: session 7c58a7a7d90a54e7e3ce65e3014d02a5 activated, mode=turn_based
+05:46:02.067 stream_prefill: n_past = 0
+05:46:02.114 stream_prefill(index=0): system prompt 初始化完成，ref_audio 已在其中 prefill
+c++ finish stream_prefill(index=0). n_past=53, n_keep=53, n_ctx=8192
+c++ finish stream_prefill(index=1). n_past=53, n_keep=53, n_ctx=8192
+05:46:02.165 LLM decode: max_tgt_len = 1024, n_predict = 1024, n_ctx = 8192
+05:46:02.219 LLM: detected end token, set llm_generation_done=true
+10.25.097.083 I Close session requested: 7c58a7a7d90a54e7e3ce65e3014d02a5
+10.44.708.282 I WS /backend: session 7c58a7a7d90a54e7e3ce65e3014d02a5 disconnected
