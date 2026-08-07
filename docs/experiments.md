@@ -415,6 +415,35 @@ init_from_host_caches 校验 cache_host.n_timesteps != n_timesteps → 拒绝
 
 **代码改动**：仅 `daily_omni_test.py`（stack_frames 默认 1）；omni.cpp 诊断 LOG 用后移除（净 0 改动）；不动 server/推理数学/红线。
 
+### 实验 P7 重验（2026-08-07）：多帧退化真因 = 非交错打包（框架 bug，非模型上限）
+
+**触发**：官方 vLLM-Omni 指南证明多帧（Daily-Omni ≤64 帧、Video-MME ≤96 帧）可达 78%/70% → 推翻 P7"多帧=模型上限"结论。重验走 stack_frames 全链路代码（非静态推测根因，而是定位打包实现）。
+
+**代码追踪（stack_frames → prefill）**：
+1. `ws_handler.cpp:944-971`（视频拆解）：`extract_video_mp4_media` 用 ffmpeg 抽 **N 个 JPEG 帧 + 1 个整段 audio（capped 29.9s）**。第 1 帧 → `tmp_files.image_path`，第 2..N 帧 → `extra_image_paths`；audio → 单个 `tmp_files.audio_path`。**全程无 1s 分段、无 frame-audio 配对**。
+2. `omni.cpp:5046-5092`（prefill 组装顺序）：
+   ```
+   <image>[overview]</image>
+   <slice>[frame2]</slice> <slice>[frame3]</slice> …   ← N 帧塞进 high-res IMAGE SLICE 槽
+   \n
+   <|audio_start|>[整段 30s audio]<|audio_end|>         ← 单个解耦 audio blob
+   [text/prompt]
+   ```
+3. `encode_image_with_vision_chunks`（omni.cpp:496-498）本就是 **MiniCPM 高清图像切片**机制（overview + 空间 tiles）——多帧视频被当成"一张高原图的多个 tile"喂入。
+
+**根因（确认）**：llama.cpp-omni 对视频做 **STACKED 打包**（N 帧 = 图像切片 + 1 个整段 audio blob，audio 在所有帧之后一次性 prefill），而 MiniCPM-o 视频训练（及 vLLM `minicpm-interleave`）是 **INTERLEAVED 打包**（1fps 帧 + 1s 音频段按时间交错：frame0/audio0-1s/frame1/audio1-2s/…）。**堆叠布局 OOD → decode 陷入重复 token id=30（repetition collapse）**。
+- 为什么 stack_frames=1 不退化：退化为"1 图 + 1 audio"单输入，是合法 omni 输入（图像+音频 QA），在分布内 → 正常（P7 T2）。
+- 为什么 vLLM ≤64/96 帧正常：它用交错打包，在训练分布内。
+
+**结论修正**：
+- P7 的**观察**（stack_frames≥2 → token id=30 重复 40 次）✅ 正确、可复现。
+- P7 的**根因结论**（"多帧超出 turn_based 训练分布 → 模型上限"）❌ 不准确：OOD 是真的，但不是"多帧本身对模型太难"，而是**llama.cpp-omni 把视频帧当图像切片 + 单段 audio 的非交错打包**与训练分布不符。**这是框架打包 bug/限制，非模型上限**——与 vLLM 78% 一致。
+- `daily_omni_test.py` 的 `--stack-frames 1` 仍是当前**正确的 workaround**（单帧避免 OOD），但**不是终局**。
+
+**修复方向（不动推理数学，红线内）**：在 `ws_handler.cpp`（抽帧改为 1fps + audio 切 1s 段）+ `omni.cpp`（prefill 改为按时间步交错 `<image>frame_i</image><|audio_start|>audio_i<|audio_end|>` 循环）实现 `minicpm-interleave` 式打包。仅改输入布局，不改模型/采样 → 数学等价、精度风险在打包层。
+
+**状态**：静态代码分析强假设（打包实现已确证为非交错）；**definitive proof = 实现交错打包后 runtime 复测多帧不再退化**（下一步，属独立修复任务）。vision_backend 非阻塞（单帧 T2 已证视觉在昇腾可用，多帧问题在打包不在后端）。
+
 ### 实验 P8：官方验收匹配度评审 + 三项 benchmark 验证（2026-08-06，分支 fix/video-extract-harden）
 
 **任务**：对照官方 5 步验收（框架/精度3项/Demo/性能/复现），逐项验证 + 补缺口 + 落盘推送。

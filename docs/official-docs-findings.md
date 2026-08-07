@@ -67,7 +67,7 @@
 |---|---|
 | Daily-Omni ~10% = omni 框架**硬上限** | ❌ 错。是**单帧喂法**导致；官方多帧交错能到 78%。 |
 | 79.5/69.0 基线"可能不是 omni 实测 / 不公" | ❌ 错。基线**真实可达**（vLLM 实测 78.28%/69.96%），不是虚高。 |
-| 多帧视觉触发模型退化（stack_frames≥2）→ 只能单帧 | ⚠️ 很可能是 **llama.cpp-omni 的 bug 或配错**，不是模型本身限制（vLLM 用 ≤64/96 帧正常）。**P7 需重新验证。** |
+| 多帧视觉触发模型退化（stack_frames≥2）→ 只能单帧 | ✅ **2026-08-07 重验定论**：真因 = **非交错打包**。llama.cpp-omni 把视频帧当高清图像 `<slice>` + 单段 30s audio blob（STACKED），而训练分布是 `minicpm-interleave`（1fps 帧 + 1s 音频交错）→ OOD → repetition collapse。**框架打包 bug，非模型上限**。详 `experiments.md` P7 重验。 |
 
 > 这也意味着 `baseline-sourcing-evidence.md` 和 `official-clarification-request.md` 的 Q1 立场需要更新——见 §6。
 
@@ -84,10 +84,9 @@
 
 ## 6. 对策略/动作的影响
 
-1. **`official-clarification-request.md` Q1 改写**（最紧要）：从"基线公不公平"改成——
-   > "vLLM-Omni 用 `minicpm-interleave`/`minicpm-frames` 打包能到 78%/70%。**llama.cpp-omni（子赛道 A）是否支持等价的交错多帧打包？** 我们实测多帧（stack_frames≥2）会触发模型退化、只能退回单帧 → Daily-Omni 仅 ~10%。请提供子赛道 A 跑 Daily-Omni/VideoMME 的**官方推荐配置**。"
-2. **`baseline-sourcing-evidence.md` 加修正说明**：基线真实可达，矛盾从"是不是 omni 的"转为"llama.cpp-omni 怎么实现多帧交错"。
-3. **重验 P7**：在 llama.cpp-omni 里找多帧/交错喂法（非 turn_based 的 stack_frames），验证"多帧退化"是否真是 bug。
+1. ~~`official-clarification-request.md` Q1 改写~~ **done 2026-08-07**（Q1 已改为"子赛道 A 多帧交错配方"方向）。
+2. ~~`baseline-sourcing-evidence.md` 加修正说明~~ **done 2026-08-07**（顶部加修正横幅，"基线不公"假设推翻）。
+3. ~~重验 P7~~ **done 2026-08-07**：根因 = **非交错打包**（STACKED：帧当图像 `<slice>` + 单段 audio，vs 训练分布 INTERLEAVED）→ 框架打包 bug，非模型上限。详 `experiments.md` P7 重验。**新下一步：实现 `minicpm-interleave` 打包**（`ws_handler.cpp` 1fps 抽帧 + audio 切 1s 段；`omni.cpp` prefill 按时间步交错）→ runtime 复测多帧不再退化、Daily-Omni 能否接近 78%。
 4. **Daily-Omni/VideoMME 从"放弃项"改为"再冲项"**：有官方配方 + 转换脚本，值得照着在子赛道 A 再跑。
 5. **性能侧无变化**：RTF 0.68/0.57 口径正确，继续 beat 1.087。
 
@@ -95,11 +94,12 @@
 
 ## 7. 待办
 
-- [ ] 改写 `official-clarification-request.md` Q1（多帧交错配方方向）
-- [ ] `baseline-sourcing-evidence.md` 加"基线可达"修正说明
-- [ ] 重验 P7：llama.cpp-omni 多帧/交错喂法
+- [x] 改写 `official-clarification-request.md` Q1（多帧交错配方方向）— 2026-08-07
+- [x] `baseline-sourcing-evidence.md` 加"基线可达"修正说明 — 2026-08-07
+- [x] 重验 P7：根因 = 非交错打包（非模型上限）— 2026-08-07，详 `experiments.md` P7 重验
+- [ ] **实现 minicpm-interleave 打包**：`ws_handler.cpp`（1fps 抽帧 + audio 切 1s 段）+ `omni.cpp`（prefill 按时间步交错）→ runtime 复测多帧
 - [ ] 跑 `convert_daily_omni_modelscope.py` 把 MTEB/Daily-Omni 转成官方布局
-- [ ] 子赛道 A 对齐 Daily-Omni/VideoMME 配方跑精度（温度 0 / max_tokens 128 / 纯文本 / 多帧）
+- [ ] 子赛道 A 对齐 Daily-Omni/VideoMME 配方跑精度（温度 0 / max_tokens 128 / 纯文本 / 多帧交错）
 
 ---
 
