@@ -83,11 +83,11 @@ OMNI_VIDEO_INTERLEAVE=0   # 启动 llama-omni-server 前 export
 - 其余不变。
 
 ### 档位 3 — 全部回退（回到改动前 STACKED）
-撤销 A+B+C+D，回到 `4e2e4f6` 的 ws_handler.cpp：
+撤销 A+B+C+D，回到改动前的 ws_handler.cpp（基准 commit `4e2e4f6`）。本批改动已提交为 `c9d9499`：
 ```bash
-# 若本批改动已提交为某 commit X：
-git revert <X>                           # 生成回滚 commit
-# 若尚未提交（当前就是未提交状态）：
+# 方式 1（推荐，生成回滚 commit，保留历史）：
+git revert c9d9499
+# 方式 2（直接重置该文件到改动前）：
 git checkout 4e2e4f6 -- code/llama.cpp-omni/tools/server/ws_handler.cpp
 cmake --build code/llama.cpp-omni/build-cann --target llama-omni-server -j$(nproc)
 ```
