@@ -444,6 +444,35 @@ init_from_host_caches 校验 cache_host.n_timesteps != n_timesteps → 拒绝
 
 **状态**：静态代码分析强假设（打包实现已确证为非交错）；**definitive proof = 实现交错打包后 runtime 复测多帧不再退化**（下一步，属独立修复任务）。vision_backend 非阻塞（单帧 T2 已证视觉在昇腾可用，多帧问题在打包不在后端）。
 
+#### Runtime 复测（2026-08-07，实现+构建+实测）— interleave 必要但不充分
+
+交错打包已实现（`ws_handler.cpp` +114/-14）并**经日志验证布局正确**：`vision_set_max_slice_nums=0` → 每帧 1 chunk 无 `<slice>`；N 步 `<image>frame_i</image><|audio_start|>10 audio tok<|audio_end|>`；问题文本经独立文本项 emit（修了 consumer 在视觉项丢 `user_text` 的 bug）；单帧路径逐字节不变。
+
+实测结果（**每个 case 必须用干净 server**，因退化会污染 shared_octx）：
+- **干净 server stack-frames 1（红线回归）→ 连贯**（"woman...skincare product...smooth wrink"）。✅ 红线守住。
+- **干净 server stack-frames 2（interleave）→ 连贯**（item: "C. Logo transition sound effect"，模型理解视频）。✅ 多图在低帧数**能工作**——相对旧 STACKED 是进步。
+- **干净 server stack-frames 8（首次请求）→ 仍 `?`×40 崩溃**（token id=30 重复）。❌ 高帧数仍退化。
+- ⚠️ 8 帧崩溃**污染 shared_octx**，其后所有请求（含 2/3 帧）都退化 → **必须重启 server 才能干净复测**（早期连续测 2/3/8 帧全 `?` 是污染假象，非本质）。
+
+**新嫌疑（8 帧崩溃真因）**：log 显示 **whisper 音频 KV cache 在 N 个 1s 段间累积**（`current_total` 50→100→…→400，`KV cache iter incremented to 1..N`）——每段不是独立编码而是流式承接前段（streaming mode），N 大时嵌入污染严重 → LLM 崩溃。N=2 时累积轻 → 仍连贯。**下一步修复方向：每段编码前清 whisper KV cache（`audition_whisper_clear_kv_cache`），让各 1s 段独立编码（匹配 interleave 训练分布）。**
+
+**修正 P7 重验结论**：交错打包**必要**（2 帧已证能工作 + 修了 user_text 丢弃 + 红线安全），但**不充分**——高帧数还卡在 whisper 流式 KV 累积。interleave 代码**保留**（gated、正确、低帧数有效、`OMNI_VIDEO_INTERLEAVE=0` 可回滚）。Daily-Omni 高精度（需多帧）还需再攻 whisper KV 清理这一关。
+
+#### whisper KV 清理实测（2026-08-07，实现+构建+干净 server 复测）— 第二个假设证伪
+
+每段编码前调 `audition_whisper_clear_kv_cache(octx->ctx_audio)`（ws_handler interleave 循环内，gated）。日志确认 **KV 不再累积**：每段都 `current_iter=0 → incremented to 1 (total_tokens=50)`（之前是 50→100→…→400 累加）。即各 1s 段现在**独立编码**，语义正确。
+
+**但干净 server stack-frames 8 仍 `?`×40 崩溃** → **whisper KV 累积不是 8 帧崩溃的真因**，第二个假设也被 runtime 推翻。
+
+#### 最终结论（runtime 推翻两个静态假设后）
+
+- 修了两个**真实 bug**（interleave 打包 + whisper KV 流式累积），都**验证生效且保留**（gated、单帧红线安全、低帧改善、语义更正确）。
+- 但**两个都没解决高帧崩溃**。clean server：1 帧/2 帧连贯，8 帧必崩（阈值在 2~8 之间，与音频 KV 无关）。
+- 高帧崩溃的真正根因在**更深的层**：最可能是 **turn_based 多 `<image>` 视觉路径**——官方 910C 指南明示"**视觉模态未验证 / vision_backend 默认 metal**"。这不是 ws_handler 或音频层能修的，需要视觉编码/chat-template/多图位置编码层面的排查（或官方修复）。
+- **Daily-Omni 高精度（需多帧）在 llama.cpp-omni 当前视觉路径下不可达**。方向转：① 问赛事方子赛道 A 多帧/视觉官方配置（Q1 已起草）；② 如实报告框架视觉限制；③ 可选深度诊断（纯多图无 audio、找 2~8 帧阈值、查 vision_backend 实际跑在哪）——但不改 server 层结论。
+
+**方法论印证**：rigor-verify-loop 两次 runtime 实测推翻静态假设（先"打包是根因"、再"KV 累积是根因"）——静态推理只生成假设，runtime 才定根因。两个修复都是真实改进（值得保留），只是都不是高帧崩溃的那一关。
+
 ### 实验 P8：官方验收匹配度评审 + 三项 benchmark 验证（2026-08-06，分支 fix/video-extract-harden）
 
 **任务**：对照官方 5 步验收（框架/精度3项/Demo/性能/复现），逐项验证 + 补缺口 + 落盘推送。
