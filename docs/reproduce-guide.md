@@ -49,14 +49,14 @@ BIN=build-cann/bin/llama-omni-perf-duplex
 MODEL=/workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-F16.gguf
 PREFIX=$PWD/tools/omni/assets/test_case/duplex_omni_test_case/duplex_omni_test_case_
 REF=$PWD/tools/omni/assets/default_ref_audio/default_ref_audio.wav
-# [P3+P4] 推荐: vocoder 24 threads + NUMA node6 绑核(CPU192-223) → RTF 0.57 (默认 16 不绑核 0.64)
+# [P3+P4] 推荐: vocoder 24 threads + NUMA node6 绑核(CPU192-223) → RTF 0.57 (默认 16 不绑核 0.64–0.68, P8 中位 0.68)
 taskset -c 192-223 env OMNI_T2W_THREADS=24 $BIN -m "$MODEL" -c 4096 -ngl 99 --ref-audio "$REF" --test "$PREFIX" 36 \
   -o tools/omni/output --out-json tools/omni/output/perf_report.json
 python3 tools/omni/perf/analyze_perf.py tools/omni/output/perf_report.json --interval-ms 1000
 ```
 
 **预期结果(本方案)**:
-- **SPEAK→WAV e2e RTF ≈ 0.57**(推荐 24 vocoder threads + NUMA node6 绑核) / 0.64(默认 16 不绑核)(官方基线 1.087,beat 48%/41%)。
+- **SPEAK→WAV e2e RTF ≈ 0.57**(推荐 24 vocoder threads + NUMA node6 绑核) / 0.64–0.68(默认 16 不绑核,P8 复测中位 0.68)(官方基线 1.087,beat 48%/37%)。
 - TTS RTF ≈ 0.57/0.64;LLM 判定 P50 ≈ 977ms。
 - 多次跑取中位(RTF 差异 <0.03 视噪声)。
 - 并发采样(证 compute 在 NPU):`while sleep 0.5; do npu-smi info -t usages -i 1 | grep -i 'Aicore\|HBM Bandwidth'; done` → decode 期 AICore burst 60–84%、HBM 带宽 50%。
@@ -85,16 +85,17 @@ curl -X PUT -H "content-type: application/json" \
 
 访问 `https://127.0.0.1:8006/` → Turn-based Chat / Omni Full-Duplex / Audio Full-Duplex。验证:发文本 → 模型流式回复(中文连贯,非乱码;Total ~925ms)。
 
-## 7. 精度评测(待官方 benchmark 脚本)
+## 7. 精度评测(现状 + 待官方)
 
-- 三项 benchmark(VideoMME / Daily-Omni / TTS-Seed ASV+WER)用**官方指定评测脚本**执行(等赛事方提供 llama.cpp-omni benchmark 分支)。
-- 数据已就位:TTS-Seed testset(`benchmark/seed-tts-eval/`,本地解压)+ WavLM SIM 模型(`shared_assets/.../CowboyZ/seed-tts-eval/wavlm_large_finetune.pth`);Video-MME(平台下载中);Daily-Omni(Videos.tar 待下)。
-- 预期:F16 不改推理数学 → 精度 = 官方基线(VideoMME 69.0 / Daily-Omni 79.5 / ASV 0.709 / WER 1.414)。
+- **TTS-Seed**:WER 用 `benchmark/seed-tts-eval/eval_ref/seed_tts_eval.py`(paraformer/Whisper + jiwer,官方同口径)→ **0.20**(≤1.56 ✅);ASV SIM 0.84 为本机 WavLM base-plus 口径,官方 UniSpeech SV 口径需 `wavlm_large_finetune.pth` + UniSpeech 模型代码(平台有权重、代码 GitHub 受限),已问组委会。
+- **Daily-Omni**:数据已就位(`shared_assets/datasets/MTEB/Daily-Omni/` parquet,内嵌 video+audio);`daily_omni_test.py` 直接读 parquet。单帧/低帧 6.7%–12.5%,多帧(8 帧)触发模型退化——已做交错打包 + whisper KV 修复(commit `c9d9499`)均生效但未解高帧,真因在视觉路径。
+- **Video-MME**:数据已就位(`shared_assets/datasets/lmms-lab/Video-MME/`);`videomme_test.py` 已建;server 处理大 video 静默崩溃,未跑通。
+- ⚠️ "F16 不改数学→精度=基线"对多模态 benchmark 不成立;**已向组委会发问**多帧视觉配置/准入刚性/基线口径/VideoMME 崩溃/ASV 口径(`organizer-inquiry-email.md`),等回复。
 
 ## 8. 复现检查清单
 
 - [ ] build-cann 无报错,产物 3 个 binary 齐。
-- [ ] perf-duplex 出报告,**SPEAK→WAV RTF ≈ 0.81–0.83**(<基线 1.087)。
+- [ ] perf-duplex 出报告,**SPEAK→WAV RTF ≈ 0.57**(24线程+NUMA)/ **0.68**(默认16)(<基线 1.087)。
 - [ ] npu-smi 采样 decode 期 AICore burst >60%(证 compute 在 NPU)。
 - [ ] `llm_debug/llm_text.txt` 输出正常(防乱码)。
 - [ ] 3 进程 Demo 启动,前端可访问,文本→流式回复正常。

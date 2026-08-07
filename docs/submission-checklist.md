@@ -38,9 +38,9 @@
 - [x] 依赖与环境配置文件(`docs/cann-patches.md` + `docs/reproduce-guide.md` §1)
 
 ### 2. Benchmark 评测结果（3 个全要）
-- [x] Daily-Omni 完整结果(`benchmark/daily-omni/result.json` + `daily_omni_test.py`;6.7%/12.5% — 框架硬上限,见 experiments P7/P8;**79.5 基线来源待官方确认**)
-- [x] TTS-Seed 完整结果(`benchmark/seed-tts-eval/gen/zh/result.json`;WER 0.20 同口径强达标,SIM 0.84 base-plus 口径偏差)
-- [ ] Video-MME 完整结果(脚本 `benchmark/video-mme/videomme_test.py` 已建;omni 处理大 video 触发 server 崩溃,未跑通 — 见 experiments P8)
+- [x] Daily-Omni 结果(`benchmark/daily-omni/result.json` + `daily_omni_test.py`;单帧/低帧 6.7%/12.5%,**多帧(8帧)触发模型退化**——已做交错打包+whisper KV 修复(commit `c9d9499`)均生效但未解高帧,真因在视觉路径;**已问组委会**多帧配置/门槛,见 `organizer-inquiry-email.md`)
+- [x] TTS-Seed 结果(`benchmark/seed-tts-eval/gen/zh/result.json`;WER 0.20 官方同口径达标 ✅;SIM 0.84 base-plus 口径,官方 UniSpeech SV 口径待对齐——已问组委会 Q5)
+- [ ] Video-MME 结果(脚本 `benchmark/video-mme/videomme_test.py` 已建;server 处理大 video 静默崩溃,未跑通;官方 `minicpm-frames` 同模型可达 69.96% — 已问组委会,见 `organizer-inquiry-email.md`)
 
 ### 3. 性能测试报告（至少包含)
 - [x] RTF（含统计口径)— SPEAK→WAV e2e,中位 0.68(P8 三次 0.84/0.68/0.58)

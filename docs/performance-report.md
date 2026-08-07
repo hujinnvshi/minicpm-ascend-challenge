@@ -1,6 +1,6 @@
 # 性能测试报告 — MiniCPM-o 4.5 双工推理优化(赛道一·子赛道 A: llama.cpp-omni)
 
-> 状态:2026-08-05 版。SPEAK→WAV RTF 已实测;精度 benchmark 待官方评测脚本到位后补。
+> 状态:2026-08-07 版。SPEAK→WAV RTF 已实测(0.57 调优 / 0.68 默认);精度 benchmark 现状见 §10(Daily-Omni/VideoMME 框架视觉限制,已向组委会发问 `docs/organizer-inquiry-email.md`)。
 > 北极星指标:**SPEAK→WAV 完整链路 RTF**(单并发 F16),官方基线 **1.087**。
 > 赛事:MiniCPM & 昇腾推理优化与应用创新挑战赛 · 赛道一 · 子赛道 A(llama.cpp-omni)。
 
@@ -8,16 +8,16 @@
 
 - **指标定义**:SPEAK→WAV 完整链路 RTF = (一轮 SPEAK 从首帧 push 到末 wav 落盘的墙钟时间) / (该轮生成音频时长)。单并发、F16。<1 表示快于实时。
 - **口径对齐**:与官方"主要优化目标 = SPEAK 生成阶段 RTF(非全 chunk 平均)"一致 —— 本指标按 SPEAK 轮计,不对 LISTEN 帧平均。
-- **实测结果(2026-08-05,perf-duplex 36 帧)**:
+- **实测结果(perf-duplex 36 帧,F16)**:
 
-| 指标 | 我方(P1.7) | 官方基线(F16) | 结论 |
+| 配置 | SPEAK→WAV RTF(e2e) | 官方基线 | 结论 |
 |---|---|---|---|
-| **SPEAK→WAV RTF(e2e,完整链路)** | **0.83**(中位 0.81–0.83) | **1.087** | ✅ **beat 基线 ~24%** |
-| TTS RTF(TTS 段,参考) | 0.82 | — | — |
-| LLM 判定 P50(参考) | 977ms | — | <1000,实时 |
+| **24 线程 + NUMA 绑核**(调优最优,5 次中位 0.55–0.62) | **0.57** | **1.087** | ✅ **beat ~48%** |
+| **16 线程默认**(最可复现,3 次 0.84/0.68/0.58) | **0.68** | **1.087** | ✅ **beat ~37%** |
 
-- **P8 复测(2026-08-06,fix 分支含 P3 vocoder 16 threads,3 次)**:e2e RTF = **0.84 / 0.68 / 0.58,中位 0.68**(run1 冷启动偏高,run2/3 热机 0.58–0.68)。含 P3 vocoder 多线程后优于 P1.7,beat 基线 ~37%。
-- 详(P1.7):`speak#0/audio#0` 音频 53.84s,e2e wall 44.44s → RTF 0.83;TTS wall 44.08s → 0.82。
+> 报告口径:**0.68**(16 线程默认,零手动配置、最可复现)为主线;**0.57**(`OMNI_T2W_THREADS=24 + taskset -c 192-223` NUMA)为调优最优,见 `reproduce-guide.md`。均红线内(仅 CPU 线程 + NUMA 绑核,不改推理数学)。
+- TTS RTF(TTS 段,参考)0.80–0.82;LLM 判定 P50(参考)977ms(<1000,实时)。
+- 优化链:P1.7(队列解耦)→ P3(vocoder 8→16 线程)→ P4(24 线程 + NUMA)。详见 `experiments.md`。
 
 ## 2. 测试环境
 
@@ -34,7 +34,7 @@
 
 ## 4. 测试次数
 
-- 多次复跑取一致值:P1.7 队列解耦后 C-8 / C-8b / 本次 → e2e RTF 0.81 / 0.80 / 0.83(中位 **0.81–0.83**,稳定 <1.087)。
+- 多次复跑取中位:16 线程默认(P8,3 次)0.84/0.68/0.58 → 中位 **0.68**;24 线程+NUMA(P4,5 次)0.55–0.62 → 中位 **0.57**。均稳定 <1.087。
 - **P8 复测(2026-08-06,fix 分支含 P3 vocoder 16)**:3 次 e2e RTF = 0.84 / 0.68 / 0.58,**中位 0.68**(冷启动→热机波动,均 <1.087)。原始日志 `tools/omni/output/perf_p8_{1,2,3}.{json,log}`(gitignored)。
 - 方法论:每配置 ≥3 次,RTF 差异 <0.03 视噪声(experiments 016);P8 三次波动 0.26 系冷启动/系统负载,取中位 0.68 报告。
 
@@ -70,10 +70,11 @@
 - 跑:`tools/omni/perf/run_perf.sh -m <F16> --test <duplex_omni_test_case_> 36` → `analyze_perf.py`。
 - 详见 [reproduce-guide.md](reproduce-guide.md)、优化链 [experiments.md](experiments.md)(P0–P1.7)、补丁 [cann-patches.md](cann-patches.md)。
 
-## 10. 精度 benchmark 现状(2026-08-06 P8 自评,详见 experiments.md P8)
+## 10. 精度 benchmark 现状(2026-08-07,详见 experiments.md P7 重验/P8 + organizer-inquiry-email.md)
 
-- **Daily-Omni**:6.7%(15 条)/ 12.5%(8 条)—— omni 框架硬上限(单帧视觉 P7 多帧退化 + whisper 30s P6 + 模型 thinking 输出),远低于基线 77.5。**79.5 基线来源待官方确认**(eval-spec 自注 daily-omni 公开 leaderboard Qwen 61.82 为"另一框架",79.5 很可能非 llama.cpp-omni 实测)。
-- **Video-MME**:未跑通 —— omni 处理 VideoMME 大 video(16MB+,short 时长)触发 server 静默崩溃(单/双 server 均复现,每跑必崩,log 无栈,非资源:mem 2TB/HBM 34%//tmp 2.3T)。脚本已建(`benchmark/video-mme/videomme_test.py`),待框架修复后可跑。
-- **TTS-Seed**:WER 0.20(同口径 paraformer+zhconv+jiwer,**强达标** ≤1.56);SIM 0.84(wavlm-base-plus 口径偏差,官方 SV 需 UniSpeech 框架 `wavlm_large_finetune.pth`,留作后续)。
-- **认知更正**:eval-spec "F16 不改数学→精度=基线" 假设对**多模态 benchmark 不成立** —— 受 omni 框架配置(视觉帧数/音频窗口/输出模态)严重影响,与单测 LLM 数学等价不同。
-- Demo 演示视频:已录制 `benchmark/demo-video/demo_turnchat.webm` + 8 项证据 `benchmark/demo-evidence/`。
+- **Daily-Omni**:单帧/低帧(2 帧)约 6.7%–12.5%;**多帧(实测 8 帧)稳定触发模型退化**(重复不可打印 token)。已实现两处真实修复(交错打包 + whisper KV 跨段清理,commit `c9d9499`,gated/红线内),**均验证生效但未解 8 帧崩溃**——真因在更深的 turn_based 多图视觉路径(官方《910C 指南》亦注明"视觉模态未验证")。**基线 79.5 真实可达**(vLLM-Omni 同模型实测 78.28%),子赛道 A 卡在视觉路径,非基线虚高。
+- **Video-MME**:未跑通 —— server 处理较大视频静默崩溃(无栈、非资源)。官方 `minicpm-frames` 配方同模型可达 69.96%。
+- **TTS-Seed**:WER 0.20(官方同口径 paraformer/Whisper + jiwer,**达标** ≤1.56)✅;ASV SIM 0.84(本机 WavLM base-plus 口径;官方 UniSpeech SV 口径需 `wavlm_large_finetune.pth` + UniSpeech 模型代码——平台有权重但代码 GitHub 受限,已问组委会 Q5)。
+- **认知更正**:"F16 不改数学→精度=基线"对多模态 benchmark 不成立——精度受框架视觉/音频路径严重影响。
+- **已向组委会发问**:`docs/organizer-inquiry-email.md`(多帧视觉配置 + 准入刚性 + 基线口径 + VideoMME 崩溃 + ASV SV 口径),等回复。
+- Demo 演示视频:`benchmark/demo-video/demo_turnchat.webm` + 8 项证据 `benchmark/demo-evidence/`。
