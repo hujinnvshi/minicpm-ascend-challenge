@@ -515,3 +515,118 @@ init_from_host_caches 校验 cache_host.n_timesteps != n_timesteps → 拒绝
 - ❌ **风险**：Daily-Omni（6.7% vs 77.5，框架上限）、VideoMME（未跑通，server 崩溃）—— 两项多模态精度受 omni 框架代际限制，需向官方求证基线口径 + 框架修复。
 
 **务实建议**：聚焦已达标项（性能/Demo/复现/TTS-WER），Daily-Omni/VideoMME 如实报告框架限制 + 求证官方基线口径（79.5/69.0 是否 omni 实测）；不强求在框架代际差内硬冲精度（ROI 低）。
+
+### 实验 P0：Daily-Omni 单帧红线复位验证（2026-08-07，分支 fix/video-extract-harden）
+
+**起点**：最新 `benchmark/daily-omni/result.json`（n=3，全 `?????` 0%），而 `daily_omni_test.py` 默认 `--stack-frames 1`、P7 已证单帧=正常文本 → 疑似"单帧红线破了"。三个嫌疑：A1 当时 server 被多帧污染 / A2 interleave 改动引入单帧回归 / A3 未提交 omni.cpp 改动。
+
+**代码复核（排除 A2/A3，不动 server）**：
+- **A2**：`ws_handler.cpp:1067` interleave gating = `!interleave_timesteps.empty() && !(OMNI_VIDEO_INTERLEAVE=="0")`；`interleave_timesteps` 仅在 `extract_video_mp4_media` 的 `if (n_frames>1)` 块填充。**stack_frames=1 → n_frames=1 → timesteps 空 → 走 else legacy 老路径，与改前逐字节一致**（帧抽取命令 n_frames==1 也不加 `-vf fps=1`）。→ interleave 对单帧零影响，排除回归。
+- **A3**：未提交 omni.cpp 改动仅 sampler 参数 LOG 打印（不影响推理数学），binary 08-07 08:04 已含。排除。
+
+**runtime 实验（起全新干净 server，08:04 binary，未设 OMNI_VIDEO_INTERLEAVE）**：
+- 起点状态：当前**无 server 在跑**（ps 空 / NPU Aicore 0% / HBM 5%）→ 最新 result.json 为上次残留；起 `scripts/serve.sh` 等价命令的全新 server。
+- 关键特性印证：Omni server **omni_context 懒加载**——启动只起 HTTP + 265 线程，HBM 5%、RSS 910MB、wchan `inet_csk_wait_for_connect`；模型在首个 WS `session.init` 才加载。探针 `wait_ready` 触发后 HBM → 33%。（即"启动≠加载完成"，干等 HBM 涨是误判。）
+- 探针（`benchmark/daily-omni/probe_p0.py`，干净 server）：
+  - **T1 纯文本** "What is 2+2?" → `"2 + 2 = which means 4. The correct answer is B.4"` ✅ **NORMAL**
+  - **T2 单帧视频**（daily-omni row 0，stack_frames=1）→ `"Okay, let me try to transcribe the audio in the video. <|SOA_0隅"` ✅ **NORMAL**（不乱码）
+
+**结论：故障 A = A1（污染），红线没破，binary 健康。** 最新 result.json 的 `?????` = 当时那个 server 被多帧（stack≥8）测试污染了 `shared_octx`，退化扩散到后续单帧请求（P7 重验已知机制"8 帧崩溃污染，其后全退化，需重启 server 复位"）。
+
+**副发现（修正 P7 "单帧=完全正常"）**：T2 单帧输出尾巴带 `<|SOA_0`（audio 起始标记）+ 乱码 `隅` → **即使单帧，模型也有概率滑向输出 audio token**。退化是**渐进/概率性**的，非"单帧 100% 稳 / 多帧 100% 崩"的开关。这指向 P2（logits 诊断）：高帧崩溃前，logits 在 audio-token 区间是否已抬升。
+
+**教训/流程**：跑过多帧（stack≥3）实验后，**同一 server 进程必须重启**才能跑正式评测或单帧对照，否则 shared_octx 污染制造假阳性"红线破了"。`daily_omni_test.py` 默认 stack_frames=1 防不住——这是同进程先后顺序问题，不是参数问题。
+
+**代码改动**：新增 `benchmark/daily-omni/probe_p0.py`（干净 server 探针，T1 纯文本 + T2 单帧视频）；不动 server/推理数学/红线。
+
+### 实验 P1：Demo 路径能否多帧 — 代码证伪（2026-08-07，分支 fix/video-extract-harden）
+
+**假设（P6 遗留）**：Demo turnchat 经 gateway/worker 能正常答视频、直连 WS 乱码 → 差异在 gateway/worker payload 转换，定位它可能解锁多帧（被搁置的"钥匙"）。
+
+**链路核实（纯代码层，未起 Demo）**：
+- **前端**（`turnbased.html`）：视频 payload = `{type:'video', data, duration}`，**不传 `stack_frames`**（L2081/2388）；顶层 `omni_mode:true` + `image.max_slice_nums:1`（hasVideo，L2479-2480）。
+- **gateway.py / worker.py**：**透传**（gateway L516-523 直接转发原始 JSON；worker `/v1/worker/chat` → backend `/backend`，mode 强制 `turn_based`）。
+- **backend `protocol.cpp:464`**：`int stack_frames = json_int(part, "stack_frames", 1)` → **video stack_frames 默认 = 1**。
+- **`omni_mode` 是 dead field**：`protocol.cpp:401` 读取赋值，但 grep 全仓（`tools/server/*.cpp` + `tools/omni/*.cpp`）**仅 protocol.cpp:401 赋值 + protocol.h:113 声明，ws_handler/omni.cpp/server-omni.cpp 零使用点**（protocol.h:113 自注 "pass-through hints §4.2"）。Demo `omni_mode=true` 与 daily-omni `false` **零行为差异**。
+
+**结论：P1 前提证伪。** Demo "能正常答视频" = **Demo 默认 stack_frames=1（单帧）**，与 daily-omni `--stack-frames 1` 完全等价（P0 T2 已证单帧正常）。P6 "Demo 正常 / 直连乱码" 的真正差异 = **stack_frames 帧数**（Demo 默认 1，daily-omni 当时 8），**非** gateway/worker 转换。Demo 路径无多帧能力 → 起 Demo 全栈（3 进程+SSL+playwright 视频上传）无法验证"框架能否多帧"，只会复证"单帧正常"。
+
+**修正 P6**：将"直连 WS 乱码 vs Demo 正常"归因为"gateway/worker payload 差异 / 前端 system_prompt / mode 字段"是误判，实为 `stack_frames` 帧数差异 + 当时 server 污染。
+
+**方向**：故障 B（多帧 stack_frames≥3 崩）仍是真问题，Demo 救不了。下一步转 P2（logits 诊断，攻多帧崩溃本身）或 P3（基线口径，战略求证）。
+
+**代码改动**：无（纯代码核实，未起 Demo，未动 server）。Explore agent 结论部分可信（stack_frames 默认 1 ✅），但其 "omni_mode 是 Demo 正常关键变量" / "mode 默认 full_duplex" 推断需修正（omni_mode=dead field；worker 显式设 turn_based）。
+
+### 实验 P2：高帧崩溃 logits 诊断 — 全 NaN 数值崩溃（推翻 P7 repetition collapse）（2026-08-07，分支 fix/video-extract-harden）
+
+**起点**：P7/P7重验 未定位高帧（stack≥3）崩溃根因（已排除交错打包、whisper KV 累积）；P7 结论 "token id=30 重复 = repetition collapse / 模型退化 OOD"。P0 副发现单帧也冒 `<|SOA_0` → 怀疑 audio-token 滑动。需下沉到 logits 数值层。
+
+**实验**：`omni.cpp:1344 sample_with_hidden_and_token`（采样点，`logits = llama_get_logits_ith(ctx,-1)` @ L1345、`common_sampler_sample` @ L1398）加临时 LOG（env `OMNI_LOGIT_DIAG=1`，前 80 步）：每步打印 sampled id + logits `[n_vocab/max/min/nan_count/tok30/audio 区间[151687,158249)]` + top-10。rebuild，干净 server（binary 12:56），首请求 `--stack-frames 8`（默认 interleave 路径）。
+
+**结果（决定性，40 步完全相同）**：
+```
+[P2 step 0..39] id=30 n_vocab=151748 nan=151748 | tok30=nan | audio_top10=0
+  top10: (空)
+```
+- **`nan=151748` = 整个 vocab（151748 个 token）的 logits 全部 NaN**。top10 空（LOG 的 `v==v` 过滤排除了全部 NaN）。
+- 每步 `id=30`：sampler 在**全 NaN logits** 下 argmax 无意义，返回固定 id=30（`\x1e`）→ 输出 `?`×40。**模型不是"选"了 30，而是输出全 NaN。**
+
+**结论：故障 B = 数值崩溃，非 repetition collapse。** P7 的 "模型退化重复选 token 30" 被推翻 —— 真因是**多帧 prefill 后 LLM 前向传播产生全 NaN logits**（NaN 经矩阵乘扩散到整个 vocab），sampler 沦为返回无意义固定 token。**故障 B 从 "模型能力上限/OOD"（死路）重定性为 "数值溢出 bug"（可定位可修）。**
+
+**补充排查（排除 RoPE，锁定 NPU vision）**：
+- `n_ctx_train=40960` ≫ stack=8 的 n_past（8 步 ×78 ≈ 646）→ **RoPE 位置越界排除**（远未到训练上限）。
+- 日志 `vision_ctx: vision using CANN0 backend` → **vision encoder 实际跑在 NPU（CANN）**，非 P7重验以为的 "metal / 未验证"。单帧正常 / 多帧全 NaN + 视觉在 NPU → 嫌疑 = **NPU（CANN）vision encoder 多帧计算产生 NaN embedding**（"视觉模态未验证" 的实操含义）。
+- 日志无任何 nan/inf/overflow error → **NaN 静默产生**（CANN 算子输出 NaN 不报错）。
+- 排除项：sampler bug、n_ctx、RoPE、interleave 打包逻辑（已修且 2 帧不崩）、whisper KV（已清）。
+
+**下一步（P2.5，定位 NaN 源头）**：① vision encode 输出处（`omni_image_embed_make_chunks_with_filename` 返回的 embedding）加 NaN 检查，对照单帧（应非 NaN）vs 多帧（应 NaN）；② 若 omni 支持切 vision backend，做 **CPU vision 多帧隔离实验**（多帧 CPU vision 不崩 → 坐实 NPU vision 算子是源头）；③ 单帧/多帧 LLM 输入 embedding 数值对照。
+
+**方法论印证**：rigor-verify-loop **第三次** runtime 实测推翻静态结论（P7重验推翻"打包根因"/"KV 根因"；P2 推翻"repetition collapse"）。**看 token id（行为）会误判"模型选 30"，看 logits（数值）才暴露 NaN —— 退化诊断必须下沉到数值层。**
+
+**代码改动**：`omni.cpp:1399` 后临时 LOG（env `OMNI_LOGIT_DIAG=1` 门控，前 80 步，只读 logits 不改推理数学）。**待 P2.5 定位 NaN 源头后统一移除（净 0）**；当前暂留（P2.5 会扩展同点诊断）。
+
+### 实验 P2.5：NaN 源头定位 — vision 干净，退化渐进，NaN 在 LLM 多步 prefill 累积（2026-08-07，分支 fix/video-extract-harden）
+
+**起点**：P2 锁定"高帧全 NaN 数值崩溃"嫌疑 NPU vision encoder。需定位 NaN 源头。
+
+**P2.5-B（vision embedding NaN 检查）**：`omni_image_embed_make_chunks_with_filename`（omni.cpp:884）的 `vision_chunks` 输出加 NaN/Inf 检查 LOG（env `OMNI_VISION_NAN_DIAG=1`）。干净 server，stack=8。
+- 结果：8 帧 vision embedding **全部 nan=0 inf=0**（max 34~40，min -7，ViT 合理范围），size=262144（4096 embd × 64 tok）。
+- **vision 非 NaN 源头**（否定 P2 嫌疑）。但 logits 仍全 NaN → NaN 在 vision 之后（（vision+audio embd）→ LLM eval）。
+
+**P2.5 阈值对照（stack=2，P7重验称"连贯"）**：同 binary 双 LOG，干净 server，stack=2。输出 `\n\n\n...`（16 换行，**非 P7重验的"连贯文本"——不可复现**）。logits：
+```
+[P2 step 0] id=151667 max=22.8 nan=0 tok30=-7.66 audio_top10=1
+  top10: [151667]=22.84 [785]=17.97 [6025]=17.16 ...
+[P2 step 1] id=198(\n) max=30.25 nan=0
+```
+- **stack=2 logits 完全正常（nan=0，有明确 top10）**，但模型选 id=151667（omni 特殊 token，紧邻 audio 区间 [151687,158249)）+ id=198（`\n`）交替 → **语义退化（attention 没崩，选错 token），非数值 NaN**。
+
+**退化渐进表（统一 P0 副发现 + P2 + P2.5）**：
+
+| stack | vision embd | logits | 输出 | 性质 |
+|---|---|---|---|---|
+| 1（P0/P7） | 干净 | 正常 | 正常文本（偶冒 `<|SOA_0` 尾巴） | 健康（轻微 audio 滑动） |
+| 2 | 干净 | **正常（nan=0）** | `\n` + id=151667 交替 | 语义退化（选 audio 边界/换行） |
+| 8 | 干净 | **全 NaN（151748）** | `?`（id=30） | 数值崩溃 |
+
+**结论**：
+1. **vision 非 NaN 源头**（三种 stack 都干净）。否定 P2 "NPU vision 多帧 NaN" 嫌疑；P2.5-A（CPU vision 隔离）因此无必要（未做）。
+2. **退化随帧数渐进**：1 正常 → 2 语义跑偏（logits 有形但选 audio 边界 token + 换行）→ 8 全 NaN 崩溃。**非"2 帧稳 / 8 帧崩"的开关**。
+3. **NaN 在 LLM 多步 interleave prefill 累积**：vision embd 干净喂入，但每步 +vision+audio embd，LLM KV/attention 逐步累积，8 步时数值溢出 NaN（2 步尚可，语义退化但 logits 有形；1 步正常）。
+4. **模型多帧倾向 audio token 输出**（id=151667 ≈ audio 边界 + P0 单帧 `<|SOA_0` 副发现）—— MiniCPM-o 全模态，视觉+audio 输入下倾向滑向 audio 输出，多帧加剧，8 帧数值崩。
+
+**修正 P7重验**："2 帧连贯"不可复现（stack=2 实测语义退化，输出换行）——可能 P7重验的 case 不同或不可重现。
+
+**P2.5-C（LLM 输入 embd NaN 检查，`prefill_with_emb` omni.cpp:380）**：env `OMNI_PREFILL_EMB_NAN=1`，检查喂给 `llama_decode` 的 `batch.embd`（vision+audio+text 拼接后的输入）。stack=8 结果：**所有输入 embd 段全部 nan=0 inf=0** —— vision 段（n_eval=64，max 34~40/min -7）+ **audio 段（n_eval=10，max 7~11/min -2~-3，whisper 合理）** 全干净；但 `[P2 step 0]` logits 仍全 NaN（nan=151748）。
+
+**最终定位（P2.5-C）**：**输入 embd（vision+audio 拼接）全干净，NaN 在 `llama_decode`（CANN 后端 LLM 前向）内部产生**。即 LLM attention/FFN 在 8 步 interleave prefill（每步 +64 vision +10 audio embd）累积后数值溢出 → logits 全 NaN。
+
+**修复可达性（关键结论）**：输入 embd 干净 → **非 omni.cpp embd 拼接问题（omni.cpp 层不可修）**；NaN 在 `llama_decode` 内部 → **入 CANN 后端（ggml-cann）/ llama 内核**。**红线内（仅流水线/调度）不可修**，需框架/CANN 层或官方修复。
+
+**诊断链闭环**：vision 干净（P2.5-B）→ audio embd 干净（P2.5-C）→ 输入 embd 全干净（P2.5-C）→ NaN 在 LLM（CANN）多步 prefill 内部累积溢出。故障 B = CANN 后端 LLM 在多模态多步 prefill 下的数值稳定性 bug，非模型上限、非 vision、非打包、非 embd 拼接。
+
+**务实结论**：继续深挖需 hook llama 内核层（ROI 极低，且改 CANN/llama 内核超红线）。建议：① 转 P3 求证官方基线口径（79.5/69.0 是否 omni 实测，若非则多帧精度非我方责任）；② 如实报告"CANN 后端 LLM 多步 prefill 数值稳定性"为框架限制；③ 单帧（stack=1）精度仍可达，作为可交付口径。
+
+**方法论印证**：rigor-verify-loop 第 4/5 次 runtime 推翻静态（P2 "NPU vision 嫌疑"被 P2.5-B 推翻；P7重验 "2 帧连贯" 被 stack=2 复测推翻）。**逐层 NaN 检查 + 阈值对照逐步缩小范围**——vision 干净 → logits 对照（2 正常 / 8 NaN）→ 锁定 LLM 累积。
+
+**代码改动**：P2 sample LOG（omni.cpp:1399）+ P2.5-B vision NaN LOG（omni.cpp:884），均 env 门控只读。**待统一移除净 0**（见 task12/17）。
