@@ -4150,6 +4150,9 @@ struct omni_context * omni_init(struct common_params * params, int media_type, b
         ctx_omni->owns_model = true;  // 拥有模型，omni_free 时需要释放
     }
     
+    print_with_timestamp("=== omni_init: sampler params (temp=%.3f penalty_repeat=%.3f penalty_last_n=%d top_p=%.3f top_k=%d)\n",
+        params->sampling.temp, params->sampling.penalty_repeat, params->sampling.penalty_last_n,
+        params->sampling.top_p, params->sampling.top_k);
     struct common_sampler * sampler = common_sampler_init(model, params->sampling);
     ctx_omni->ctx_llama = ctx_llama;
     ctx_omni->model = model;
