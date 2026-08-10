@@ -1,12 +1,12 @@
 # 复现说明(2026-08-05 版)
 
-目标:评审人员在官方昇腾环境(单卡 910B3 + CANN 9.1.0-beta.3,厂家授权替代 910C)按本文档复现本方案的全部结果(SPEAK→WAV RTF + 可运行 Demo)。
+目标:评审人员在官方昇腾环境(单卡 910B4 + CANN 9.1.0-beta.3,厂家授权替代 910C)按本文档复现本方案的全部结果(SPEAK→WAV RTF + 可运行 Demo)。
 
 > 配套:[cann-patches.md](cann-patches.md)(6 补丁详)、[experiments.md](experiments.md)(P0–P1.7 优化链)、[performance-report.md](performance-report.md)、[demo-server-notes.md](demo-server-notes.md)。
 
 ## 1. 环境
 
-- 硬件:昇腾 910B3 单卡(64GB HBM,20 AICore)+ 鲲鹏 920 256 核 + 2TB 内存,aarch64(openEuler)。
+- 硬件:昇腾 910B4 单卡(64GB HBM,20 AICore)+ 鲲鹏 920 256 核 + 2TB 内存,aarch64(openEuler)。
 - 软件:CANN 9.1.0-beta.3(官方指定 beta1,向上兼容);`ASCEND_TOOLKIT_HOME` 已配置;`npu-smi` 可用。
 - 预置权重(只读,免下载):`/workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/`。
 - 依赖:cmake ≥3.24、g++ ≥11、python3(分析脚本)、`npu-smi`。
@@ -28,11 +28,17 @@
 
 ```bash
 cd code/llama.cpp-omni
-# CANN 后端(910B3;图模式 USE_ACL_GRAPH 在 910B 头文件缺失,不开启)
-cmake -B build-cann -DCMAKE_BUILD_TYPE=Release \
-      -DGGML_CANN=ON -DCANN_INSTALL_DIR=$ASCEND_TOOLKIT_HOME
+# ⚠️ 必须用 CANN bisheng clang(ccec),系统 gcc 12.3.1 build 不了(COMDAT/binding/symtab 异常,
+#   bfd/lld/gold 三 linker 全失败,见 memory 910b-cann-gotchas 第10条)。
+#   简单方式: bash scripts/build-cann.sh(已固化 ccec);或显式:
+CCEC=$ASCEND_TOOLKIT_HOME/tools/bisheng_compiler/bin/ccec   # CANN 自带 clang 15.0.5
+cmake -B build-cann -DCMAKE_BUILD_TYPE=Release -DGGML_CANN=ON -DCANN_INSTALL_DIR=$ASCEND_TOOLKIT_HOME \
+  -DCMAKE_C_COMPILER=$CCEC -DCMAKE_CXX_COMPILER=$CCEC \
+  -DCMAKE_EXE_LINKER_FLAGS="-lstdc++ -lm -lpthread -ldl" \
+  -DCMAKE_SHARED_LINKER_FLAGS="-lstdc++ -lm" -DCMAKE_MODULE_LINKER_FLAGS="-lstdc++ -lm"
 cmake --build build-cann --target llama-omni-cli llama-omni-perf-duplex llama-omni-server -j$(nproc)
 # 产物:build-cann/bin/{llama-omni-cli,llama-omni-perf-duplex,llama-omni-server}
+# (eval target llama-omni-eval-cli/-eval-daily-cli: CookBook 官方评测 pipeline,见 benchmark/video-mme-cookbook/ + docs/asv-official-plan.md)
 ```
 
 ## 4. 权重

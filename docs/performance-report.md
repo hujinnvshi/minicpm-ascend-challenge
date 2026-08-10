@@ -70,11 +70,22 @@
 - 跑:`tools/omni/perf/run_perf.sh -m <F16> --test <duplex_omni_test_case_> 36` → `analyze_perf.py`。
 - 详见 [reproduce-guide.md](reproduce-guide.md)、优化链 [experiments.md](experiments.md)(P0–P1.7)、补丁 [cann-patches.md](cann-patches.md)。
 
-## 10. 精度 benchmark 现状(2026-08-07,详见 experiments.md P7 重验/P8 + organizer-inquiry-email.md)
+## 10. 精度 benchmark 现状(2026-08-10 更新,详见 experiments.md P3 + organizer-inquiry-final.md)
 
-- **Daily-Omni**:单帧/低帧(2 帧)约 6.7%–12.5%;**多帧(实测 8 帧)稳定触发模型退化**(重复不可打印 token)。已实现两处真实修复(交错打包 + whisper KV 跨段清理,commit `c9d9499`,gated/红线内),**均验证生效但未解 8 帧崩溃**——真因在更深的 turn_based 多图视觉路径(官方《910C 指南》亦注明"视觉模态未验证")。**基线 79.5 真实可达**(vLLM-Omni 同模型实测 78.28%),子赛道 A 卡在视觉路径,非基线虚高。
-- **Video-MME**:未跑通 —— server 处理较大视频静默崩溃(无栈、非资源)。官方 `minicpm-frames` 配方同模型可达 69.96%。
-- **TTS-Seed**:WER 0.20(官方同口径 paraformer/Whisper + jiwer,**达标** ≤1.56)✅;ASV SIM 0.84(本机 WavLM base-plus 口径;官方 UniSpeech SV 口径需 `wavlm_large_finetune.pth` + UniSpeech 模型代码——平台有权重但代码 GitHub 受限,已问组委会 Q5)。
-- **认知更正**:"F16 不改数学→精度=基线"对多模态 benchmark 不成立——精度受框架视觉/音频路径严重影响。
-- **已向组委会发问**:`docs/organizer-inquiry-email.md`(多帧视觉配置 + 准入刚性 + 基线口径 + VideoMME 崩溃 + ASV SV 口径),等回复。
+**准入判定(当前 910B4,1 die;基线 910C=2×910B)**:
+| 项 | 基线 | 准入 | 实测 | 判定 |
+|---|---|---|---|---|
+| VideoMME | 69.0 | ≥67.0 | 多帧退化 | ❌ |
+| Daily-Omni | 79.5 | ≥77.5 | 多帧退化 | ❌ |
+| TTS-ASV | 0.709 | ≥0.689 | 0.84 base-plus(官方 GRP 闸口) | ⚠️ 待赛方 |
+| TTS-WER | 1.414 | ≤1.56 | 0.20 | ✅ |
+
+- **多帧退化(VideoMME/Daily-Omni)= 910B4/CANN 框架级 bug**(非 context/喂法/编译器):
+  - 接入官方 `OpenSQZ/MiniCPM-V-CookBook` evaluation pipeline(ccec build `llama-omni-eval-cli`,`CTX_SIZE=40960` + 64 帧 @1fps 官方喂法)→ smoke_test **跑通但 0/2 退化**(输出 `_`),CLI log 无 NaN(logits 退化,见 experiments.md P3)。
+  - **context 40960 不是解**(原假设证伪);flash_attn 开启也**不解**(排除 attention softmax)→ 退化在 FFN/norm/embedding 累积。
+  - **硬件级**:910B4 实测(npu-smi `910B4-1`,Chip Count=1),别人 910B4 也退化(37.5%/36.9%);vLLM-Omni 同模型多帧正常(模型支持)。→ 官方基线 69.0/79.5 极可能 910C(=2×910B)实测。
+- **TTS-Seed**:WER 0.20(paraformer+jiwer,官方同口径,**达标** ✅)。ASV SIM 0.84 为本机 WavLM base-plus;**官方 UniSpeech SV 口径本地不可实现**——`wavlm_large_finetune.pth` 是 UniSpeech **GRP variant**(`encoder.layers.N.self_attn.grep_a/grep_linear`),s3prl 标准 WavLM 无 GRP 结构不兼容,UniSpeech 代码/HF converted 均 github/HF 封(见 docs/asv-official-plan.md C 实证)。**需赛方提供 UniSpeech 代码/可运行 ASV 脚本**。
+- **认知**:"F16 不改数学→精度=基线"对多模态不成立;多帧退化是 910B4/CANN 框架 bug,910C 不退化(基线环境差异)。
+- **已向组委会询问**:`docs/organizer-inquiry-final.md`(Q1 910B4 vs 910C 资源对等 + Q3 多帧退化 CookBook 实证 + Q5 ASV UniSpeech 口径)。邮件待发(内部 SMTP 封,腾讯企业邮箱客户端手动)。
 - Demo 演示视频:`benchmark/demo-video/demo_turnchat.webm` + 8 项证据 `benchmark/demo-evidence/`。
+- binary 备份:`/tmp/build-cann-bin.bak`(ccec build 全 5 binary);build 详见 [reproduce-guide.md](reproduce-guide.md) §3(ccec)。
