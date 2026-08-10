@@ -46,7 +46,16 @@ export PATH="$CANN_INSTALL_DIR/bin:${PATH:-}"
 echo "[2/3] 验证 NPU..."
 npu-smi info 2>/dev/null | head -3 || { echo "WARN: npu-smi 不可用（容器内可能无权限，跳过）"; }
 
-CMAKE_ARGS=(-B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release -DGGML_CANN=ON -DCANN_INSTALL_DIR="$CANN_INSTALL_DIR")
+# ⚠️ 必须用 CANN bisheng clang(ccec),不能用系统 gcc——
+#   gcc 12.3.1(openEuler) 生成的 .o 在 COMDAT/binding/symtab 多方面异常,
+#   bfd/lld/gold 三个 linker 都链接失败(见 memory 910b-cann-gotchas 第10条)。
+#   ccec 是 clang 15.0.5,干净编过;但默认不链 libm/libstdc++,须显式补。
+CCEC="$CANN_INSTALL_DIR/tools/bisheng_compiler/bin/ccec"
+CMAKE_ARGS=(-B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release -DGGML_CANN=ON -DCANN_INSTALL_DIR="$CANN_INSTALL_DIR"
+    -DCMAKE_C_COMPILER="$CCEC" -DCMAKE_CXX_COMPILER="$CCEC"
+    -DCMAKE_EXE_LINKER_FLAGS="-lstdc++ -lm -lpthread -ldl"
+    -DCMAKE_SHARED_LINKER_FLAGS="-lstdc++ -lm"
+    -DCMAKE_MODULE_LINKER_FLAGS="-lstdc++ -lm")
 if [ "${1:-}" = "--graph" ]; then
     # ⚠️ 910B3 实测：acl_graph 头文件缺失，图模式大概率不支持（编不过或 FATAL_ERROR）
     #     910C 才完整支持图模式。910B 上默认编译即可，--graph 仅作验证性尝试。
