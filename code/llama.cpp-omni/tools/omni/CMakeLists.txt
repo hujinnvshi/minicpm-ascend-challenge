@@ -104,6 +104,28 @@ endif()
 target_link_libraries  (${TARGET} PRIVATE llama-common omni Threads::Threads)
 target_compile_features(${TARGET} PRIVATE cxx_std_17)
 
+# Video-MME 评测 CLI - pipe 驱动的批量多模态推理（替代 HTTP llama-server）
+set(TARGET_EVAL_CLI llama-omni-eval-cli)
+add_executable         (${TARGET_EVAL_CLI} omni-eval-cli.cpp)
+set_target_properties  (${TARGET_EVAL_CLI} PROPERTIES OUTPUT_NAME llama-omni-eval-cli)
+if(LLAMA_TOOLS_INSTALL)
+    install(TARGETS ${TARGET_EVAL_CLI} RUNTIME)
+endif()
+target_link_libraries  (${TARGET_EVAL_CLI} PRIVATE llama-common omni Threads::Threads)
+target_include_directories(${TARGET_EVAL_CLI} PRIVATE ../../vendor)
+target_compile_features(${TARGET_EVAL_CLI} PRIVATE cxx_std_17)
+
+# Daily-Omni 评测 CLI - pipe 驱动的批量多模态（视频帧 + 交错音频）推理，替代 HTTP llama-server
+set(TARGET_EVAL_DAILY_CLI llama-omni-eval-daily-cli)
+add_executable         (${TARGET_EVAL_DAILY_CLI} omni-eval-daily-cli.cpp)
+set_target_properties  (${TARGET_EVAL_DAILY_CLI} PROPERTIES OUTPUT_NAME llama-omni-eval-daily-cli)
+if(LLAMA_TOOLS_INSTALL)
+    install(TARGETS ${TARGET_EVAL_DAILY_CLI} RUNTIME)
+endif()
+target_link_libraries  (${TARGET_EVAL_DAILY_CLI} PRIVATE llama-common omni Threads::Threads)
+target_include_directories(${TARGET_EVAL_DAILY_CLI} PRIVATE ../../vendor)
+target_compile_features(${TARGET_EVAL_DAILY_CLI} PRIVATE cxx_std_17)
+
 # 单工模式 - 纯音频测试（批量 prefill + 单次 decode）
 set(TARGET_SINGLE_TEST_AUDIO llama-omni-single-test-audio)
 add_executable         (${TARGET_SINGLE_TEST_AUDIO} test/single_test_audio.cpp)
