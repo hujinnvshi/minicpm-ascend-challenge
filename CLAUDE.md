@@ -13,6 +13,7 @@ MiniCPM-o 4.5 全模态推理优化参赛仓库（赛道一·**子赛道 A: llam
 - **判断"NPU 是否在算"**：用 `npu-smi info -t usages -i 1` **细粒度（≤0.5s）采样**，看 `Aicore Usage Rate` + `HBM Bandwidth Usage Rate`（后者高=真在 NPU 算）。**不能看单次/粗均值**（曾因此误判"AICore 4%=没走 NPU"，实测 burst 60–84%）。
 - **perf-duplex 的 exit 0/2/3 是本工具"双工实时交互"门槛，非官方排名指标**。官方性能只看 **SPEAK→WAV RTF**（基线 1.087，我方 0.83）。`analyze_perf.py` 的 `e2e RTF` = SPEAK 轮完整链路 RTF（≈官方口径）。
 - 图模式 `USE_ACL_GRAPH` 在 910B **不支持**（头文件缺）。
+- **双die device 锁定**（2026-08-10 新设备 910B/beta.1 验证）：双 die 被 CANN 枚举为 device0+device1，**dev1（die1）不可用**。perf-duplex 双工流水线会跑到 dev1，在 `aclnn_repeat_interleave`（RoPE 用）崩溃 exit139。跑 perf/duplex 前**必须** `ASCEND_RT_VISIBLE_DEVICES=0 CUDA_VISIBLE_DEVICES=0`（→ aclrtGetDeviceCount=1，只看 die0）。npu-smi 查询用 `-i 5`，binary 用 dev0。详见 `docs/session-2026-08-10-newenv.md`。
 - 优化**不得改推理数学**（仅流水线/调度层）→ 精度 = F16 基线，准入必过。
 
 ## 常用命令
