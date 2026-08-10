@@ -54,3 +54,9 @@ benchmark/seed-tts-eval/gen/
 benchmark/**/tts_wav/
 benchmark/demo-evidence/video_*/
 # demo runtime self-regenerated certs (keep committed originals only)
+
+# ASV/TTS eval 本地产物(大文件/本地配置, 不入 git)
+benchmark/seed-tts-eval/sv/wavlm-large/
+benchmark/video-mme-cookbook/.env
+benchmark/video-mme-cookbook/log/
+benchmark/video-mme/data/

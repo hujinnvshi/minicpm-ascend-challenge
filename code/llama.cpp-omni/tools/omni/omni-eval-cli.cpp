@@ -327,6 +327,7 @@ int main(int argc, char ** argv) {
     params.n_ctx        = n_ctx;
     params.n_gpu_layers = n_gpu_layers;
     params.n_predict    = n_predict;
+    params.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_ENABLED;  // 强制 FA: 多帧长序列 attention 数值稳定, 试解退化
     // Sampling (kept identical to the previous HTTP-server evaluation config).
     params.sampling.temp           = temp;
     params.sampling.top_p          = top_p;
