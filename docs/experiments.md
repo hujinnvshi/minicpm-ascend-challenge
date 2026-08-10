@@ -630,3 +630,28 @@ init_from_host_caches 校验 cache_host.n_timesteps != n_timesteps → 拒绝
 **方法论印证**：rigor-verify-loop 第 4/5 次 runtime 推翻静态（P2 "NPU vision 嫌疑"被 P2.5-B 推翻；P7重验 "2 帧连贯" 被 stack=2 复测推翻）。**逐层 NaN 检查 + 阈值对照逐步缩小范围**——vision 干净 → logits 对照（2 正常 / 8 NaN）→ 锁定 LLM 累积。
 
 **代码改动**：P2 sample LOG（omni.cpp:1399）+ P2.5-B vision NaN LOG（omni.cpp:884），均 env 门控只读。**待统一移除净 0**（见 task12/17）。
+
+---
+
+### 实验 P3：CookBook 官方 pipeline 实证 — context 40960 不是解，退化是 910B3/CANN 框架 bug（2026-08-10）
+
+**起点**：P2.5 定位 NaN 在 CANN 后端 LLM 多步 prefill。P2.5 务实结论建议 P3 求证官方基线口径。期间曾假设"context 过小（4096/8192 vs 官方 40960）是退化根因"。本实验接入官方 pipeline 实证。
+
+**接入**（commit `ab5653e` feat(eval) + `e1d79f4` build-cann.sh ccec）：
+- 官方评测路径：`OpenSQZ/MiniCPM-V-CookBook` `evaluation/videomme` 的 `llama-omni-eval-cli`（pipe 驱动，`media_type=2` 固定、`use_tts=false`），**非 WS server**（前几轮自建 WS turn_based 路径本就不对）。
+- build：**ccec（CANN bisheng clang 15）**——系统 gcc 12.3.1（openEuler）.o COMDAT/binding/symtab 异常，bfd/lld/gold 三 linker 全失败；ccec 干净编过（见 memory `910b-cann-gotchas` 第10条）。
+- 官方参数：`CTX_SIZE=40960`、`MAX_NUM_FRAMES=64 @1fps`、`temp 0.2`、`max_tokens 100`。
+
+**实证（smoke_test 2 题，video fFjv93ACGo8）**：
+- ✅ 跑通：CLI 6.4s ready + ffmpeg 抽 64 帧 + 多帧 prefill（n_past 4071→4538，**ctx 40960 无滑窗**）+ decode 100 token。
+- ❌ 精度 **0/2**：两题输出 100 个 `_`（退化 token）。CLI log **无 NaN/inf 报错**（logits 退化，非 P2.5 的数值崩溃 NaN；但同属多帧退化谱系）。
+
+**结论（推翻 context 假设）**：
+1. **context 40960 不是解**——官方 pipeline + 64 帧 + 40960 context 仍退化，"context 过小"假设**证伪**。
+2. **退化是 910B3/CANN 框架 bug**（P2.5 已定位 CANN 多步 prefill 数值稳定性），与 context/喂法（官方 pipeline）/编译器（ccec）都无关。
+3. **官方基线 69.0 极可能 910C 实测**（910C 不退化）——910B3 厂家替代 910C 的精度代价。
+4. 单帧（stack=1）仍可达（~10%），但官方口径 64 帧退化 → 多帧精度项（VideoMME/Daily-Omni）在 910B3 客观难达标。
+
+**务实结论**：解铃在赛方/910C。向赛方确认（`organizer-inquiry-final.md`）：① 官方基线环境（910C?）；② 910B3 选手多帧精度如何判定；③ 框架受限项是否豁免。我方强项 = 性能（RTF 0.68）+ Demo + TTS-WER（0.20）。
+
+**方法论印证**：rigor-verify-loop 第 6 次——"context 过小"静态假设被官方 pipeline 实测推翻（40960 仍退化）。**精度退化根因诊断必须 runtime 实测，静态推理（含"context 越大越好"的直觉）会误导**。

@@ -44,6 +44,8 @@
 **(a)** 准入基线 Daily-Omni 79.5 / Video-MME 69.0 的来源：是**子赛道 A（llama.cpp-omni）实测**，还是源自**子赛道 B（vLLM-Omni）/ 原生 MiniCPM-o**？贵方《vLLM-Omni 部署指南》给出的 vLLM 配方可达 Daily-Omni 78.28% / Video-MME 69.96%（与基线高度吻合），提示基线可能源自 vLLM/原生路径。若是，子赛道 A 是否有独立的、基于 llama.cpp-omni 实测的精度门槛？
 **(b)** 我队在 llama.cpp-omni turn_based 模式实测：**多帧视频（stack_frames ≥ 3）稳定触发 LLM logits 全 NaN**。逐层诊断：vision / audio / prefill 输入 embd 均无 NaN，NaN 产生在 **CANN 后端 `llama_decode` 内部多步 prefill 累积溢出**；stack=1 正常、stack=2 语义跑偏、stack=8 全 NaN，**渐进式非开关式**。单帧 Daily-Omni 仅 ~10%。而 vLLM-Omni ≤64/96 帧正常，证明**模型本身支持多帧**，问题在 llama.cpp-omni/CANN 路径。**子赛道 A 是否有官方推荐的多帧评测配置？该 NaN 是否在官方 910C 环境复现？是否需我队在 910C 重测排除 910B 特有因素？**
 
+**【2026-08-10 CookBook 官方 pipeline 实证补充】**我队已接入 `OpenSQZ/MiniCPM-V-CookBook` 的 `evaluation/videomme` 官方 pipeline(`llama-omni-eval-cli`,`CTX_SIZE=40960` + 64 帧 @1fps 官方喂法,**非 WS server**)。`smoke_test` 实证:pipeline 端到端跑通(CLI 6.4s ready + 抽 64 帧 + 多帧 prefill ctx40960 无滑窗 + decode 100 token),但 **0/2 退化(输出下划线)**,CLI log 无 NaN/inf(logits 退化)。即**官方 pipeline + 40960 context 在 910B3 仍退化——context 非根因,退化是 910B3/CANN 框架级 bug**(逐层诊断见我队 `docs/experiments.md` P2.5:vision/audio/输入 embd 全干净,NaN 在 CANN 后端 LLM 多步 prefill 累积溢出)。**据此强烈推断:官方基线 69.0/79.5 为 910C 实测(910C 不退化)**。恳请确认:① 官方基线评测环境是否为 910C;② 910B3(厂家授权替代 910C)选手的多帧精度如何判定;③ 框架受限项(非模型上限、非参赛方可修)是否有豁免/降权。
+
 **Q4（框架受限精度项的准入认定）.** 我队理解精度准入为硬性门槛（规范 4.1：须同时满足）。对于子赛道 A 因**框架客观限制**可能难以达标的精度项（如 Q3 多帧视觉），贵方认定机制是：仍按统一门槛刚性判定，还是对框架受限项有**豁免 / 降权 / 部分得分**？此点直接决定我队后续投入策略。
 
 ## 三、评测执行
