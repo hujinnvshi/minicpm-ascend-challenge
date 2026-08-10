@@ -50,3 +50,16 @@
 3. 是否**先单独验证 wavlm-large 能加载**(步骤 1-3 小步验证),再跑全 20 对——避免装完发现 wavlm-large 拿不到白费。
 
 建议:**先做风险 1 的可行性验证**(modelscope/本地 wavlm-large 能否到手 + s3prl 能 load),确认后再跑全流程。
+
+## 【2026-08-10 执行实证 · ASV 本地不可实现,回退】
+
+风险 1 验证 + A/B/C 三路全试,**卡在 UniSpeech GRP variant**(实证,非推测):
+
+- **闸口验证**:本地 HF cache 无 wavlm;HF offline 失败(封);**modelscope 有 microsoft/wavlm-large(transformers 格式)可下** → 但 s3prl 要的是 `s3prl/converted_ckpts/wavlm_large.pt`(s3prl 自有格式),两者不通用。
+- **A(modelscope s3prl converted)**:4 候选全 404,modelscope 无 s3prl converted。
+- **B(wavlm_local(wavlm_large_finetune.pth))**:失败 `'cfg'` —— s3prl UpstreamExpert 期望 `{cfg, model}` 格式,我们的 SV ckpt 是 ECAPA `state_dict["model"]`,不匹配。
+- **C(构造 s3prl ckpt)**:从 wavlm_large_finetune.pth 提取 `feature_extract.model.*`(WavLM 主干 488 keys)+ remap conv_layers norm(`.2.1`→`.2`)→ WavLM(large) load **missing=0**(主干可加载)。**但 wavlm_local 完整加载失败**:unexpected 暴露 `encoder.layers.N.self_attn.grep_a/grep_linear`(所有 24 层) + `relative_attention_bias` —— **wavlm_large_finetune.pth 的 WavLM 是 UniSpeech GRP(relative position)attention variant**,s3prl 标准 WavLM **无 GRP 结构**,不兼容(不是命名问题,是结构差异)。
+
+**结论**:ASV 官方口径本地三路全堵(s3prl 无 GRP / UniSpeech 代码 github 封 / HF converted 封)。**印证 organizer-inquiry-asv-sv.md 早诊断**:该 ckpt 是 UniSpeech 格式,需 UniSpeech 加载代码。**需赛方提供 UniSpeech 代码 / 可运行 ASV 脚本 / s3prl converted ckpt**。
+
+**回退**:保留 base-plus SIM 0.84(说明 TTS 正常,口径非官方);邮件(`organizer-inquiry-asv-sv.md`)明确求赛方提供 ASV 工具;转高 ROI 项(910C 对照 / WER 全量 / 提交材料)。
