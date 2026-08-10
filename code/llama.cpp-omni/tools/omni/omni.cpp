@@ -366,6 +366,18 @@ bool omni_eval_embed(llama_context * ctx_llama, const struct omni_embed * omni_e
     return true;
 }
 
+// [DEBUG] OMNI_DEBUG_NAN: prefill 输入 embed NaN 检查（定位 vision vs LLM 边界）
+static void omni_debug_emb_nan(const float * embd, int n, int n_past, const char * tag) {
+    static thread_local bool dbg_on = (getenv("OMNI_DEBUG_NAN") != nullptr);
+    if (!dbg_on || !embd) return;
+    bool has_nan = false;
+    int limit = n < 50000 ? n : 50000;
+    for (int i = 0; i < limit; i++) {
+        if (std::isnan(embd[i]) || std::isinf(embd[i])) { has_nan = true; break; }
+    }
+    fprintf(stderr, "[DBGNAN] %s n_past=%d n_elements=%d emb_nan=%d\n", tag, n_past, n, (int)has_nan);
+}
+
 bool prefill_with_emb(struct omni_context * ctx_omni, common_params * params, float* embed, int n_pos, int n_batch, int*n_past) {
     kv_cache_slide_window(ctx_omni, params, n_pos);
     
@@ -383,7 +395,8 @@ bool prefill_with_emb(struct omni_context * ctx_omni, common_params * params, fl
             pos_vec[j] = *n_past + j;
         }
         batch.pos = pos_vec.data();
-        
+        omni_debug_emb_nan(batch.embd, n_eval * n_embd, *n_past, "prefill_emb");
+
         if (llama_decode(ctx_omni->ctx_llama, batch)) {
             LOG_ERR("%s : failed to eval\n", __func__);
             return false;
@@ -431,6 +444,7 @@ bool prefill_emb_with_hidden(struct omni_context * ctx_omni, common_params * par
 
         // 启用 embeddings 输出
         llama_set_embeddings(ctx_omni->ctx_llama, true);
+        omni_debug_emb_nan(batch.embd, n_eval * n_embd, *n_past, "prefill_hidden");
 
         if (llama_decode(ctx_omni->ctx_llama, batch)) {
             LOG_ERR("%s : failed to eval\n", __func__);
@@ -1308,6 +1322,26 @@ static bool eval_string_with_hidden(struct omni_context * ctx_omni, common_param
 }
 
 static const char * sample(struct common_sampler * smpl, struct omni_context * ctx_omni, common_params* params, int * n_past) {
+    // [DEBUG] OMNI_DEBUG_LOGITS: 多帧退化 logits 塌缩诊断（只读，不改采样数学）
+    {
+        static thread_local int dbg_cnt = -1;
+        if (dbg_cnt < 0) dbg_cnt = (getenv("OMNI_DEBUG_LOGITS") != nullptr) ? 0 : 1000;
+        if (dbg_cnt < 10) {
+            float * lg = llama_get_logits_ith(ctx_omni->ctx_llama, -1);
+            if (lg) {
+                const llama_vocab * vocab = llama_model_get_vocab(llama_get_model(ctx_omni->ctx_llama));
+                int n_vocab = llama_vocab_n_tokens(vocab);
+                int ami = 0; float am = lg[0];
+                for (int i = 1; i < n_vocab; i++) if (lg[i] > am) { am = lg[i]; ami = i; }
+                double s = 0; for (int i = 0; i < n_vocab; i++) s += exp((double)(lg[i] - am));
+                double p1 = exp((double)(lg[ami] - am)) / s;
+                std::string piece = common_token_to_piece(ctx_omni->ctx_llama, ami);
+                fprintf(stderr, "[DBGLOGITS] n_past=%d tok#%d argmax=%d '%s' maxlogit=%.3f p_argmax=%.4f\n",
+                        *n_past, dbg_cnt, ami, piece.c_str(), (double)am, p1);
+            }
+            dbg_cnt++;
+        }
+    }
     const llama_token id = common_sampler_sample(smpl, ctx_omni->ctx_llama, -1);
     common_sampler_accept(smpl, id, true);
     static std::string ret;
@@ -1343,6 +1377,23 @@ static const char * llama_loop(struct omni_context * ctx_omni, common_params *pa
 // 🔧 [双工模式] 支持 forbidden_token_ids，禁止采样 <|tts_pad|> 等 token
 static const char * sample_with_hidden_and_token(struct common_sampler * smpl, struct omni_context * ctx_omni, common_params* params, int * n_past, float *& hidden_states, llama_token & token_id) {
     float * logits = llama_get_logits_ith(ctx_omni->ctx_llama, -1);
+    // [DEBUG] OMNI_DEBUG_LOGITS: 多帧退化 logits 塌缩诊断（只读，不改采样数学）
+    {
+        static thread_local int dbg_cnt = -1;
+        if (dbg_cnt < 0) dbg_cnt = (getenv("OMNI_DEBUG_LOGITS") != nullptr) ? 0 : 1000;
+        if (dbg_cnt < 10 && logits) {
+            const llama_vocab * vocab = llama_model_get_vocab(llama_get_model(ctx_omni->ctx_llama));
+            int n_vocab = llama_vocab_n_tokens(vocab);
+            int ami = 0; float am = logits[0];
+            for (int i = 1; i < n_vocab; i++) if (logits[i] > am) { am = logits[i]; ami = i; }
+            double s = 0; for (int i = 0; i < n_vocab; i++) s += exp((double)(logits[i] - am));
+            double p1 = exp((double)(logits[ami] - am)) / s;
+            std::string piece = common_token_to_piece(ctx_omni->ctx_llama, ami);
+            fprintf(stderr, "[DBGLOGITS] n_past=%d tok#%d argmax=%d '%s' maxlogit=%.3f p_argmax=%.4f\n",
+                    *n_past, dbg_cnt, ami, piece.c_str(), (double)am, p1);
+            dbg_cnt++;
+        }
+    }
     
     // 🔧 [双工模式] 在采样前调整 logits
     if (ctx_omni->duplex_mode) {
