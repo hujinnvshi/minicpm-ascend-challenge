@@ -55,6 +55,21 @@ beta.1 下 `0/2`，输出 100 个 `_`，与旧环境 beta.3 P3 基线**完全一
 → **多帧退化跨 beta.1 & beta.3 持续，非 CANN 版本差异**，是 910B/CANN 后端多步 prefill 数值稳定性问题。
 （原对照目标"910B vs 910C"未达成——本机也是 910B；但 beta.1 对照给出等价结论：非 CANN 小版本。）
 
+### 多帧退化诊断（2026-08-10 补充）—— 退化阈值 = 6 帧
+
+帧数梯度实测（`diag_frames.py`，每帧数独立 CLI 进程避免 shared_octx 污染；2 题/帧数；GT=C/A）：
+
+| 帧数 | 1 | 2 | 4 | **5** | **6** | 7 | 8 | 16 | 32 | 64 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 结果 | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+
+- **单帧红线 ✅**：1 帧 2/2 全对（GT=C→C, GT=A→A）→ binary 健康、模型正常，**退化确属多帧特有**。
+- **退化边界 = 6 帧**：≤5 帧全对，≥6 帧输出 100 个 `_`。比"多帧退化"精确得多——退化有明确阈值，非"多帧即崩"。
+- **≤5 帧精度正常 = 可交付口径**（对赛方有力的新证据）。
+- 6 帧可能对应某 vision token 数 / prefill 步数边界（根因待深挖）。
+- **坑**：`eval_cpp_video_prep.prepare_video_frames` 的 `max_num_frames` 是默认参数（def 时绑定 64），monkey-patch 模块级 `MAX_NUM_FRAMES` 无效，必须显式传参 `max_num_frames=nf`。
+- 诊断产物：`/workspace/user_data/verify-ascend-2026-08-10/diag/`（`diag_frames.py` + `CONCLUSION.txt` + `diag.log` + `diag-fine.log`）。
+
 ## 判定矩阵 → 情形B
 - 退化跨 beta.1&beta.3 持续；非硬件（本机亦 910B）；非 CANN 小版本。
 - 下一步：① 邮件升级（**beta.1 也退化 = 新证据**）求豁免 / 求 910C 复测；② 单帧口径作可交付（stack=1 预期正常）；③ 不再追多帧（ROI 低，超红线）。
