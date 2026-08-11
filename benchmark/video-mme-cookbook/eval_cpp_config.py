@@ -52,12 +52,12 @@ CTX_SIZE = int(os.environ.get("CTX_SIZE", "40960"))
 
 MAX_NUM_FRAMES = 64
 MAX_FPS = 1.0
-MAX_SLICE_NUMS = 0
+MAX_SLICE_NUMS = int(os.environ.get("MAX_SLICE_NUMS", "0"))
 MAX_TOKENS = 100          # 每题最多生成 token 数（CLI --n-predict）
 
 # 解码策略：当前 TEMPERATURE=0.0 为 greedy（对齐 Python do_sample=False）
 # 若需开启 sampling，将 TEMPERATURE 改为 > 0（如 0.2）
-TEMPERATURE = 0.2
+TEMPERATURE = 0.0  # greedy, 对齐官方 eval_cpp_config
 TOP_P = 0.8
 TOP_K = 100
 REPEAT_PENALTY = 1.02

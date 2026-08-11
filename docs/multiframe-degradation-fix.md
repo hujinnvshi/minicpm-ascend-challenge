@@ -180,7 +180,40 @@ GGML_CANN_WEIGHT_NZ=off ASCEND_RT_VISIBLE_DEVICES=0 CUDA_VISIBLE_DEVICES=0 \
 
 ---
 
-## 七、相关文档与产物
+## 八、附:修复后的精度上限调查(2026-08-11,bench-huawei-adapt)
+
+退化修复后(0% degraded),VideoMME 精度仍在 ~48-50%(低于准入 67% / 基线 69.0)。调查结论:
+
+**配置旋钮全部穷尽(99 题,stratified short/medium/long,修复后 binary):**
+| 旋钮 | 取值 | 64帧/8帧 精度 | 结论 |
+|---|---|---|---|
+| temperature | 0.0(greedy) vs 0.2 | 47.5% vs 49.5% | 无效 |
+| 帧数 | 8 vs 64 | 48.5% ≈ 47.5% | 加帧不涨分 |
+| max_slice_nums | 0 vs 2(高清) | 48.5% vs 46.5% | 无效 |
+
+**⭐ Track B 诊断对比(决定性)—— 推翻"框架上限"假设:**
+同 20 题、64 帧、greedy、同 prompt 下,head-to-head:
+| 框架 | 准确率 |
+|---|---|
+| Track B(torch_npu + HF transformers 参考实现) | **10/20 = 50%** |
+| llama.cpp-omni | **10/20 = 50%** |
+两框架在 **18/20 题答案一致**(都对 9、都错 9)。
+
+→ **不是 llama.cpp 视觉 encoder 质量问题**(HF 参考给出相同 50%)。框架视觉质量没问题,退化修复是框架无关的真实胜利。
+
+**真因(50% vs vLLM 70% 的 gap):**
+- **pipeline 配置**:vLLM 用 `minicpm-frames` **关键帧采样** + ≤96 帧 + 专用 prompt;我们用 @1fps 均匀 64 帧 + CookBook prompt。这是 vLLM 配方的核心差异。
+- **样本方差**:20 题 95% CI ≈ ±22pp,50% 与更高全量值统计相容;定论需全量 2700。
+- **非**:硬件、NaN(已修)、temp、帧数、slice、视觉 encoder(均已排除)。
+
+**结论 + 后续杠杆:**
+- 精度项**阶段性结论**:退化已修(0%)+ 非框架上限(HF=llama.cpp);~50% 是"本 pipeline + 小样本"结果,非定论。
+- 唯一未探的真杠杆:**`minicpm-frames` 关键帧采样**(对齐 vLLM 配方)——但 llama.cpp-omni eval-cli 是否支持关键帧选择待查;且需全量 900 视频验证。
+- 产物:`diag/trackb_accuracy.py`、`diag/trackb_accuracy_20q.csv`、`diag/results_scale_*.csv`(greedy/slice 各跑)。
+
+---
+
+## 九、相关文档与产物
 
 - `docs/bench-huawei-branch-notice.md` —— 官方统一测评分支通知（逐字留档 + 影响 + Track B 上下文）
 - `docs/multiframe-degradation-repro.md` —— 复现/对比指南（基于外部 CookBook，待对齐到官方分支）
