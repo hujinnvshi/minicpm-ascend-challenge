@@ -139,7 +139,10 @@ static OmniModelPaths resolve_model_paths(const std::string & llm_path) {
 static FILE * g_proto = nullptr;
 
 static void proto_write(const json & obj) {
-    const std::string s = obj.dump();
+    // n_predict 会把生成截断在多字节字符中间，留下不合法的 UTF-8 片段。默认的 strict
+    // 处理会抛 type_error.316，这里没人接，整个进程 abort，本分片剩下的题全部记错。
+    // 用 replace 把坏字节换成 U+FFFD：答案抽取只看选项字母，替换不影响判分。
+    const std::string s = obj.dump(-1, ' ', false, json::error_handler_t::replace);
     if (g_proto) {
         fwrite(s.data(), 1, s.size(), g_proto);
         fputc('\n', g_proto);
@@ -290,7 +293,8 @@ static void show_usage(const char * prog) {
         "  -ngl <n>               GPU layers (default: 999)\n"
         "  --max-slice-nums <n>   Default vision slices per frame (default: 0 = use global)\n"
         "  --n-predict <n>        Max generated tokens per answer (default: 128)\n"
-        "  --temp <f>             Sampling temperature (default: 0.7)\n"
+        "  --seed <n>             Sampling seed (default: 42; fixed so runs are reproducible)\n"
+        "  --temp <f>             Sampling temperature (default: 0 = greedy)\n"
         "  --top-p <f>            top-p (default: 0.8)\n"
         "  --top-k <n>            top-k (default: 100)\n"
         "  --repeat-penalty <f>   repetition penalty (default: 1.02)\n"
@@ -310,7 +314,14 @@ int main(int argc, char ** argv) {
     int   n_gpu_layers   = 999;
     int   max_slice_nums = 0;    // default per-frame slices (0 => stream_prefill keeps global)
     int   n_predict      = 128;
-    float temp           = 0.7f;
+    // Fixed by default: with common_params' LLAMA_DEFAULT_SEED the sampler reseeds
+    // from std::random_device every run, so the same build scores differently each
+    // time and a real accuracy change is indistinguishable from sampling noise.
+    // Matters more here than for Video-MME since this task samples at temp=0.7.
+    uint32_t seed        = 42;
+    // Greedy by default: this is a multiple-choice benchmark, matching the Python
+    // reference implementation's do_sample=False.
+    float temp           = 0.0f;
     float top_p          = 0.8f;
     int   top_k          = 100;
     float repeat_penalty = 1.02f;
@@ -326,6 +337,7 @@ int main(int argc, char ** argv) {
         else if (a == "-ngl" && i + 1 < argc)             n_gpu_layers = std::atoi(argv[++i]);
         else if (a == "--max-slice-nums" && i + 1 < argc) max_slice_nums = std::atoi(argv[++i]);
         else if (a == "--n-predict" && i + 1 < argc)      n_predict = std::atoi(argv[++i]);
+        else if (a == "--seed" && i + 1 < argc)           seed = (uint32_t) std::strtoul(argv[++i], nullptr, 10);
         else if (a == "--temp" && i + 1 < argc)           temp = (float) std::atof(argv[++i]);
         else if (a == "--top-p" && i + 1 < argc)          top_p = (float) std::atof(argv[++i]);
         else if (a == "--top-k" && i + 1 < argc)          top_k = std::atoi(argv[++i]);
@@ -373,6 +385,7 @@ int main(int argc, char ** argv) {
     params.n_gpu_layers = n_gpu_layers;
     params.n_predict    = n_predict;
     // Sampling (kept identical to the previous HTTP-server Daily-Omni config).
+    params.sampling.seed           = seed;
     params.sampling.temp           = temp;
     params.sampling.top_p          = top_p;
     params.sampling.top_k          = top_k;
@@ -387,7 +400,7 @@ int main(int argc, char ** argv) {
     fprintf(stderr, "  Vision:  %s\n", paths.vision.c_str());
     fprintf(stderr, "  Audio:   %s\n", paths.audio.c_str());
     fprintf(stderr, "  ctx=%d ngl=%d n_predict=%d max_slice=%d\n", n_ctx, n_gpu_layers, n_predict, max_slice_nums);
-    fprintf(stderr, "  temp=%.3f top_p=%.3f top_k=%d repeat_penalty=%.3f\n", temp, top_p, top_k, repeat_penalty);
+    fprintf(stderr, "  seed=%u temp=%.3f top_p=%.3f top_k=%d repeat_penalty=%.3f\n", seed, temp, top_p, top_k, repeat_penalty);
 
     // media_type=2 (omni: audio+vision), use_tts=false (text-only answers).
     omni_context * ctx = omni_init(&params, /*media_type*/ 2, /*use_tts*/ false, tts_bin_dir,

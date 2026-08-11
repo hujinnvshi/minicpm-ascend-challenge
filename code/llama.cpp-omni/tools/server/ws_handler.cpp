@@ -7,7 +7,6 @@
 #include <fstream>
 #include <thread>
 #include <vector>
-#include <sys/wait.h>   // WEXITSTATUS
 
 #include <cpp-httplib/httplib.h>
 
@@ -345,54 +344,10 @@ static bool file_nonempty(const std::string & path) {
     return fs::exists(path, ec) && fs::file_size(path, ec) > 0;
 }
 
-static std::string truncate_for_prompt(const std::string & text, size_t max_chars); // defined below
-
-// Run a shell command via popen, merging stdout+stderr into *capture (up to
-// cap_max bytes), and return the exit code (WEXITSTATUS). Returns -1 on popen
-// failure or abnormal termination (e.g. killed by signal). Used instead of
-// std::system so we can capture ffmpeg stderr for diagnostics and obtain a
-// reliable exit code; the 2>&1 merge does not affect the exit code. The caller
-// is responsible for shell-quoting any paths embedded in cmd.
-static int run_cmd_capture(const std::string & cmd, std::string * capture, size_t cap_max = 4096) {
-    if (capture) {
-        capture->clear();
-    }
-    FILE * pipe = popen(("(" + cmd + ") 2>&1").c_str(), "r");
-    if (!pipe) {
-        return -1;
-    }
-    char buf[512];
-    size_t got = 0;
-    while (fgets(buf, sizeof(buf), pipe)) {
-        if (capture && got < cap_max) {
-            std::string piece(buf);
-            if (piece.size() > cap_max - got) {
-                piece.resize(cap_max - got);
-            }
-            capture->append(piece);
-            got += piece.size();
-        }
-    }
-    int status = pclose(pipe);
-    if (status == -1 || !WIFEXITED(status)) {
-        return -1;
-    }
-    return WEXITSTATUS(status);
-}
-
-// One video timestep for interleaved (minicpm-interleave) packing:
-// a 1fps frame at second i paired with its 1s audio segment [i, i+1]s.
-struct VideoTimestep {
-    std::string frame_path;
-    std::string audio_seg_path; // may be empty if the segment failed to extract
-};
-
 struct ExtractedVideoMedia {
     std::string video_path;
     std::string audio_path;
     std::vector<std::string> frame_paths;
-    std::vector<VideoTimestep> timesteps; // interleaved frame+1s-audio pairs (n_frames>1 only)
-    std::string last_error; // ffmpeg stderr summary on failure; empty on success
 };
 
 // Decode a base64 MP4 (turn_based `video` content item) to a temp file and use
@@ -423,112 +378,27 @@ static ExtractedVideoMedia extract_video_mp4_media(const std::string & video_b64
         return out;
     }
 
-    // Audio extraction: ffmpeg -> mono 16k PCM WAV. Retry once on transient
-    // subprocess failure (startup races); audio failure is non-fatal (some
-    // clips have no audio) — matches prior behavior of leaving audio_path empty.
-    // timeout(1) guards against a hung ffmpeg demuxer. ffmpeg params unchanged
-    // vs. original (bit-identical output on the success path).
     std::string audio_path = (dir / "audio.wav").string();
-    // Cap audio at 29.9s so mel frames <= 3000 -> whisper encoder tokens <= 1500
-    // (n_audio_ctx). Audio > 30.0s overflows the position-encoding buffer in
-    // build_whisper (audition.cpp) and aborts the whole server (SIGABRT). 29.9s
-    // leaves a small margin under the hard 1500-token whisper window.
-    // (Daily-Omni audio is 30~60s, so this cap is what makes the clip encodable
-    //  at all within omni's whisper ASR path; see docs/daily-omni-notes.md.)
     std::string audio_cmd =
-        "timeout -k 5 30 ffmpeg -y -hide_banner -loglevel error -i " + shell_quote(out.video_path) +
-        " -vn -ac 1 -ar 16000 -c:a pcm_f32le -t 29.9 " + shell_quote(audio_path);
-    {
-        std::string cap;
-        int rc = -1;
-        for (int attempt = 0; attempt < 2; ++attempt) {
-            rc = run_cmd_capture(audio_cmd, &cap);
-            if (rc == 0 && file_nonempty(audio_path)) {
-                break;
-            }
-            if (attempt == 0) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(200));
-            }
-        }
-        if (rc == 0 && file_nonempty(audio_path)) {
-            out.audio_path = audio_path;
-        } else {
-            out.last_error += "audio_extract rc=" + std::to_string(rc) +
-                              ": " + truncate_for_prompt(cap, 512) + " | ";
-        }
+        "ffmpeg -y -hide_banner -loglevel error -i " + shell_quote(out.video_path) +
+        " -vn -ac 1 -ar 16000 -c:a pcm_f32le " + shell_quote(audio_path);
+    if (std::system(audio_cmd.c_str()) == 0 && file_nonempty(audio_path)) {
+        out.audio_path = audio_path;
     }
 
-    // Frame extraction: ffmpeg -> up to n_frames JPEGs. Retry once on transient
-    // failure; frame failure IS fatal (caller checks frame_paths.empty()).
     std::string frame_pattern = (dir / "frame_%03d.jpg").string();
-    // Sample at 1fps when n_frames>1 so frame_i ≈ second i (aligned with the 1s audio
-    // segment built below for interleaved packing). n_frames==1 keeps the original
-    // command byte-for-byte (legacy single-frame red line).
     std::string frame_cmd =
-        "timeout -k 5 30 ffmpeg -y -hide_banner -loglevel error -i " + shell_quote(out.video_path) +
-        " -an " + std::string(n_frames > 1 ? "-vf fps=1 " : "") +
-        "-frames:v " + std::to_string(n_frames) +
+        "ffmpeg -y -hide_banner -loglevel error -i " + shell_quote(out.video_path) +
+        " -an -frames:v " + std::to_string(n_frames) +
         " -q:v 2 " + shell_quote(frame_pattern);
-    {
-        std::string cap;
-        int rc = -1;
-        for (int attempt = 0; attempt < 2; ++attempt) {
-            rc = run_cmd_capture(frame_cmd, &cap);
-            if (rc == 0) {
-                break;
+    if (std::system(frame_cmd.c_str()) == 0) {
+        for (int i = 1; i <= n_frames; ++i) {
+            char name[32];
+            snprintf(name, sizeof(name), "frame_%03d.jpg", i);
+            std::string frame_path = (dir / name).string();
+            if (file_nonempty(frame_path)) {
+                out.frame_paths.push_back(frame_path);
             }
-            if (attempt == 0) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(200));
-            }
-        }
-        if (rc == 0) {
-            for (int i = 1; i <= n_frames; ++i) {
-                char name[32];
-                snprintf(name, sizeof(name), "frame_%03d.jpg", i);
-                std::string frame_path = (dir / name).string();
-                if (file_nonempty(frame_path)) {
-                    out.frame_paths.push_back(frame_path);
-                }
-            }
-        } else {
-            out.last_error += "frame_extract rc=" + std::to_string(rc) +
-                              ": " + truncate_for_prompt(cap, 512);
-        }
-    }
-
-    // Interleaved packing (n_frames>1 only): pair each 1fps frame_i (second i) with its
-    // aligned 1s audio segment [i, i+1]s. The caller packs these as
-    //   <image>frame_i</image><|audio_start|>seg_i<|audio_end|>
-    // per timestep (canonical minicpm-interleave training layout). Each ≤1s segment
-    // yields ≤~10 whisper tokens, encoded independently (per-call n_audio_ctx=1500 cap,
-    // no inference-math change). n_frames==1 leaves `timesteps` empty (legacy path).
-    // Missing frame -> skip timestep; missing segment -> empty audio_seg_path (consumer
-    // tolerates via has_audio).
-    if (n_frames > 1) {
-        for (int i = 0; i < n_frames; ++i) {
-            char fname[32];
-            snprintf(fname, sizeof(fname), "frame_%03d.jpg", i + 1);
-            std::string fpath = (dir / fname).string();
-            if (!file_nonempty(fpath)) {
-                continue;
-            }
-            VideoTimestep ts;
-            ts.frame_path = fpath;
-            char aname[32];
-            snprintf(aname, sizeof(aname), "audio_%03d.wav", i);
-            std::string apath = (dir / aname).string();
-            std::string seg_cmd =
-                "timeout -k 5 30 ffmpeg -y -hide_banner -loglevel error -ss " + std::to_string(i) +
-                " -i " + shell_quote(out.video_path) +
-                " -t 1 -vn -ac 1 -ar 16000 -c:a pcm_f32le " + shell_quote(apath);
-            std::string cap;
-            int rc = run_cmd_capture(seg_cmd, &cap);
-            if (rc == 0 && file_nonempty(apath)) {
-                ts.audio_seg_path = apath;
-            } else {
-                out.last_error += "audio_seg[" + std::to_string(i) + "] rc=" + std::to_string(rc) + "; ";
-            }
-            out.timesteps.push_back(ts);
         }
     }
 
@@ -625,16 +495,9 @@ static void configure_turn_based_prompt(omni_context * octx,
 
     if (use_tts_template) {
         octx->audio_voice_clone_prompt = "<|im_start|>system\n模仿音频样本的音色并生成新的内容。\n<|audio_start|>";
+        octx->audio_assistant_prompt = "<|audio_end|>你的任务是用这种声音模式来当一个助手。请认真、高质量地回复用户的问题。请用高自然度的方式和用户聊天。你是由面壁智能开发的人工智能助手：面壁小钢炮。<|im_end|>\n<|im_start|>user\n";
         octx->omni_voice_clone_prompt = "<|im_start|>system\n模仿音频样本的音色并生成新的内容。\n<|audio_start|>";
-        // [TTS-Seed] assistant 指令可由 OMNI_ASSISTANT_PROMPT 覆盖（与 omni_init 路径 omni.cpp 一致，
-        // 补全 commit 6a232b1 的 server turn_based 遗漏）。默认"助手对话"；TTS-Seed 评测设朗读指令。
-        // 不改推理数学，仅 prompt 文本 → 精度不受影响（符合红线）。
-        const char * default_ap = "你的任务是用这种声音模式来当一个助手。请认真、高质量地回复用户的问题。请用高自然度的方式和用户聊天。你是由面壁智能开发的人工智能助手：面壁小钢炮。";
-        const char * e = std::getenv("OMNI_ASSISTANT_PROMPT");
-        const std::string ap_inner = (e && *e) ? std::string(e) : std::string(default_ap);
-        const std::string ap = "<|audio_end|>" + ap_inner + "<|im_end|>\n<|im_start|>user\n";
-        octx->audio_assistant_prompt = ap;
-        octx->omni_assistant_prompt = ap;
+        octx->omni_assistant_prompt = "<|audio_end|>你的任务是用这种声音模式来当一个助手。请认真、高质量地回复用户的问题。请用高自然度的方式和用户聊天。<|im_end|>\n<|im_start|>user\n";
         return;
     }
 
@@ -721,18 +584,10 @@ void handle_ws_backend(httplib::ws::WebSocket & ws,
     int msg_counter = 0;
     std::vector<std::string> retained_media_files;
 
-    // Helper: fail-fast — send session.closed (optional diagnostic) and close WS.
-    // The diagnostic is surfaced to the client via session.closed.diagnostic and
-    // always logged via LOG_WRN (default verbosity already shows WARN).
-    auto fail_fast = [&](const std::string & session_id,
-                         const std::string & reason,
-                         const std::string & diagnostic = "") {
-        LOG_WRN("WS /backend: fail_fast session=%s reason=%s%s%s\n",
-                session_id.c_str(), reason.c_str(),
-                diagnostic.empty() ? "" : " diag=",
-                diagnostic.empty() ? "" : diagnostic.c_str());
+    // Helper: fail-fast — send session.closed and close WS
+    auto fail_fast = [&](const std::string & session_id, const std::string & reason) {
         if (!session_id.empty()) {
-            std::string ev = make_session_closed(session_id, reason, diagnostic).dump();
+            std::string ev = make_session_closed(session_id, reason).dump();
             ws.send(ev);
         }
         session_mgr.close(session_id);
@@ -966,7 +821,6 @@ void handle_ws_backend(httplib::ws::WebSocket & ws,
             std::vector<std::string> extra_image_paths;
             std::vector<std::string> turn_temp_paths;
             int turn_vision_slices = 0;
-            std::vector<VideoTimestep> interleave_timesteps;
 
             // Images: take all images from the last user message
             const ParsedMessage * last_user_msg = nullptr;
@@ -1011,18 +865,10 @@ void handle_ws_backend(httplib::ws::WebSocket & ws,
                             extra_image_paths.push_back(frame_path);
                         }
                     }
-                    // Collect interleaved (frame, 1s-audio) timesteps for the multi-frame
-                    // video path. Empty for stack_frames==1 (legacy single-frame path).
-                    for (const auto & ts : video.timesteps) {
-                        interleave_timesteps.push_back(ts);
-                        if (!ts.audio_seg_path.empty()) {
-                            turn_temp_paths.push_back(ts.audio_seg_path); // ensure cleanup
-                        }
-                    }
                     if (video.frame_paths.empty()) {
                         tmp_files.cleanup();
                         for (const auto & path : turn_temp_paths) fs::remove(path);
-                        fail_fast(session_id, "video_decode_failed", video.last_error);
+                        fail_fast(session_id, "video_decode_failed");
                         return;
                     }
                 }
@@ -1061,76 +907,24 @@ void handle_ws_backend(httplib::ws::WebSocket & ws,
                     }
                 }
                 int input_index = msg_counter > 0 ? msg_counter : ++msg_counter;
-                // Interleaved packing for multi-frame video (canonical minicpm-interleave):
-                // default ON when timesteps were collected (stack_frames>1); set env
-                // OMNI_VIDEO_INTERLEAVE=0 to force the legacy stacked path for A/B / rollback.
-                const char * il_env = std::getenv("OMNI_VIDEO_INTERLEAVE");
-                const bool video_interleave = !interleave_timesteps.empty()
-                    && !(il_env && std::string(il_env) == "0");
-                if (video_interleave) {
-                    // N timesteps, each packed as <image>frame_i</image><|audio_start|>1s_seg_i<|audio_end|>
-                    // (the consumer emits these per queue entry in FIFO order). Force max_slice_nums=0
-                    // so each frame is a single <image> with no <slice>, then restore the model default.
-                    // max_slice_nums=0 is passed to stream_prefill (its >=1 guard skips re-setting,
-                    // so the override stays 0). The user question is sent LAST as a separate text-only
-                    // entry — this also fixes the consumer dropping user_text on vision-bearing entries.
-                    if (octx->ctx_vision) {
-                        vision_set_max_slice_nums(octx->ctx_vision, 0);
-                    }
-                    for (const auto & ts : interleave_timesteps) {
-                        // Clear the whisper streaming KV cache before each 1s segment so each
-                        // encodes INDEPENDENTLY (matches the interleaved training distribution).
-                        // Without this the cache accumulates across N segments (streaming mode),
-                        // making later segments' embeddings contextual on prior ones; at high
-                        // frame counts the pollution collapses the LLM into repetition (the
-                        // 8-frame token-id=30 degeneration). Legacy single-audio path untouched.
-                        if (octx->ctx_audio) {
-                            audition_whisper_clear_kv_cache(octx->ctx_audio);
-                        }
-                        if (!stream_prefill(octx, ts.audio_seg_path, ts.frame_path,
-                                            ++msg_counter, /*max_slice_nums*/0, /*text*/"")) {
-                            octx->use_tts = prev_use_tts;
-                            tmp_files.cleanup();
-                            for (const auto & path : extra_image_paths) fs::remove(path);
-                            for (const auto & path : turn_temp_paths) fs::remove(path);
-                            fail_fast(session_id, "video_interleave_prefill_failed");
-                            return;
-                        }
-                    }
-                    if (octx->ctx_vision) {
-                        vision_set_max_slice_nums(octx->ctx_vision, -1); // restore default slicing
-                    }
-                    if (!prompt.empty()) {
-                        if (!stream_prefill(octx, /*aud*/"", /*img*/"", ++msg_counter,
-                                            /*max_slice_nums*/0, /*text*/prompt)) {
-                            octx->use_tts = prev_use_tts;
-                            tmp_files.cleanup();
-                            for (const auto & path : extra_image_paths) fs::remove(path);
-                            for (const auto & path : turn_temp_paths) fs::remove(path);
-                            fail_fast(session_id, "video_interleave_text_prefill_failed");
-                            return;
-                        }
-                    }
-                } else {
-                    if (!stream_prefill(octx, tmp_files.audio_path, tmp_files.image_path,
-                                        input_index, parsed_input.max_slice_nums, prompt)) {
+                if (!stream_prefill(octx, tmp_files.audio_path, tmp_files.image_path,
+                                    input_index, parsed_input.max_slice_nums, prompt)) {
+                    octx->use_tts = prev_use_tts;
+                    tmp_files.cleanup();
+                    for (const auto & path : extra_image_paths) fs::remove(path);
+                    for (const auto & path : turn_temp_paths) fs::remove(path);
+                    fail_fast(session_id, "prefill_failed");
+                    return;
+                }
+                for (const auto & image_path : extra_image_paths) {
+                    if (!stream_prefill(octx, /*aud*/"", image_path,
+                                        ++msg_counter, parsed_input.max_slice_nums, /*text*/"")) {
                         octx->use_tts = prev_use_tts;
                         tmp_files.cleanup();
                         for (const auto & path : extra_image_paths) fs::remove(path);
                         for (const auto & path : turn_temp_paths) fs::remove(path);
-                        fail_fast(session_id, "prefill_failed");
+                        fail_fast(session_id, "video_frame_prefill_failed");
                         return;
-                    }
-                    for (const auto & image_path : extra_image_paths) {
-                        if (!stream_prefill(octx, /*aud*/"", image_path,
-                                            ++msg_counter, parsed_input.max_slice_nums, /*text*/"")) {
-                            octx->use_tts = prev_use_tts;
-                            tmp_files.cleanup();
-                            for (const auto & path : extra_image_paths) fs::remove(path);
-                            for (const auto & path : turn_temp_paths) fs::remove(path);
-                            fail_fast(session_id, "video_frame_prefill_failed");
-                            return;
-                        }
                     }
                 }
                 octx->use_tts = prev_use_tts;
@@ -1205,7 +999,7 @@ void handle_ws_backend(httplib::ws::WebSocket & ws,
                                                  elapsed_ms(t_request_start), 0,
                                                  turn_vision_slices)));
                         break;
-                    } else if (frag == "__END_OF_TURN__") {
+                    } else if (frag == "__END_OF_TURN__" || frag == "__TURN_IDLE__") {
                         // handled by response.done
                     } else {
                         const std::string text = sanitize_utf8_stream(utf8_pending, frag);
@@ -1383,7 +1177,7 @@ void handle_ws_backend(httplib::ws::WebSocket & ws,
                                                  elapsed_ms(t_request_start), 0,
                                                  turn_vision_slices)));
                         break; // Done for this input
-                    } else if (frag == "__END_OF_TURN__") {
+                    } else if (frag == "__END_OF_TURN__" || frag == "__TURN_IDLE__") {
                         // Turn ended — will be handled by response.done
                     } else {
                         // Text delta

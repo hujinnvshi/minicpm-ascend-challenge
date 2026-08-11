@@ -1701,6 +1701,13 @@ static void * ggml_cann_host_malloc(size_t size) {
     }
 
     void *   hostPtr = nullptr;
+    // aclrtMallocHost requires a thread-local ACL context; threads that have
+    // not touched a device yet (e.g. the token2wav worker thread) would fail
+    // here and silently lose pinned memory. Bind the primary device first.
+    int32_t current_device = -1;
+    if (aclrtGetDevice(&current_device) != ACL_SUCCESS) {
+        ggml_cann_set_device(0);
+    }
     aclError err     = aclrtMallocHost((void **) &hostPtr, size);
     if (err != ACL_SUCCESS) {
         GGML_LOG_WARN("%s: failed to allocate %.2f MiB of pinned memory: %s\n", __func__, size / 1024.0 / 1024.0,
@@ -1922,10 +1929,12 @@ static bool ggml_cann_compute_forward(ggml_backend_cann_context & ctx, struct gg
             ggml_cann_scale(ctx, dst);
             break;
         case GGML_OP_SQR:
-            // SQR(x)=x*x via aclnn_mul. Newer ggml graph layouts may leave
-            // src[1] non-null; overwrite it (SQR has no real 2nd operand).
-            dst->src[1] = dst->src[0];
-            ggml_cann_binary_op<aclnn_mul>(ctx, dst);
+            {
+                struct ggml_tensor * src1_prev = dst->src[1];
+                dst->src[1] = dst->src[0];
+                ggml_cann_binary_op<aclnn_mul>(ctx, dst);
+                dst->src[1] = src1_prev;
+            }
             break;
         case GGML_OP_SQRT:
             GGML_CANN_CALL_OP_UNARY(Sqrt);
@@ -2082,14 +2091,13 @@ static void ggml_backend_cann_set_tensor_async(ggml_backend_t backend,
     ggml_backend_cann_context * cann_ctx = (ggml_backend_cann_context *) backend->context;
     ggml_backend_buffer_t       buf      = tensor->view_src ? tensor->view_src->buffer : tensor->buffer;
 
-    // Bind the device to the current thread before the async copy. Token2Wav runs
-    // in its own thread; without this, aclrtMemcpyAsync fails with a null context
-    // (current device: -1) on CANN, since aclrtSetDevice is per-thread.
-    ggml_cann_set_device(cann_ctx->device);
-
     GGML_ASSERT(buf->buft == ggml_backend_cann_buffer_type(cann_ctx->device) && "unsupported buffer type");
     GGML_ASSERT(!ggml_is_quantized(tensor->type));
 
+    // Bind the calling thread to the device: worker threads (e.g. the
+    // token2wav thread) may reach here as their first CANN call, and
+    // aclrtMemcpyAsync requires a thread-local ACL context.
+    ggml_cann_set_device(cann_ctx->device);
     ACL_CHECK(aclrtMemcpyAsync((char *) tensor->data + offset, size, data, size, ACL_MEMCPY_HOST_TO_DEVICE,
                                cann_ctx->stream()));
 }
@@ -2113,12 +2121,11 @@ static void ggml_backend_cann_get_tensor_async(ggml_backend_t      backend,
     ggml_backend_cann_context * cann_ctx = (ggml_backend_cann_context *) backend->context;
     ggml_backend_buffer_t       buf      = tensor->view_src ? tensor->view_src->buffer : tensor->buffer;
 
-    // Bind device to current thread (mirrors set_tensor_async; see note above).
-    ggml_cann_set_device(cann_ctx->device);
-
     GGML_ASSERT(buf->buft == ggml_backend_cann_buffer_type(cann_ctx->device) && "unsupported buffer type");
     GGML_ASSERT(!ggml_is_quantized(tensor->type));
 
+    // Same as set_tensor_async: ensure this thread has an ACL context.
+    ggml_cann_set_device(cann_ctx->device);
     ACL_CHECK(aclrtMemcpyAsync(data, size, (char *) tensor->data + offset, size, ACL_MEMCPY_DEVICE_TO_HOST,
                                cann_ctx->stream()));
 }
@@ -2721,9 +2728,6 @@ static bool ggml_backend_cann_supports_op(ggml_backend_dev_t dev, const ggml_ten
  */
 static void ggml_backend_cann_event_record(ggml_backend_t backend, ggml_backend_event_t event) {
     ggml_backend_cann_context * cann_ctx = (ggml_backend_cann_context *) backend->context;
-    // Bind device to current thread (events may be recorded from worker threads
-    // like Token2Wav; aclrtRecordEvent requires a bound device context).
-    ggml_cann_set_device(cann_ctx->device);
     ACL_CHECK(aclrtRecordEvent((aclrtEvent) event->context, cann_ctx->stream()));
 }
 
@@ -2739,8 +2743,6 @@ static void ggml_backend_cann_event_record(ggml_backend_t backend, ggml_backend_
  */
 static void ggml_backend_cann_event_wait(ggml_backend_t backend, ggml_backend_event_t event) {
     ggml_backend_cann_context * cann_ctx = (ggml_backend_cann_context *) backend->context;
-    // Bind device to current thread (mirrors event_record; see note above).
-    ggml_cann_set_device(cann_ctx->device);
     if (ggml_backend_is_cann(backend)) {
         ACL_CHECK(aclrtStreamWaitEvent(cann_ctx->stream(), (aclrtEvent) event->context));
     } else {
@@ -2822,7 +2824,7 @@ static void ggml_backend_cann_device_get_props(ggml_backend_dev_t dev, ggml_back
     props->type        = ggml_backend_cann_device_get_type(dev);
     ggml_backend_cann_device_get_memory(dev, &props->memory_free, &props->memory_total);
 
-    bool host_buffer = getenv("GGML_CANN_FORCE_PINNED") != nullptr;  // 默认 false：LLM 权重用 device buffer 上 NPU（翻转原 NO_PINNED 语义；运行时 pinned 传输仍由 ggml_cann_host_malloc 的 GGML_CANN_NO_PINNED 控制）
+    bool host_buffer = getenv("GGML_CANN_NO_PINNED") == nullptr;
 
     props->caps = {
         /* .async                 = */ false,

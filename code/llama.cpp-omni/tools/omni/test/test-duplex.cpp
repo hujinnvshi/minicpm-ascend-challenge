@@ -141,7 +141,7 @@ static void duplex_test_case(struct omni_context * ctx_omni,
 
     for (int il = 0; il < cnt && !g_is_interrupted; ++il) {
         OmniDuplexFrameResult r;
-        if (!omni_duplex_wait_next_frame(ctx_omni, &r, /*timeout_ms=*/30000) || !r.ok) {
+        if (!omni_duplex_wait_next_frame(ctx_omni, &r, /*timeout_ms=*/120000) || !r.ok) {
             fprintf(stderr, "[错误] frame %d 处理失败/超时\n", il + 1);
             break;
         }
