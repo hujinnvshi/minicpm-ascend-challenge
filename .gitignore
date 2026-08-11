@@ -60,3 +60,6 @@ benchmark/seed-tts-eval/sv/wavlm-large/
 benchmark/video-mme-cookbook/.env
 benchmark/video-mme-cookbook/log/
 benchmark/video-mme/data/
+
+# G2 benchmark: Daily-Omni 转换产物（684 mp4+wav + jsonl, ~2.7GB, 不入库）
+benchmark/daily-omni-data/

@@ -1,0 +1,49 @@
+Python: /workspace/user_data/venv-tts/bin/python3
+============================================
+CPP TTS Evaluation Pipeline
+============================================
+MODEL_PATH:      /workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf
+TTS_MODEL_PATH:  /workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/tts/MiniCPM-o-4_5-tts-F16.gguf
+CPP_BIN:         /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/build-huawei/bin/llama-omni-tts-eval
+ONNX_MODEL_DIR:  /workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5/assets/token2wav
+SAVE_DIR:        /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/tts_seed/eval_results/cpp-zh-20260812_024010-42
+EVAL_META_PATH:  /workspace/user_data/seedtts_testset/zh/meta.lst
+EVAL_DATA_PATH:  /workspace/user_data/seedtts_testset/zh
+LANGUAGE:        zh
+SEED:            42
+============================================
+EVAL_SCRIPT_DIR: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/tts_seed/eval_tools
+S3PRL_REPO:      /workspace/user_data/s3prl
+PARAFORMER:      paraformer-zh
+=== Step 1: Pre-extract prompt_bundles ===
+Total unique wavs: 1010, to extract: 1010
+  Log: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/tts_seed/eval_results/cpp-zh-20260812_024010-42/logs/extract_bundle_20260812_024010.log
+=== Prompt bundle extraction done ===
+=== Step 2: C++ TTS Inference (1 GPUs) ===
+  Per-GPU logs: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/tts_seed/eval_results/cpp-zh-20260812_024010-42/logs/cpp_gpu*_20260812_024010.log
+=== TTS Inference Done ===
+=== Step 3: WER Calculation ===
+  Log: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/tts_seed/eval_results/cpp-zh-20260812_024010-42/logs/wer_20260812_024010.log
+  0%|          | 0/2020 [00:00<?, ?it/s]  5%|▌         | 101/2020 [00:00<00:01, 1000.29it/s] 10%|█         | 202/2020 [00:00<00:01, 994.25it/s]  15%|█▍        | 302/2020 [00:00<00:01, 949.57it/s] 20%|█▉        | 403/2020 [00:00<00:01, 970.75it/s] 25%|██▍       | 501/2020 [00:00<00:01, 913.47it/s] 29%|██▉       | 593/2020 [00:00<00:01, 860.55it/s] 34%|███▍      | 688/2020 [00:00<00:01, 885.56it/s] 39%|███▊      | 782/2020 [00:00<00:01, 896.90it/s] 43%|████▎     | 873/2020 [00:00<00:01, 865.16it/s] 48%|████▊     | 965/2020 [00:01<00:01, 880.90it/s] 52%|█████▏    | 1054/2020 [00:01<00:01, 845.16it/s] 57%|█████▋    | 1142/2020 [00:01<00:01, 823.85it/s] 61%|██████    | 1225/2020 [00:01<00:01, 697.44it/s] 65%|██████▍   | 1309/2020 [00:01<00:00, 733.54it/s] 70%|██████▉   | 1408/2020 [00:01<00:00, 798.52it/s] 74%|███████▍  | 1494/2020 [00:01<00:00, 813.88it/s] 78%|███████▊  | 1580/2020 [00:01<00:00, 822.20it/s] 82%|████████▏ | 1665/2020 [00:01<00:00, 828.08it/s] 87%|████████▋ | 1764/2020 [00:02<00:00, 871.72it/s] 93%|█████████▎| 1871/2020 [00:02<00:00, 928.54it/s] 98%|█████████▊| 1971/2020 [00:02<00:00, 946.58it/s]100%|██████████| 2020/2020 [00:02<00:00, 869.93it/s]
+  WER: 2020 条拆成 32 片，每片 16 线程
+  WER: 2020/2020 条
+WER: 1.501%
+
+WER_NORMALIZED: 1.501%
+
+WER_BELOW50: 1.501% ,WERS_NORM_BELOW50: 2020, WER_BELOW50_RATIO: 1.0%
+
+=== WER Calculation Done ===
+=== Step 4: Speaker Similarity ===
+  Log: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/tts_seed/eval_results/cpp-zh-20260812_024010-42/logs/sim_20260812_024010.log
+  0%|          | 0/2020 [00:00<?, ?it/s]  4%|▍         | 83/2020 [00:00<00:02, 813.29it/s]  8%|▊         | 171/2020 [00:00<00:02, 844.52it/s] 13%|█▎        | 270/2020 [00:00<00:01, 907.28it/s] 18%|█▊        | 363/2020 [00:00<00:01, 909.92it/s] 23%|██▎       | 455/2020 [00:00<00:01, 886.83it/s] 27%|██▋       | 544/2020 [00:00<00:01, 859.22it/s] 31%|███       | 631/2020 [00:00<00:01, 841.05it/s] 36%|███▌      | 724/2020 [00:00<00:01, 866.89it/s] 40%|████      | 811/2020 [00:00<00:01, 823.20it/s] 44%|████▍     | 894/2020 [00:01<00:01, 792.07it/s] 48%|████▊     | 978/2020 [00:01<00:01, 804.70it/s] 52%|█████▏    | 1059/2020 [00:01<00:01, 804.60it/s] 57%|█████▋    | 1149/2020 [00:01<00:01, 832.22it/s] 62%|██████▏   | 1250/2020 [00:01<00:00, 881.15it/s] 67%|██████▋   | 1360/2020 [00:01<00:00, 941.43it/s] 72%|███████▏  | 1461/2020 [00:01<00:00, 961.64it/s] 77%|███████▋  | 1561/2020 [00:01<00:00, 972.11it/s] 82%|████████▏ | 1663/2020 [00:01<00:00, 985.76it/s] 87%|████████▋ | 1762/2020 [00:01<00:00, 973.11it/s] 92%|█████████▏| 1862/2020 [00:02<00:00, 978.24it/s] 97%|█████████▋| 1968/2020 [00:02<00:00, 997.87it/s]100%|██████████| 2020/2020 [00:02<00:00, 907.44it/s]
+  SIM: 2020 对拆成 32 片，每片 16 线程
+  SIM: 2020/2020 条
+ASV: 0.694
+ASV-var: 0.004
+result written to /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/tts_seed/eval_results/cpp-zh-20260812_024010-42/eval_result.out
+=== SIM Calculation Done ===
+=== All Evaluation Done ===
+Results saved to: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/tts_seed/eval_results/cpp-zh-20260812_024010-42
+Logs saved to:    /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/tts_seed/eval_results/cpp-zh-20260812_024010-42/logs/*_20260812_024010.log
+Summary appended to: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/tts_seed/run_cpp_eval_results.txt

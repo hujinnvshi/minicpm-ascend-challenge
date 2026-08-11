@@ -211,6 +211,43 @@ GGML_CANN_WEIGHT_NZ=off ASCEND_RT_VISIBLE_DEVICES=0 CUDA_VISIBLE_DEVICES=0 \
 - 唯一未探的真杠杆:**`minicpm-frames` 关键帧采样**(对齐 vLLM 配方)——但 llama.cpp-omni eval-cli 是否支持关键帧选择待查;且需全量 900 视频验证。
 - 产物:`diag/trackb_accuracy.py`、`diag/trackb_accuracy_20q.csv`、`diag/results_scale_*.csv`(greedy/slice 各跑)。
 
+### 8.1 官方 bench/huawei pipeline 复跑确认(2026-08-11 晚,最终)
+
+用官方**不可改 evaluation/** 真实 pipeline 复跑(非 cookbook 复刻)——固化 ~50% 结论:
+- 配置:`run_all.sh --tasks videomme --smoke 99 --no-build` + `EVAL_CONFIG=diag/eval-99q.env`(子集parquet:现有33视频=99题,分层short/medium/long各33,经 PARQUET_PATH 覆盖,**不改 evaluation/**)。
+- CLI:`build-huawei/bin/llama-omni-eval-cli`,F16/-c40960/-ngl999/--max-slice-nums0/temp0/seed42,@1fps均匀64帧。
+- 结果(output/20260811_211509):**51/99 = 51.5%**,真退化0(1题"BC"格式边界非NaN),rc=0,47min。
+
+| 分层 | 官方pipeline | gap vs基线69 |
+|---|---|---|
+| short | 60.6% (20/33) | -8.4pp |
+| medium | 45.5% (15/33) | -23.5pp |
+| long | 48.5% (16/33) | -20.5pp |
+| overall | **51.5%** | **-17.5pp**(低于准入67 共15.5pp) |
+
+**确认:** 官方pipeline(51.5%) ≈ cookbook(49.5%) ≈ trackb(50%) 三者一致 → **~50% 是910B+@1fps均匀64帧+F16稳定真实水平**;退化0(修复在官方路径有效);short(60.6)>medium/long(45-48)印证@1fps均匀对长视频信息稀疏。gap根因=**口径(@1fps均匀 vs vLLM minicpm-frames)+环境(910B vs 910C)**,非代码(TrackB证HF同910B也50%);官方不可改evaluation/无minicpm-frames→子赛道A口径下无杠杆。
+
+**工程坑留档(本次踩到):**
+- ① 历史CLI残留进程占NPU → 新CLI加载卡死 → pipeline 300s超时杀不干净 → 滚雪球失败。清法:`pgrep -x llama-omni-eval`(进程名被内核截断15字符,`pkill -x llama-omni-eval-cli`不匹配);**禁用 `pkill -f llama-omni-eval-cli`(命令行含该串会误杀自己shell)**。
+- ② CANN 实际 = `cann-9.1.0-beta.1`(CLAUDE.md 记的 beta.3 已过时);npu-smi 查询用 `-i 1`(本机NPU id=1)。
+- ③ 视频4294:文件名匹配parquet的`videoID`列(非`video_id`);视频缺失题response=`[ERROR]`计入Accuracy分母。
+
+**下一步:** 99题95%CI±10pp,定论需全量2700(解压900视频,单卡~15h);找赛方澄清子赛道A(llama.cpp-omni+官方evaluation/)基线是否真=69.0(若是,910B+HF为何都只50%)。
+
+### 8.2 帧数杠杆证伪(uni96 对照,2026-08-11 晚)— gap 不是帧数
+
+为验证 gap(50→69)是否来自帧数(64→96),Track B HF 同20题 @1fps均匀,仅变帧数:
+| | overall | short | medium | long |
+|---|---|---|---|---|
+| baseline 64帧 | 10/20=50% | 5/7 | 3/7 | 2/6 |
+| uni96 96帧 | 11/20=55% | 5/7 | 3/7 | 3/6 |
+
+逐题仅3题变化(净+1: 301-2↑ 302-2↓ 601-2↑),short完全不变(短视频@1fps帧<96取全部,nf实际74-96)。→ **帧数64→96几乎无影响(20题±22pp CI内,实质持平)**。
+
+**决定性推论:** 同模型同96帧同greedy, HF(910B)=55% vs vLLM=69.96% → **gap不是帧数**, 是环境/口径(vLLM可能910C/GPU,或minicpm-frames关键帧算法+不同prompt)。**910B+HF/llama.cpp的MiniCPM-o VideoMME真实水平~50-55%(无论帧数)**。
+
+**最终结论:** 官方不可改evaluation/64帧在910B基线就是~50(我们51.5%+HF50%一致),与官方基线69不符。无合规技术路径能显著提分——帧数证伪、temp/slice穷尽、模型必须F16、后端TrackB证无问题、采样算法在不可改evaluation/。**唯一未排除的选手侧杠杆是视频预处理(让@1fps均匀64采到更关键帧),但合规存疑(算不算特化测试集)**。真正卡点是赛方口径: 官方evaluation/64帧在910真实基线=69还是~50?
+
 ---
 
 ## 九、相关文档与产物

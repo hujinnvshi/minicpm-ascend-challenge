@@ -1,0 +1,8 @@
+VideoMME 分层精度复跑  ts=20260811_174517
+帧数曲线=[8, 64]  官方 CookBook pipeline (temp=0.0, max_tokens=100, @1fps)
+total questions=99 (short/medium/long 各 33)
+
+ frames |     short |    medium |      long |   overall | degraded%
+----------------------------------------------------------------------
+      8 |     18/33 |     16/33 |     14/33 |     48/99 |        0%
+     64 |     17/33 |     16/33 |     14/33 |     47/99 |        0%
