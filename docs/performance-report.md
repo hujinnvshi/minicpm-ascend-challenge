@@ -16,6 +16,7 @@
 | **16 线程默认**(最可复现,3 次 0.84/0.68/0.58) | **0.68** | **1.087** | ✅ **beat ~37%** |
 
 > 报告口径:**0.68**(16 线程默认,零手动配置、最可复现)为主线;**0.57**(`OMNI_T2W_THREADS=24 + taskset -c 192-223` NUMA)为调优最优,见 `reproduce-guide.md`。均红线内(仅 CPU 线程 + NUMA 绑核,不改推理数学)。
+> **P6 overlap 探索(2026-08-12)**:尝试 vocoder overlap(t2m‖vocoder async)降 0.57→0.34,bit-精确失败——ggml 跨 backend(NPU+CANN vs CPU)并发非 thread-safe 改内容(step1 串行 bit-精确 vs step2 async 改内容)。**0.57 是当前架构(t2m+vocoder 共享 ggml)物理限**;overlap 不改数学下不可行。详见 `perf-vocoder-overlap` 分支 + experiments P6。
 - TTS RTF(TTS 段,参考)0.80–0.82;LLM 判定 P50(参考)977ms(<1000,实时)。
 - 优化链:P1.7(队列解耦)→ P3(vocoder 8→16 线程)→ P4(24 线程 + NUMA)。详见 `experiments.md`。
 

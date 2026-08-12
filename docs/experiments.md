@@ -655,3 +655,17 @@ init_from_host_caches 校验 cache_host.n_timesteps != n_timesteps → 拒绝
 **务实结论**：解铃在赛方/910C。向赛方确认（`organizer-inquiry-final.md`）：① 官方基线环境（910C?）；② 910B3 选手多帧精度如何判定；③ 框架受限项是否豁免。我方强项 = 性能（RTF 0.68）+ Demo + TTS-WER（0.20）。
 
 **方法论印证**：rigor-verify-loop 第 6 次——"context 过小"静态假设被官方 pipeline 实测推翻（40960 仍退化）。**精度退化根因诊断必须 runtime 实测，静态推理（含"context 越大越好"的直觉）会误导**。
+
+---
+
+## 实验 P6：vocoder overlap + CPU 亲和（2026-08-12）— bit-精确失败，接受 RTF 0.57
+
+> 分支 `perf-vocoder-overlap`（**未 merge**，信息性留档，含 step1/step2 完整代码 + 本 P6 详节）。
+
+**目标**：RTF 0.57 → 理论 0.34（vocoder CPU 346ms ‖ t2m NPU 126ms 完全 overlap）。P5（experiments.md:345-358）试 overlap 失败归因"CPU 竞争"，decision L18 留"CPU 亲和"未试。
+
+- **step1（拆分 + env gate，✅ bit-精确）**：拆 `push_tokens_only`(t2m)+`vocoder_only`(vocoder+cache)，保留原函数；env `OMNI_VOC_OVERLAP` gate。on 串行调子函数 = off，wav **20/20 byte-identical**（解决 P5 遗留 58/57）。
+- **step2（async overlap，❌ bit-精确失败）**：`feed_window_overlap`(t2m N 主 ‖ vocoder N-1 `std::async`)+`flush_overlap`。on 总长一致（434880 样本）但 **PCM 改内容**（max_diff 27756, mean 1994, 非零 99.67%）。
+- **根因**：step1 串行 bit-精确 vs step2 async 改内容 → **ggml 跨 backend（NPU+CANN vs CPU）并发非 thread-safe**（async vocoder 与主线程 t2m 共享 ggml state 污染内容）。**这是 P5 失败真因**（不只 CPU 竞争，还有并发改内容）。
+- **决策**：off env 关 = bit-精确零破坏 RTF 0.57；overlap on 改内容违反"不改数学"红线 → 不可用 → **接受 0.57（beat 基线 1.087 共 48%）**。
+- **教训**：ggml 跨 backend 并发需先验证 context 隔离；未来多 backend overlap 需重构 t2m/vocoder 为独立 ggml context（大改 + 高风险）。性能优化终点 = 0.57。
