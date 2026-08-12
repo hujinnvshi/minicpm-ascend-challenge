@@ -655,3 +655,38 @@ init_from_host_caches 校验 cache_host.n_timesteps != n_timesteps → 拒绝
 **务实结论**：解铃在赛方/910C。向赛方确认（`organizer-inquiry-final.md`）：① 官方基线环境（910C?）；② 910B3 选手多帧精度如何判定；③ 框架受限项是否豁免。我方强项 = 性能（RTF 0.68）+ Demo + TTS-WER（0.20）。
 
 **方法论印证**：rigor-verify-loop 第 6 次——"context 过小"静态假设被官方 pipeline 实测推翻（40960 仍退化）。**精度退化根因诊断必须 runtime 实测，静态推理（含"context 越大越好"的直觉）会误导**。
+
+---
+
+## 实验 P6：vocoder overlap + CPU 亲和（2026-08-12）— bit-精确失败，ggml 并发限制
+
+> 分支 `perf-vocoder-overlap`（基于 bench-huawei-adapt，**未 merge**，信息性留档）。配套 `docs/perf-ceiling-analysis.md`（理论 0.34 推导）。
+
+**目标**：SPEAK→WAV RTF 0.57 → 理论极限 0.34。vocoder CPU 346ms（73% RTF，物理限）与 t2m NPU 126ms 完全 overlap → wall = max(346,126)=346ms → RTF 0.34。P5 试 overlap 失败（experiments.md:345-358，归因"CPU 竞争"），decision L18 留"CPU 亲和"方向未试。
+
+**P5 代码已丢**（commit eb93d70 分支未 push、本地删）→ 从 main 串行 `push_tokens_window`（token2wav-impl.cpp:9753）重建。
+
+### step1：拆分 + env gate（✅ bit-精确通过）
+- 拆 `push_tokens_window` → `push_tokens_only`(t2m NPU) + `vocoder_only`(vocoder CPU+cache)，**保留原函数**；env `OMNI_VOC_OVERLAP` gate（off=原函数，on=串行调子函数）
+- 验证：off/on 各跑 perf-duplex（同 seed42+36帧），wav **20/20 byte-identical**（解决 P5 遗留 58/57 wav 数不一致）→ 拆分数学等价证实
+
+### step2：async overlap（❌ bit-精确失败，改内容）
+- `Token2WavSession::feed_window_overlap`：t2m N（主线程）‖ vocoder N-1（`std::async`），wave 延迟一轮返回；`flush_overlap` 循环尾收尾（解决末轮丢 wav）
+- `t2w_thread_func_cpp`（omni.cpp:9162）：env gate（off=`feed_window`，on=`feed_window_overlap`+循环尾`flush_overlap`写 wav）
+- 验证：on（async overlap）20 wav，总长一致（434880 samples=18.12s），**但 PCM 内容显著不同：max_abs_diff=27756, mean=1994, 非零 99.67%**
+
+### 根因（关键发现）
+- step1 **串行**调子函数 = off **bit-精确**；step2 **async** overlap **改内容** → 差异只在 **t2m(NPU) 与 vocoder(CPU) 并发**
+- 推断：**ggml 内部 state（compute buffer / backend registry）在跨 backend（NPU+CANN + CPU）并发时非完全 thread-safe** → async vocoder 与主线程 t2m 共享 ggml 上下文时内容被污染
+- **这是 P5 失败的真因**（P5 归因"CPU 竞争"不完整——还有并发改内容；P5 的 58/57 wav 数差异 + RTF 没降，都源于此）
+
+### 决策：回退，接受 RTF 0.57
+- **off 路径全程 bit-精确 + RTF 0.57**（env gate 默认关，零破坏）——回退到 step1 状态
+- overlap on 改内容 → 违反"不改推理数学"红线 → **不可用**
+- **RTF 0.57 是当前架构（单进程 t2m+vocoder 共享 ggml）的物理限**。overlap 在不改数学下无法安全提升，除非重构 t2m/vocoder 为完全独立 ggml context（大改 + 高风险，超红线）
+- 性能优化诚实终点：**RTF 0.57（beat 基线 1.087 共 48%）**
+
+### 产物（perf-vocoder-overlap 分支，未 merge）
+- step1 拆分（commit 1a5ad47，bit-精确）+ step2 overlap（feed_window_overlap/flush_overlap + t2w_thread gate）
+- 复现：`OMNI_VOC_OVERLAP=0`(off,bit-精确) / `=1`(on,改内容,验证用)
+- 教训：**ggml 跨 backend 并发非安全**；未来多 backend overlap 需先验证 ggml context 隔离

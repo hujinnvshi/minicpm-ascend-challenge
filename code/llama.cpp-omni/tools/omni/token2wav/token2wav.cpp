@@ -94,6 +94,45 @@ bool Token2WavSession::feed_window(const int32_t *      tokens,
     return true;
 }
 
+// P6 vocoder-overlap: t2m N(主线程) ‖ vocoder N-1(async)。wave 延迟一轮返回。
+// 线程安全: push_tokens_only 只用 t2m_; vocoder_only 只用 voc_runner_/voc_*_cache; 数据正交无竞争。
+// cache 时序: vocoder 串行(future.get 保证 N-1 完成才启 N), voc_mel_cache_bct_ 跨轮一致。
+bool Token2WavSession::feed_window_overlap(const int32_t * tokens, int64_t n_tokens, bool is_final,
+                                            std::vector<float> & wave_bt_out) {
+    wave_bt_out.clear();
+    // 1. t2m N (主线程, NPU flow_matching)
+    std::vector<float> mel_N;
+    if (!t2w.push_tokens_only(tokens, n_tokens, is_final, mel_N)) {
+        return false;
+    }
+    // 2. get 上轮 vocoder future → wave_{N-1} (延迟一轮返回; 首轮 has_prev_=false 返回空)
+    if (has_prev_ && voc_fut_.valid()) {
+        auto result = voc_fut_.get();
+        wave_bt_out = std::move(result.first);
+    }
+    // 3. 启 vocoder N async (用 mel_N; ‖ 下轮 t2m)。vocoder_only 内部串行改 cache, 主线程不碰。
+    voc_fut_ = std::async(std::launch::async, [this, mel_N = std::move(mel_N), is_final]() {
+        std::vector<float> w;
+        int64_t            T = 0;
+        t2w.vocoder_only(mel_N, is_final, w, T);
+        return std::make_pair(std::move(w), T);
+    });
+    has_prev_ = true;
+    return true;
+}
+
+// 循环尾收尾: get 最后一个 vocoder future → wave_last (解决 P5 末轮丢 wav)
+bool Token2WavSession::flush_overlap(std::vector<float> & wave_bt_out) {
+    wave_bt_out.clear();
+    if (has_prev_ && voc_fut_.valid()) {
+        auto result = voc_fut_.get();
+        wave_bt_out = std::move(result.first);
+        has_prev_ = false;
+        return true;
+    }
+    return false;
+}
+
 bool Token2WavSession::feed_window(const int32_t *              tokens,
                                    int64_t                      n_tokens,
                                    bool                         is_final,

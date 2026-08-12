@@ -2,6 +2,8 @@
 
 
 #include <cstdint>
+#include <future>
+#include <utility>
 #include "ggml.h"
 #include <functional>
 #include <memory>
@@ -2305,6 +2307,14 @@ struct Token2WavSession {
         return feed_window(tokens.data(), (int64_t) tokens.size(), is_final, wave_bt_out);
     }
 
+    // P6 overlap: t2m N(主线程) ‖ vocoder N-1(async)。wave 延迟一轮返回;
+    // 末轮(is_final)后必须调 flush_overlap 收尾拿最后 wav。仅改调度, 算子零改动。
+    bool feed_window_overlap(const int32_t * tokens, int64_t n_tokens, bool is_final, std::vector<float> & wave_bt_out);
+    bool feed_window_overlap(const std::vector<int32_t> & tokens, bool is_final, std::vector<float> & wave_bt_out) {
+        return feed_window_overlap(tokens.data(), (int64_t) tokens.size(), is_final, wave_bt_out);
+    }
+    bool flush_overlap(std::vector<float> & wave_bt_out);  // 循环尾: get 最后 vocoder future → wave_last
+
     using audio_chunk_callback = std::function<void(const float * pcm, int64_t n_samples)>;
 
     bool feed_window(const int32_t *              tokens,
@@ -2332,6 +2342,9 @@ struct Token2WavSession {
   private:
     std::vector<int32_t> pending_;
     std::vector<float>   wave_tmp_;
+    // P6 overlap state (仅 feed_window_overlap 用; off 路径不动, 零影响)
+    std::future<std::pair<std::vector<float>, int64_t>> voc_fut_;
+    bool has_prev_ = false;
 };
 
 }  // namespace flow

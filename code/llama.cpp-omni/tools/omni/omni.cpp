@@ -9159,6 +9159,11 @@ void t2w_thread_func_cpp(struct omni_context * ctx_omni, common_params *params) 
             need_flush = is_final;
         }
         
+        // P6 overlap gate (env OMNI_VOC_OVERLAP; off=原 feed_window bit-精确零破坏)
+        static const bool voc_overlap = [] {
+            const char * e = getenv("OMNI_VOC_OVERLAP");
+            return e && e[0] && atoi(e) > 0;
+        }();
         // Process windows using sliding window
         int process_count = 0;
         while (token_buffer.size() >= min_process_threshold || (need_flush && !token_buffer.empty())) {
@@ -9174,7 +9179,10 @@ void t2w_thread_func_cpp(struct omni_context * ctx_omni, common_params *params) 
             auto t2w_start = std::chrono::high_resolution_clock::now();
             
             std::vector<float> chunk_wav;
-            if (ctx_omni->token2wav_session->feed_window(window, is_last_window, chunk_wav)) {
+            bool fw_ok = voc_overlap
+                ? ctx_omni->token2wav_session->feed_window_overlap(window, is_last_window, chunk_wav)
+                : ctx_omni->token2wav_session->feed_window(window, is_last_window, chunk_wav);
+            if (fw_ok) {
                 auto t2w_end = std::chrono::high_resolution_clock::now();
                 double t2w_ms = std::chrono::duration<double, std::milli>(t2w_end - t2w_start).count();
                 
@@ -9302,6 +9310,38 @@ void t2w_thread_func_cpp(struct omni_context * ctx_omni, common_params *params) 
                 // Python: if is_last_chunk: stream(..., last_chunk=True); buffer = []
                 // 普通 chunk 结束时，剩余 tokens 保留在 buffer 中等待下一个 chunk
                 if (is_final) {
+                    // P6 overlap 收尾: get 最后 vocoder future → wave_last, 写 wav (仅 on 路径; off 跳过)
+                    if (voc_overlap) {
+                        std::vector<float> flush_wav;
+                        if (ctx_omni->token2wav_session->flush_overlap(flush_wav) && !flush_wav.empty()) {
+                            std::string wav_path = tts_wav_output_dir + "/wav_" + std::to_string(wav_base + wav_idx) + ".wav";
+                            std::vector<int16_t> pcm(flush_wav.size());
+                            for (size_t i = 0; i < flush_wav.size(); ++i) {
+                                float x = flush_wav[i];
+                                if (!std::isfinite(x)) x = 0.0f;
+                                x = std::max(-1.0f, std::min(1.0f, x));
+                                pcm[i] = (int16_t)(x * 32767.0f);
+                            }
+                            uint32_t data_bytes = (uint32_t)(pcm.size() * sizeof(int16_t));
+                            uint32_t riff_size  = 36u + data_bytes;
+                            FILE* f_wav = fopen(wav_path.c_str(), "wb");
+                            if (f_wav) {
+                                fwrite("RIFF", 1, 4, f_wav); fwrite(&riff_size, 4, 1, f_wav);
+                                fwrite("WAVE", 1, 4, f_wav); fwrite("fmt ", 1, 4, f_wav);
+                                uint32_t fmt_size = 16; uint16_t audio_format = 1;
+                                fwrite(&fmt_size, 4, 1, f_wav); fwrite(&audio_format, 2, 1, f_wav);
+                                int16_t num_channels = 1; fwrite(&num_channels, 2, 1, f_wav);
+                                fwrite(&sample_rate, 4, 1, f_wav);
+                                int32_t byte_rate = sample_rate * 2; int16_t block_align = 2, bits_per_sample = 16;
+                                fwrite(&byte_rate, 4, 1, f_wav); fwrite(&block_align, 2, 1, f_wav);
+                                fwrite(&bits_per_sample, 2, 1, f_wav);
+                                fwrite("data", 1, 4, f_wav); fwrite(&data_bytes, 4, 1, f_wav);
+                                fwrite(pcm.data(), 1, data_bytes, f_wav);
+                                fclose(f_wav);
+                                wav_idx++;
+                            }
+                        }
+                    }
                     // 🚀 [优化] 写入结束标记文件，通知 Python 立即结束（无需等待超时）
                     // 标记文件包含最后一个 wav 的编号，方便 Python 验证
                     {
