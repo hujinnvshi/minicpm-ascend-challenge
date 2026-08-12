@@ -1,0 +1,56 @@
+
+==============================================================================
+  MiniCPM-o 评测套件 —— 全链路
+==============================================================================
+  仓库        : /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni
+  构建目录    : /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/build-huawei
+  任务        : videomme
+  产物目录    : /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260812_094020
+  编译日志    : /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260812_094020/build.log
+==============================================================================
+
+[1;36m[run_all][0m ===== videomme =====
+========================================================================
+  MiniCPM-o 评测套件
+========================================================================
+  任务          : videomme
+  精度权重      : /workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-F16.gguf
+  RTS 权重      : /workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-F16.gguf
+  eval CLI 目录 : /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/build-huawei/bin
+  server 仓库   : /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni
+  卡 (ASCEND_RT_VISIBLE_DEVICES) : 0  共 1 张
+  RTS 卡        : 0
+  样本数        : videomme=2  daily-omni=2  tts=2
+  产物目录      : /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260812_094020
+========================================================================
+
+========================================================================
+[videomme] /workspace/user_data/venv-omni/bin/python eval_cpp_pipeline.py --num-gpus 1 --limit 2 --output /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260812_094020/videomme_output.json --skip-scoring
+[videomme] cwd=/workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/videomme
+[videomme] log=/workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260812_094020/videomme.log
+========================================================================
+2026-08-12 09:40:26 [INFO] __main__: ============================================================
+2026-08-12 09:40:26 [INFO] __main__: Video-MME CPP Evaluation Pipeline
+2026-08-12 09:40:26 [INFO] __main__:   GPUs: 1
+2026-08-12 09:40:26 [INFO] __main__:   Parquet: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/video-mme-cookbook/diag/videomme_subset_99q.parquet
+2026-08-12 09:40:26 [INFO] __main__:   Video dir: /workspace/user_data/verify-ascend-2026-08-10/videomme-data
+2026-08-12 09:40:26 [INFO] __main__:   Output: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260812_094020/videomme_output.json
+2026-08-12 09:40:26 [INFO] __main__: ============================================================
+2026-08-12 09:40:26 [INFO] __main__: Loading dataset from /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/video-mme-cookbook/diag/videomme_subset_99q.parquet
+2026-08-12 09:40:27 [INFO] __main__: Limited to first 2 rows
+2026-08-12 09:40:27 [INFO] __main__: Loaded 2 questions
+2026-08-12 09:40:27 [INFO] __main__: Grouped into 1 videos
+2026-08-12 09:40:27 [INFO] __main__:   Chunk 0: 1 videos
+2026-08-12 09:40:27 [INFO] __main__: Starting llama-omni-eval-cli processes...
+2026-08-12 09:40:27 [INFO] eval_cpp_cli_client: [GPU 0] launching CLI: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/build-huawei/bin/llama-omni-eval-cli -m /workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-F16.gguf -c 40960 -ngl 999 --max-slice-nums 0 --n-predict 100 --temp 0.0 --top-p 0.8 --top-k 100 --repeat-penalty 1.02 --seed 42  (log: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/videomme/log/cli_gpu0.log)
+2026-08-12 09:40:27 [INFO] eval_cpp_cli_client: Waiting for 1 CLI processes to load model...
+2026-08-12 09:41:05 [INFO] eval_cpp_cli_client: [GPU 0] CLI ready，耗时 38.5s
+2026-08-12 09:41:05 [INFO] eval_cpp_cli_client: All 1 CLI processes ready
+2026-08-12 09:41:05 [INFO] __main__: Starting evaluation...
+2026-08-12 09:41:05 [INFO] __main__: [GPU 0] (1/1) Processing video 001
+2026-08-12 09:41:35 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/fFjv93ACGo8.mp4, backend=ffmpeg, sample_fps=0.861, frames=64, total=2227, raw_fps=29.970
+2026-08-12 09:41:36 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 001
+2026-08-12 09:46:36 [WARNING] eval_cpp_cli_client: [GPU 0] [GPU 0] infer 超时或进程退出 (qid=001-1)，尝试重启后重试 qid=001-1
+2026-08-12 09:46:36 [WARNING] eval_cpp_cli_client: [GPU 0] 重启 CLI（第 1/3 次）
+2026-08-12 09:46:36 [INFO] eval_cpp_cli_client: [GPU 0] launching CLI: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/build-huawei/bin/llama-omni-eval-cli -m /workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-F16.gguf -c 40960 -ngl 999 --max-slice-nums 0 --n-predict 100 --temp 0.0 --top-p 0.8 --top-k 100 --repeat-penalty 1.02 --seed 42  (log: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/videomme/log/cli_gpu0.log)
+2026-08-12 09:46:44 [INFO] eval_cpp_cli_client: [GPU 0] CLI ready，耗时 7.6s
