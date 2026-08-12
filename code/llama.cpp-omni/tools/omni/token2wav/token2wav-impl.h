@@ -2222,6 +2222,17 @@ class Token2Wav {
                             std::vector<float> & wave_bt_out,
                             int64_t &            out_T_audio);
 
+    // P6 vocoder-overlap: 把 push_tokens_window 拆成 t2m / vocoder 两段正交子函数
+    // (env OMNI_VOC_OVERLAP gate; off=原 push_tokens_window bit-精确; 拆分仅调度, 算子零改动)
+    bool push_tokens_only(const int32_t *      tokens,
+                          int64_t              n_tokens,
+                          bool                 is_final,
+                          std::vector<float> & mel_bct_out);   // 只 t2m (NPU), 产 mel; 不碰 voc_*_cache
+    bool vocoder_only(const std::vector<float> & mel_bct,
+                      bool                       is_final,
+                      std::vector<float> &       wave_bt_out,
+                      int64_t &                  out_T_audio);  // mel(+cache)→vocoder(CPU)+fade+cache更新+裁尾
+
     bool push_tokens_window(const std::vector<int32_t> & tokens,
                             bool                         is_final,
                             std::vector<float> &         wave_bt_out,

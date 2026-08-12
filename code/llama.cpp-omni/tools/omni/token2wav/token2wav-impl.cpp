@@ -9758,6 +9758,20 @@ bool Token2Wav::push_tokens_window(const int32_t *      tokens,
     wave_bt_out.clear();
     out_T_audio = 0;
 
+    // P6 vocoder-overlap gate: env OMNI_VOC_OVERLAP>0 时走拆分子函数(串行, 验证拆分正确性);
+    // 默认关 = 原逻辑 bit-精确。仅改调度入口, 算子零改动。
+    static const bool voc_overlap_env = [] {
+        const char * e = getenv("OMNI_VOC_OVERLAP");
+        return e && e[0] && atoi(e) > 0;
+    }();
+    if (voc_overlap_env) {
+        std::vector<float> mel_bct;
+        if (!push_tokens_only(tokens, n_tokens, is_final, mel_bct)) {
+            return false;
+        }
+        return vocoder_only(mel_bct, is_final, wave_bt_out, out_T_audio);
+    }
+
     if (!models_loaded_) {
         LOG_ERROR( "Token2Wav.push_tokens_window: models not loaded\n");
         return false;
@@ -9863,6 +9877,84 @@ bool Token2Wav::push_tokens_window(const int32_t *      tokens,
             (long long) out_T_audio);
     }
 
+    return true;
+}
+
+// ===== P6 vocoder-overlap: 从 push_tokens_window 抠出的两段正交子函数 =====
+// 仅调度拆分, t2m/vocoder 算子逐行原样; 数学等价(串行 = push_tokens_window off)。
+bool Token2Wav::push_tokens_only(const int32_t * tokens, int64_t n_tokens, bool is_final,
+                                 std::vector<float> & mel_bct_out) {
+    mel_bct_out.clear();
+    if (!models_loaded_) {
+        LOG_ERROR("Token2Wav.push_tokens_only: models not loaded\n");
+        return false;
+    }
+    if (n_tokens < 0 || n_tokens > Token2Mel::kDt) {
+        LOG_ERROR("Token2Wav.push_tokens_only: expected 0 <= n_tokens <= %d, got %lld\n",
+                  (int) Token2Mel::kDt, (long long) n_tokens);
+        return false;
+    }
+    if (!t2m_.push_tokens(tokens, n_tokens, is_final, mel_bct_out)) {
+        LOG_ERROR("Token2Wav.push_tokens_only: Token2Mel.push_tokens failed\n");
+        return false;
+    }
+    if (mel_bct_out.empty()) {
+        return true;
+    }
+    if (mel_bct_out.size() % (size_t) Token2Mel::kMelChannels != 0) {
+        LOG_ERROR("Token2Wav.push_tokens_only: invalid mel size (not divisible by %d)\n",
+                  (int) Token2Mel::kMelChannels);
+        return false;
+    }
+    return true;
+}
+
+bool Token2Wav::vocoder_only(const std::vector<float> & mel_bct, bool is_final,
+                             std::vector<float> & wave_bt_out, int64_t & out_T_audio) {
+    wave_bt_out.clear();
+    out_T_audio = 0;
+    if (mel_bct.empty()) {
+        return true;
+    }
+    std::vector<float> mel_in_bct = voc_mel_cache_bct_;
+    Token2Mel::append_bct_along_time(mel_bct, 1, Token2Mel::kMelChannels, mel_in_bct);
+    const int64_t T_mel = (int64_t) mel_in_bct.size() / (int64_t) Token2Mel::kMelChannels;
+
+    std::vector<float> out_source_bt1;
+    int64_t            out_T_source = 0;
+    if (!voc_runner_.voc_hg2_runner_eval_stream(mel_in_bct, T_mel, voc_cache_source_bt1_, voc_Tc_, wave_bt_out,
+                                                 out_T_audio, out_source_bt1, out_T_source)) {
+        LOG_ERROR("Token2Wav.vocoder_only: voc_hg2_runner_eval_stream failed\n");
+        return false;
+    }
+
+    if (!voc_speech_cache_bt_.empty()) {
+        token2wav_utils::fade_in_out_b1(wave_bt_out, voc_speech_cache_bt_, voc_speech_window_, (int64_t) kSourceCacheLen);
+    }
+
+    {
+        const int64_t      C       = Token2Mel::kMelChannels;
+        const int64_t      T_total = (int64_t) mel_in_bct.size() / C;
+        std::vector<float> next_mel_cache;
+        token2wav_utils::crop_bct_tail_b1(mel_in_bct, C, T_total, (int64_t) kMelCacheLen, next_mel_cache);
+        voc_mel_cache_bct_.swap(next_mel_cache);
+    }
+    {
+        std::vector<float> next_source_cache;
+        token2wav_utils::crop_t_tail_b1(out_source_bt1, (int64_t) kSourceCacheLen, next_source_cache);
+        voc_cache_source_bt1_.swap(next_source_cache);
+        voc_Tc_ = (int64_t) voc_cache_source_bt1_.size();
+    }
+    {
+        std::vector<float> next_speech_cache;
+        token2wav_utils::crop_t_tail_b1(wave_bt_out, (int64_t) kSourceCacheLen, next_speech_cache);
+        voc_speech_cache_bt_.swap(next_speech_cache);
+    }
+
+    if (!is_final && (int64_t) wave_bt_out.size() > (int64_t) kSourceCacheLen) {
+        wave_bt_out.resize(wave_bt_out.size() - (size_t) kSourceCacheLen);
+        out_T_audio = (int64_t) wave_bt_out.size();
+    }
     return true;
 }
 
