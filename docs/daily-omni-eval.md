@@ -68,5 +68,5 @@ EVAL_CONFIG=../../../benchmark/daily-omni-convert/eval-daily.env \
 依赖：venv-omni 装 `librosa soundfile`（audio_prep 用，已装）；decord 缺则 video_prep fallback ffmpeg（正常）。复用 `build-huawei/bin/llama-omni-eval-daily-cli`（含退化修复）。
 
 ## 六、下一步
-- 50 题 88% 信号强，**全量 1196 待跑**（~4.6h）出正式 Daily-Omni 精度 + 官方全量 Overall
+- 50 题子集 88% 偏易（信号）；**全量 1196 已跑：79.8%（output/20260812_132304，用时6.5h，官方Overall 954/1196），微超基线79.5（+0.3pp），达准入（降幅≤2pp，实际增幅）**
 - 三项现状：Video-MME 51.5%（gap，待赛方澄清口径）/ **Daily-Omni 88%（超基线✓）** / TTS-Seed 未跑（卡打分模型）
