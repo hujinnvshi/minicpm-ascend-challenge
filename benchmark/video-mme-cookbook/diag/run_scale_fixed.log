@@ -1,0 +1,650 @@
+17:09:54 [INFO] frame sweep=[1, 8, 64]  out=/workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/video-mme-cookbook/diag/results_scale_20260811_170954.csv
+17:09:54 [INFO] loaded 99 selected questions from /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/video-mme-cookbook/diag/selected_questions.csv
+17:09:54 [INFO] [GPU 0] launching CLI: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/build-huawei/bin/llama-omni-eval-cli -m /workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-F16.gguf -c 40960 -ngl 999 --max-slice-nums 0 --n-predict 100 --temp 0.2 --top-p 0.8 --top-k 100 --repeat-penalty 1.02  (log: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/video-mme-cookbook/log/cli_gpu0.log)
+17:10:04 [INFO] [GPU 0] CLI ready，耗时 9.1s
+17:10:04 [INFO] [frames=1] CLI ready, running 99 questions ...
+17:10:04 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/fFjv93ACGo8.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:04 [INFO] Prepared 1 frames for video fFjv93ACGo8
+17:10:05 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/fFjv93ACGo8.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:05 [INFO] Prepared 1 frames for video fFjv93ACGo8
+17:10:06 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/fFjv93ACGo8.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:06 [INFO] Prepared 1 frames for video fFjv93ACGo8
+17:10:07 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/N1cdUjctpG8.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:07 [INFO] Prepared 1 frames for video N1cdUjctpG8
+17:10:08 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/N1cdUjctpG8.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:08 [INFO] Prepared 1 frames for video N1cdUjctpG8
+17:10:09 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/N1cdUjctpG8.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:09 [INFO] Prepared 1 frames for video N1cdUjctpG8
+17:10:09 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HIjX8OPuf-w.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:09 [INFO] Prepared 1 frames for video HIjX8OPuf-w
+17:10:10 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HIjX8OPuf-w.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:10 [INFO] Prepared 1 frames for video HIjX8OPuf-w
+17:10:11 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HIjX8OPuf-w.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:11 [INFO] Prepared 1 frames for video HIjX8OPuf-w
+17:10:12 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HwnB8aCn8yE.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:12 [INFO] Prepared 1 frames for video HwnB8aCn8yE
+17:10:12 [INFO] [frames=1] 10/99 done (correct so far=7)
+17:10:13 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HwnB8aCn8yE.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:13 [INFO] Prepared 1 frames for video HwnB8aCn8yE
+17:10:13 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HwnB8aCn8yE.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:13 [INFO] Prepared 1 frames for video HwnB8aCn8yE
+17:10:14 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/24i4ncHuf6A.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:14 [INFO] Prepared 1 frames for video 24i4ncHuf6A
+17:10:15 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/24i4ncHuf6A.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:15 [INFO] Prepared 1 frames for video 24i4ncHuf6A
+17:10:16 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/24i4ncHuf6A.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:16 [INFO] Prepared 1 frames for video 24i4ncHuf6A
+17:10:17 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/40BlVzjxu-I.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:17 [INFO] Prepared 1 frames for video 40BlVzjxu-I
+17:10:18 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/40BlVzjxu-I.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:18 [INFO] Prepared 1 frames for video 40BlVzjxu-I
+17:10:18 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/40BlVzjxu-I.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:18 [INFO] Prepared 1 frames for video 40BlVzjxu-I
+17:10:19 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/0ay2Qy3wBe8.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:19 [INFO] Prepared 1 frames for video 0ay2Qy3wBe8
+17:10:20 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/0ay2Qy3wBe8.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:20 [INFO] Prepared 1 frames for video 0ay2Qy3wBe8
+17:10:21 [INFO] [frames=1] 20/99 done (correct so far=12)
+17:10:21 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/0ay2Qy3wBe8.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:21 [INFO] Prepared 1 frames for video 0ay2Qy3wBe8
+17:10:22 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/_tvmjsKXTu8.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:22 [INFO] Prepared 1 frames for video _tvmjsKXTu8
+17:10:22 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/_tvmjsKXTu8.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:22 [INFO] Prepared 1 frames for video _tvmjsKXTu8
+17:10:23 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/_tvmjsKXTu8.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:23 [INFO] Prepared 1 frames for video _tvmjsKXTu8
+17:10:24 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/sUDY-SMREtA.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:24 [INFO] Prepared 1 frames for video sUDY-SMREtA
+17:10:25 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/sUDY-SMREtA.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:25 [INFO] Prepared 1 frames for video sUDY-SMREtA
+17:10:26 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/sUDY-SMREtA.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:26 [INFO] Prepared 1 frames for video sUDY-SMREtA
+17:10:26 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/PSt_op3fQck.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:26 [INFO] Prepared 1 frames for video PSt_op3fQck
+17:10:27 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/PSt_op3fQck.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:27 [INFO] Prepared 1 frames for video PSt_op3fQck
+17:10:28 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/PSt_op3fQck.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:28 [INFO] Prepared 1 frames for video PSt_op3fQck
+17:10:29 [INFO] [frames=1] 30/99 done (correct so far=15)
+17:10:29 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/OE5S-NbNsro.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:29 [INFO] Prepared 1 frames for video OE5S-NbNsro
+17:10:30 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/OE5S-NbNsro.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:30 [INFO] Prepared 1 frames for video OE5S-NbNsro
+17:10:31 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/OE5S-NbNsro.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:31 [INFO] Prepared 1 frames for video OE5S-NbNsro
+17:10:31 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/dphq5X-rMew.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:31 [INFO] Prepared 1 frames for video dphq5X-rMew
+17:10:32 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/dphq5X-rMew.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:32 [INFO] Prepared 1 frames for video dphq5X-rMew
+17:10:33 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/dphq5X-rMew.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:33 [INFO] Prepared 1 frames for video dphq5X-rMew
+17:10:34 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/K64wRD8eaus.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:34 [INFO] Prepared 1 frames for video K64wRD8eaus
+17:10:35 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/K64wRD8eaus.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:35 [INFO] Prepared 1 frames for video K64wRD8eaus
+17:10:35 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/K64wRD8eaus.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:35 [INFO] Prepared 1 frames for video K64wRD8eaus
+17:10:36 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/kSBB5PsRV-k.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:36 [INFO] Prepared 1 frames for video kSBB5PsRV-k
+17:10:37 [INFO] [frames=1] 40/99 done (correct so far=19)
+17:10:37 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/kSBB5PsRV-k.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:37 [INFO] Prepared 1 frames for video kSBB5PsRV-k
+17:10:38 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/kSBB5PsRV-k.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:38 [INFO] Prepared 1 frames for video kSBB5PsRV-k
+17:10:39 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/QTA8j5wSTx4.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:39 [INFO] Prepared 1 frames for video QTA8j5wSTx4
+17:10:40 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/QTA8j5wSTx4.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:40 [INFO] Prepared 1 frames for video QTA8j5wSTx4
+17:10:40 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/QTA8j5wSTx4.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:40 [INFO] Prepared 1 frames for video QTA8j5wSTx4
+17:10:41 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/tuZcS2Flabw.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:41 [INFO] Prepared 1 frames for video tuZcS2Flabw
+17:10:42 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/tuZcS2Flabw.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:42 [INFO] Prepared 1 frames for video tuZcS2Flabw
+17:10:43 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/tuZcS2Flabw.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:43 [INFO] Prepared 1 frames for video tuZcS2Flabw
+17:10:44 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/s_TGkDcjBqI.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:44 [INFO] Prepared 1 frames for video s_TGkDcjBqI
+17:10:44 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/s_TGkDcjBqI.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:45 [INFO] Prepared 1 frames for video s_TGkDcjBqI
+17:10:45 [INFO] [frames=1] 50/99 done (correct so far=21)
+17:10:45 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/s_TGkDcjBqI.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:45 [INFO] Prepared 1 frames for video s_TGkDcjBqI
+17:10:46 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/8l1NyR6UvxU.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:46 [INFO] Prepared 1 frames for video 8l1NyR6UvxU
+17:10:47 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/8l1NyR6UvxU.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:47 [INFO] Prepared 1 frames for video 8l1NyR6UvxU
+17:10:48 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/8l1NyR6UvxU.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:48 [INFO] Prepared 1 frames for video 8l1NyR6UvxU
+17:10:49 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/wgPymD-NBQU.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:49 [INFO] Prepared 1 frames for video wgPymD-NBQU
+17:10:49 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/wgPymD-NBQU.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:49 [INFO] Prepared 1 frames for video wgPymD-NBQU
+17:10:50 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/wgPymD-NBQU.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:50 [INFO] Prepared 1 frames for video wgPymD-NBQU
+17:10:51 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/tjrvKA4w9-Y.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:51 [INFO] Prepared 1 frames for video tjrvKA4w9-Y
+17:10:52 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/tjrvKA4w9-Y.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:52 [INFO] Prepared 1 frames for video tjrvKA4w9-Y
+17:10:53 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/tjrvKA4w9-Y.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:53 [INFO] Prepared 1 frames for video tjrvKA4w9-Y
+17:10:53 [INFO] [frames=1] 60/99 done (correct so far=24)
+17:10:53 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/A9fQPzZ1-hg.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:53 [INFO] Prepared 1 frames for video A9fQPzZ1-hg
+17:10:54 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/A9fQPzZ1-hg.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:54 [INFO] Prepared 1 frames for video A9fQPzZ1-hg
+17:10:55 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/A9fQPzZ1-hg.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:55 [INFO] Prepared 1 frames for video A9fQPzZ1-hg
+17:10:56 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/4jmMWohs1XM.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:56 [INFO] Prepared 1 frames for video 4jmMWohs1XM
+17:10:57 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/4jmMWohs1XM.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:57 [INFO] Prepared 1 frames for video 4jmMWohs1XM
+17:10:58 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/4jmMWohs1XM.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:58 [INFO] Prepared 1 frames for video 4jmMWohs1XM
+17:10:58 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/TGom0uiW130.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:58 [INFO] Prepared 1 frames for video TGom0uiW130
+17:10:59 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/TGom0uiW130.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:10:59 [INFO] Prepared 1 frames for video TGom0uiW130
+17:11:00 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/TGom0uiW130.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:00 [INFO] Prepared 1 frames for video TGom0uiW130
+17:11:01 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/w0Wmc8C0Eq0.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:01 [INFO] Prepared 1 frames for video w0Wmc8C0Eq0
+17:11:02 [INFO] [frames=1] 70/99 done (correct so far=30)
+17:11:02 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/w0Wmc8C0Eq0.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:02 [INFO] Prepared 1 frames for video w0Wmc8C0Eq0
+17:11:03 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/w0Wmc8C0Eq0.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:03 [INFO] Prepared 1 frames for video w0Wmc8C0Eq0
+17:11:04 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/7D-gxaie6UI.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:04 [INFO] Prepared 1 frames for video 7D-gxaie6UI
+17:11:04 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/7D-gxaie6UI.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:04 [INFO] Prepared 1 frames for video 7D-gxaie6UI
+17:11:05 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/7D-gxaie6UI.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:05 [INFO] Prepared 1 frames for video 7D-gxaie6UI
+17:11:06 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/0RxMZBLeqRI.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:06 [INFO] Prepared 1 frames for video 0RxMZBLeqRI
+17:11:07 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/0RxMZBLeqRI.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:07 [INFO] Prepared 1 frames for video 0RxMZBLeqRI
+17:11:08 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/0RxMZBLeqRI.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:08 [INFO] Prepared 1 frames for video 0RxMZBLeqRI
+17:11:08 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/xKiRmesHWIA.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:09 [INFO] Prepared 1 frames for video xKiRmesHWIA
+17:11:09 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/xKiRmesHWIA.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:09 [INFO] Prepared 1 frames for video xKiRmesHWIA
+17:11:10 [INFO] [frames=1] 80/99 done (correct so far=32)
+17:11:10 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/xKiRmesHWIA.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:10 [INFO] Prepared 1 frames for video xKiRmesHWIA
+17:11:11 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/uC8TK7GH85o.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:11 [INFO] Prepared 1 frames for video uC8TK7GH85o
+17:11:12 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/uC8TK7GH85o.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:12 [INFO] Prepared 1 frames for video uC8TK7GH85o
+17:11:13 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/uC8TK7GH85o.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:13 [INFO] Prepared 1 frames for video uC8TK7GH85o
+17:11:13 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/zxKPjD8urG4.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:14 [INFO] Prepared 1 frames for video zxKPjD8urG4
+17:11:14 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/zxKPjD8urG4.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:14 [INFO] Prepared 1 frames for video zxKPjD8urG4
+17:11:15 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/zxKPjD8urG4.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:15 [INFO] Prepared 1 frames for video zxKPjD8urG4
+17:11:16 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/BoBapnk6TB8.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:16 [INFO] Prepared 1 frames for video BoBapnk6TB8
+17:11:17 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/BoBapnk6TB8.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:17 [INFO] Prepared 1 frames for video BoBapnk6TB8
+17:11:18 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/BoBapnk6TB8.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:18 [INFO] Prepared 1 frames for video BoBapnk6TB8
+17:11:18 [INFO] [frames=1] 90/99 done (correct so far=36)
+17:11:18 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HProiNnmGwI.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:19 [INFO] Prepared 1 frames for video HProiNnmGwI
+17:11:19 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HProiNnmGwI.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:19 [INFO] Prepared 1 frames for video HProiNnmGwI
+17:11:20 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HProiNnmGwI.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:20 [INFO] Prepared 1 frames for video HProiNnmGwI
+17:11:21 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/O7zcPvQDIMU.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:21 [INFO] Prepared 1 frames for video O7zcPvQDIMU
+17:11:22 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/O7zcPvQDIMU.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:22 [INFO] Prepared 1 frames for video O7zcPvQDIMU
+17:11:23 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/O7zcPvQDIMU.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:23 [INFO] Prepared 1 frames for video O7zcPvQDIMU
+17:11:24 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/H8fGd3fCJbg.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:24 [INFO] Prepared 1 frames for video H8fGd3fCJbg
+17:11:24 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/H8fGd3fCJbg.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:24 [INFO] Prepared 1 frames for video H8fGd3fCJbg
+17:11:25 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/H8fGd3fCJbg.mp4, backend=ffmpeg, sample_fps=1.000, frames=1, total=1, raw_fps=1.000
+17:11:25 [INFO] Prepared 1 frames for video H8fGd3fCJbg
+17:11:26 [INFO] [frames=1] 99/99 done (correct so far=40)
+17:11:30 [INFO] [frames=1] FINISHED correct=40/99
+17:11:30 [INFO] [GPU 0] launching CLI: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/build-huawei/bin/llama-omni-eval-cli -m /workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-F16.gguf -c 40960 -ngl 999 --max-slice-nums 0 --n-predict 100 --temp 0.2 --top-p 0.8 --top-k 100 --repeat-penalty 1.02  (log: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/video-mme-cookbook/log/cli_gpu0.log)
+17:11:39 [INFO] [GPU 0] CLI ready，耗时 9.3s
+17:11:39 [INFO] [frames=8] CLI ready, running 99 questions ...
+17:11:40 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/fFjv93ACGo8.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:11:40 [INFO] Prepared 8 frames for video fFjv93ACGo8
+17:11:43 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/fFjv93ACGo8.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:11:43 [INFO] Prepared 8 frames for video fFjv93ACGo8
+17:11:45 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/fFjv93ACGo8.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:11:45 [INFO] Prepared 8 frames for video fFjv93ACGo8
+17:11:47 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/N1cdUjctpG8.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:11:48 [INFO] Prepared 8 frames for video N1cdUjctpG8
+17:11:50 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/N1cdUjctpG8.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:11:50 [INFO] Prepared 8 frames for video N1cdUjctpG8
+17:11:53 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/N1cdUjctpG8.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:11:53 [INFO] Prepared 8 frames for video N1cdUjctpG8
+17:11:55 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HIjX8OPuf-w.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:11:55 [INFO] Prepared 8 frames for video HIjX8OPuf-w
+17:11:57 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HIjX8OPuf-w.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:11:58 [INFO] Prepared 8 frames for video HIjX8OPuf-w
+17:12:00 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HIjX8OPuf-w.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:12:00 [INFO] Prepared 8 frames for video HIjX8OPuf-w
+17:12:02 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HwnB8aCn8yE.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:12:02 [INFO] Prepared 8 frames for video HwnB8aCn8yE
+17:12:04 [INFO] [frames=8] 10/99 done (correct so far=6)
+17:12:04 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HwnB8aCn8yE.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:12:05 [INFO] Prepared 8 frames for video HwnB8aCn8yE
+17:12:07 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HwnB8aCn8yE.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:12:07 [INFO] Prepared 8 frames for video HwnB8aCn8yE
+17:12:09 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/24i4ncHuf6A.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:12:09 [INFO] Prepared 8 frames for video 24i4ncHuf6A
+17:12:11 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/24i4ncHuf6A.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:12:12 [INFO] Prepared 8 frames for video 24i4ncHuf6A
+17:12:14 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/24i4ncHuf6A.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:12:14 [INFO] Prepared 8 frames for video 24i4ncHuf6A
+17:12:16 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/40BlVzjxu-I.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:12:16 [INFO] Prepared 8 frames for video 40BlVzjxu-I
+17:12:19 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/40BlVzjxu-I.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:12:19 [INFO] Prepared 8 frames for video 40BlVzjxu-I
+17:12:21 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/40BlVzjxu-I.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:12:21 [INFO] Prepared 8 frames for video 40BlVzjxu-I
+17:12:24 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/0ay2Qy3wBe8.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:12:24 [INFO] Prepared 8 frames for video 0ay2Qy3wBe8
+17:12:26 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/0ay2Qy3wBe8.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:12:26 [INFO] Prepared 8 frames for video 0ay2Qy3wBe8
+17:12:28 [INFO] [frames=8] 20/99 done (correct so far=10)
+17:12:28 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/0ay2Qy3wBe8.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:12:29 [INFO] Prepared 8 frames for video 0ay2Qy3wBe8
+17:12:31 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/_tvmjsKXTu8.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:12:31 [INFO] Prepared 8 frames for video _tvmjsKXTu8
+17:12:33 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/_tvmjsKXTu8.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:12:33 [INFO] Prepared 8 frames for video _tvmjsKXTu8
+17:12:35 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/_tvmjsKXTu8.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:12:36 [INFO] Prepared 8 frames for video _tvmjsKXTu8
+17:12:38 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/sUDY-SMREtA.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:12:38 [INFO] Prepared 8 frames for video sUDY-SMREtA
+17:12:40 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/sUDY-SMREtA.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:12:41 [INFO] Prepared 8 frames for video sUDY-SMREtA
+17:12:43 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/sUDY-SMREtA.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:12:43 [INFO] Prepared 8 frames for video sUDY-SMREtA
+17:12:45 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/PSt_op3fQck.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:12:46 [INFO] Prepared 8 frames for video PSt_op3fQck
+17:12:48 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/PSt_op3fQck.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:12:48 [INFO] Prepared 8 frames for video PSt_op3fQck
+17:12:50 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/PSt_op3fQck.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:12:50 [INFO] Prepared 8 frames for video PSt_op3fQck
+17:12:52 [INFO] [frames=8] 30/99 done (correct so far=15)
+17:12:52 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/OE5S-NbNsro.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:12:53 [INFO] Prepared 8 frames for video OE5S-NbNsro
+17:12:55 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/OE5S-NbNsro.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:12:55 [INFO] Prepared 8 frames for video OE5S-NbNsro
+17:12:57 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/OE5S-NbNsro.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:12:57 [INFO] Prepared 8 frames for video OE5S-NbNsro
+17:12:59 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/dphq5X-rMew.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:13:00 [INFO] Prepared 8 frames for video dphq5X-rMew
+17:13:02 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/dphq5X-rMew.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:13:02 [INFO] Prepared 8 frames for video dphq5X-rMew
+17:13:04 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/dphq5X-rMew.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:13:04 [INFO] Prepared 8 frames for video dphq5X-rMew
+17:13:06 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/K64wRD8eaus.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:13:07 [INFO] Prepared 8 frames for video K64wRD8eaus
+17:13:09 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/K64wRD8eaus.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:13:09 [INFO] Prepared 8 frames for video K64wRD8eaus
+17:13:11 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/K64wRD8eaus.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:13:11 [INFO] Prepared 8 frames for video K64wRD8eaus
+17:13:13 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/kSBB5PsRV-k.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:13:14 [INFO] Prepared 8 frames for video kSBB5PsRV-k
+17:13:15 [INFO] [frames=8] 40/99 done (correct so far=22)
+17:13:16 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/kSBB5PsRV-k.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:13:16 [INFO] Prepared 8 frames for video kSBB5PsRV-k
+17:13:18 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/kSBB5PsRV-k.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:13:18 [INFO] Prepared 8 frames for video kSBB5PsRV-k
+17:13:20 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/QTA8j5wSTx4.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:13:20 [INFO] Prepared 8 frames for video QTA8j5wSTx4
+17:13:23 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/QTA8j5wSTx4.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:13:23 [INFO] Prepared 8 frames for video QTA8j5wSTx4
+17:13:25 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/QTA8j5wSTx4.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:13:25 [INFO] Prepared 8 frames for video QTA8j5wSTx4
+17:13:27 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/tuZcS2Flabw.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:13:28 [INFO] Prepared 8 frames for video tuZcS2Flabw
+17:13:30 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/tuZcS2Flabw.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:13:30 [INFO] Prepared 8 frames for video tuZcS2Flabw
+17:13:32 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/tuZcS2Flabw.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:13:32 [INFO] Prepared 8 frames for video tuZcS2Flabw
+17:13:34 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/s_TGkDcjBqI.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:13:34 [INFO] Prepared 8 frames for video s_TGkDcjBqI
+17:13:36 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/s_TGkDcjBqI.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:13:37 [INFO] Prepared 8 frames for video s_TGkDcjBqI
+17:13:38 [INFO] [frames=8] 50/99 done (correct so far=26)
+17:13:39 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/s_TGkDcjBqI.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:13:39 [INFO] Prepared 8 frames for video s_TGkDcjBqI
+17:13:41 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/8l1NyR6UvxU.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:13:41 [INFO] Prepared 8 frames for video 8l1NyR6UvxU
+17:13:43 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/8l1NyR6UvxU.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:13:43 [INFO] Prepared 8 frames for video 8l1NyR6UvxU
+17:13:45 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/8l1NyR6UvxU.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:13:46 [INFO] Prepared 8 frames for video 8l1NyR6UvxU
+17:13:48 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/wgPymD-NBQU.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:13:48 [INFO] Prepared 8 frames for video wgPymD-NBQU
+17:13:50 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/wgPymD-NBQU.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:13:50 [INFO] Prepared 8 frames for video wgPymD-NBQU
+17:13:52 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/wgPymD-NBQU.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:13:52 [INFO] Prepared 8 frames for video wgPymD-NBQU
+17:13:54 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/tjrvKA4w9-Y.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:13:54 [INFO] Prepared 8 frames for video tjrvKA4w9-Y
+17:13:57 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/tjrvKA4w9-Y.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:13:57 [INFO] Prepared 8 frames for video tjrvKA4w9-Y
+17:13:59 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/tjrvKA4w9-Y.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:13:59 [INFO] Prepared 8 frames for video tjrvKA4w9-Y
+17:14:01 [INFO] [frames=8] 60/99 done (correct so far=30)
+17:14:01 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/A9fQPzZ1-hg.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:14:01 [INFO] Prepared 8 frames for video A9fQPzZ1-hg
+17:14:03 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/A9fQPzZ1-hg.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:14:03 [INFO] Prepared 8 frames for video A9fQPzZ1-hg
+17:14:05 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/A9fQPzZ1-hg.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:14:05 [INFO] Prepared 8 frames for video A9fQPzZ1-hg
+17:14:07 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/4jmMWohs1XM.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:14:08 [INFO] Prepared 8 frames for video 4jmMWohs1XM
+17:14:10 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/4jmMWohs1XM.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:14:10 [INFO] Prepared 8 frames for video 4jmMWohs1XM
+17:14:12 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/4jmMWohs1XM.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:14:12 [INFO] Prepared 8 frames for video 4jmMWohs1XM
+17:14:14 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/TGom0uiW130.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:14:14 [INFO] Prepared 8 frames for video TGom0uiW130
+17:14:16 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/TGom0uiW130.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:14:16 [INFO] Prepared 8 frames for video TGom0uiW130
+17:14:19 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/TGom0uiW130.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:14:19 [INFO] Prepared 8 frames for video TGom0uiW130
+17:14:21 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/w0Wmc8C0Eq0.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:14:21 [INFO] Prepared 8 frames for video w0Wmc8C0Eq0
+17:14:23 [INFO] [frames=8] 70/99 done (correct so far=37)
+17:14:23 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/w0Wmc8C0Eq0.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:14:23 [INFO] Prepared 8 frames for video w0Wmc8C0Eq0
+17:14:25 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/w0Wmc8C0Eq0.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:14:26 [INFO] Prepared 8 frames for video w0Wmc8C0Eq0
+17:14:28 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/7D-gxaie6UI.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:14:28 [INFO] Prepared 8 frames for video 7D-gxaie6UI
+17:14:30 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/7D-gxaie6UI.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:14:30 [INFO] Prepared 8 frames for video 7D-gxaie6UI
+17:14:32 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/7D-gxaie6UI.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:14:32 [INFO] Prepared 8 frames for video 7D-gxaie6UI
+17:14:34 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/0RxMZBLeqRI.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:14:35 [INFO] Prepared 8 frames for video 0RxMZBLeqRI
+17:14:37 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/0RxMZBLeqRI.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:14:37 [INFO] Prepared 8 frames for video 0RxMZBLeqRI
+17:14:39 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/0RxMZBLeqRI.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:14:39 [INFO] Prepared 8 frames for video 0RxMZBLeqRI
+17:14:41 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/xKiRmesHWIA.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:14:41 [INFO] Prepared 8 frames for video xKiRmesHWIA
+17:14:43 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/xKiRmesHWIA.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:14:44 [INFO] Prepared 8 frames for video xKiRmesHWIA
+17:14:45 [INFO] [frames=8] 80/99 done (correct so far=42)
+17:14:46 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/xKiRmesHWIA.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:14:46 [INFO] Prepared 8 frames for video xKiRmesHWIA
+17:14:48 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/uC8TK7GH85o.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:14:48 [INFO] Prepared 8 frames for video uC8TK7GH85o
+17:14:50 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/uC8TK7GH85o.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:14:50 [INFO] Prepared 8 frames for video uC8TK7GH85o
+17:14:52 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/uC8TK7GH85o.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:14:52 [INFO] Prepared 8 frames for video uC8TK7GH85o
+17:14:54 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/zxKPjD8urG4.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:14:54 [INFO] Prepared 8 frames for video zxKPjD8urG4
+17:14:57 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/zxKPjD8urG4.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:14:57 [INFO] Prepared 8 frames for video zxKPjD8urG4
+17:14:59 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/zxKPjD8urG4.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:14:59 [INFO] Prepared 8 frames for video zxKPjD8urG4
+17:15:01 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/BoBapnk6TB8.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:15:01 [INFO] Prepared 8 frames for video BoBapnk6TB8
+17:15:03 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/BoBapnk6TB8.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:15:04 [INFO] Prepared 8 frames for video BoBapnk6TB8
+17:15:06 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/BoBapnk6TB8.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:15:06 [INFO] Prepared 8 frames for video BoBapnk6TB8
+17:15:08 [INFO] [frames=8] 90/99 done (correct so far=45)
+17:15:08 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HProiNnmGwI.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:15:08 [INFO] Prepared 8 frames for video HProiNnmGwI
+17:15:11 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HProiNnmGwI.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:15:11 [INFO] Prepared 8 frames for video HProiNnmGwI
+17:15:13 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HProiNnmGwI.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:15:13 [INFO] Prepared 8 frames for video HProiNnmGwI
+17:15:15 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/O7zcPvQDIMU.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:15:16 [INFO] Prepared 8 frames for video O7zcPvQDIMU
+17:15:18 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/O7zcPvQDIMU.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:15:18 [INFO] Prepared 8 frames for video O7zcPvQDIMU
+17:15:20 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/O7zcPvQDIMU.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:15:20 [INFO] Prepared 8 frames for video O7zcPvQDIMU
+17:15:22 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/H8fGd3fCJbg.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:15:22 [INFO] Prepared 8 frames for video H8fGd3fCJbg
+17:15:25 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/H8fGd3fCJbg.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:15:25 [INFO] Prepared 8 frames for video H8fGd3fCJbg
+17:15:27 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/H8fGd3fCJbg.mp4, backend=ffmpeg, sample_fps=1.000, frames=8, total=8, raw_fps=1.000
+17:15:27 [INFO] Prepared 8 frames for video H8fGd3fCJbg
+17:15:29 [INFO] [frames=8] 99/99 done (correct so far=49)
+17:15:33 [INFO] [frames=8] FINISHED correct=49/99
+17:15:33 [INFO] [GPU 0] launching CLI: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/build-huawei/bin/llama-omni-eval-cli -m /workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-F16.gguf -c 40960 -ngl 999 --max-slice-nums 0 --n-predict 100 --temp 0.2 --top-p 0.8 --top-k 100 --repeat-penalty 1.02  (log: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/video-mme-cookbook/log/cli_gpu0.log)
+17:15:42 [INFO] [GPU 0] CLI ready，耗时 9.1s
+17:15:42 [INFO] [frames=64] CLI ready, running 99 questions ...
+17:15:43 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/fFjv93ACGo8.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:15:45 [INFO] Prepared 64 frames for video fFjv93ACGo8
+17:16:01 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/fFjv93ACGo8.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:16:02 [INFO] Prepared 64 frames for video fFjv93ACGo8
+17:16:17 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/fFjv93ACGo8.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:16:18 [INFO] Prepared 64 frames for video fFjv93ACGo8
+17:16:34 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/N1cdUjctpG8.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:16:34 [INFO] Prepared 64 frames for video N1cdUjctpG8
+17:16:49 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/N1cdUjctpG8.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:16:51 [INFO] Prepared 64 frames for video N1cdUjctpG8
+17:17:06 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/N1cdUjctpG8.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:17:07 [INFO] Prepared 64 frames for video N1cdUjctpG8
+17:17:22 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HIjX8OPuf-w.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:17:23 [INFO] Prepared 64 frames for video HIjX8OPuf-w
+17:17:38 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HIjX8OPuf-w.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:17:39 [INFO] Prepared 64 frames for video HIjX8OPuf-w
+17:17:54 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HIjX8OPuf-w.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:17:55 [INFO] Prepared 64 frames for video HIjX8OPuf-w
+17:18:10 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HwnB8aCn8yE.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:18:11 [INFO] Prepared 64 frames for video HwnB8aCn8yE
+17:18:25 [INFO] [frames=64] 10/99 done (correct so far=6)
+17:18:26 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HwnB8aCn8yE.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:18:27 [INFO] Prepared 64 frames for video HwnB8aCn8yE
+17:18:42 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HwnB8aCn8yE.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:18:43 [INFO] Prepared 64 frames for video HwnB8aCn8yE
+17:18:58 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/24i4ncHuf6A.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:18:59 [INFO] Prepared 64 frames for video 24i4ncHuf6A
+17:19:14 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/24i4ncHuf6A.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:19:15 [INFO] Prepared 64 frames for video 24i4ncHuf6A
+17:19:30 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/24i4ncHuf6A.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:19:32 [INFO] Prepared 64 frames for video 24i4ncHuf6A
+17:19:47 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/40BlVzjxu-I.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:19:48 [INFO] Prepared 64 frames for video 40BlVzjxu-I
+17:20:03 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/40BlVzjxu-I.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:20:04 [INFO] Prepared 64 frames for video 40BlVzjxu-I
+17:20:19 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/40BlVzjxu-I.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:20:21 [INFO] Prepared 64 frames for video 40BlVzjxu-I
+17:20:36 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/0ay2Qy3wBe8.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:20:37 [INFO] Prepared 64 frames for video 0ay2Qy3wBe8
+17:20:52 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/0ay2Qy3wBe8.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:20:54 [INFO] Prepared 64 frames for video 0ay2Qy3wBe8
+17:21:08 [INFO] [frames=64] 20/99 done (correct so far=12)
+17:21:09 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/0ay2Qy3wBe8.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:21:10 [INFO] Prepared 64 frames for video 0ay2Qy3wBe8
+17:21:25 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/_tvmjsKXTu8.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:21:26 [INFO] Prepared 64 frames for video _tvmjsKXTu8
+17:21:41 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/_tvmjsKXTu8.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:21:43 [INFO] Prepared 64 frames for video _tvmjsKXTu8
+17:21:58 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/_tvmjsKXTu8.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:21:59 [INFO] Prepared 64 frames for video _tvmjsKXTu8
+17:22:14 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/sUDY-SMREtA.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:22:15 [INFO] Prepared 64 frames for video sUDY-SMREtA
+17:22:30 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/sUDY-SMREtA.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:22:32 [INFO] Prepared 64 frames for video sUDY-SMREtA
+17:22:47 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/sUDY-SMREtA.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:22:48 [INFO] Prepared 64 frames for video sUDY-SMREtA
+17:23:03 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/PSt_op3fQck.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:23:05 [INFO] Prepared 64 frames for video PSt_op3fQck
+17:23:19 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/PSt_op3fQck.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:23:20 [INFO] Prepared 64 frames for video PSt_op3fQck
+17:23:35 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/PSt_op3fQck.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:23:37 [INFO] Prepared 64 frames for video PSt_op3fQck
+17:23:50 [INFO] [frames=64] 30/99 done (correct so far=15)
+17:23:51 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/OE5S-NbNsro.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:23:52 [INFO] Prepared 64 frames for video OE5S-NbNsro
+17:24:07 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/OE5S-NbNsro.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:24:08 [INFO] Prepared 64 frames for video OE5S-NbNsro
+17:24:23 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/OE5S-NbNsro.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:24:24 [INFO] Prepared 64 frames for video OE5S-NbNsro
+17:24:39 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/dphq5X-rMew.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:24:39 [INFO] Prepared 64 frames for video dphq5X-rMew
+17:24:54 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/dphq5X-rMew.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:24:55 [INFO] Prepared 64 frames for video dphq5X-rMew
+17:25:10 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/dphq5X-rMew.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:25:11 [INFO] Prepared 64 frames for video dphq5X-rMew
+17:25:25 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/K64wRD8eaus.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:25:26 [INFO] Prepared 64 frames for video K64wRD8eaus
+17:25:41 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/K64wRD8eaus.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:25:41 [INFO] Prepared 64 frames for video K64wRD8eaus
+17:25:56 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/K64wRD8eaus.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:25:57 [INFO] Prepared 64 frames for video K64wRD8eaus
+17:26:11 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/kSBB5PsRV-k.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:26:12 [INFO] Prepared 64 frames for video kSBB5PsRV-k
+17:26:26 [INFO] [frames=64] 40/99 done (correct so far=21)
+17:26:27 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/kSBB5PsRV-k.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:26:27 [INFO] Prepared 64 frames for video kSBB5PsRV-k
+17:26:42 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/kSBB5PsRV-k.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:26:43 [INFO] Prepared 64 frames for video kSBB5PsRV-k
+17:26:58 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/QTA8j5wSTx4.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:26:59 [INFO] Prepared 64 frames for video QTA8j5wSTx4
+17:27:14 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/QTA8j5wSTx4.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:27:14 [INFO] Prepared 64 frames for video QTA8j5wSTx4
+17:27:29 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/QTA8j5wSTx4.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:27:30 [INFO] Prepared 64 frames for video QTA8j5wSTx4
+17:27:45 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/tuZcS2Flabw.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:27:46 [INFO] Prepared 64 frames for video tuZcS2Flabw
+17:28:01 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/tuZcS2Flabw.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:28:02 [INFO] Prepared 64 frames for video tuZcS2Flabw
+17:28:16 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/tuZcS2Flabw.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:28:17 [INFO] Prepared 64 frames for video tuZcS2Flabw
+17:28:32 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/s_TGkDcjBqI.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:28:33 [INFO] Prepared 64 frames for video s_TGkDcjBqI
+17:28:47 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/s_TGkDcjBqI.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:28:48 [INFO] Prepared 64 frames for video s_TGkDcjBqI
+17:29:02 [INFO] [frames=64] 50/99 done (correct so far=23)
+17:29:03 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/s_TGkDcjBqI.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:29:04 [INFO] Prepared 64 frames for video s_TGkDcjBqI
+17:29:19 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/8l1NyR6UvxU.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:29:20 [INFO] Prepared 64 frames for video 8l1NyR6UvxU
+17:29:35 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/8l1NyR6UvxU.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:29:35 [INFO] Prepared 64 frames for video 8l1NyR6UvxU
+17:29:50 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/8l1NyR6UvxU.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:29:51 [INFO] Prepared 64 frames for video 8l1NyR6UvxU
+17:30:05 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/wgPymD-NBQU.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:30:06 [INFO] Prepared 64 frames for video wgPymD-NBQU
+17:30:21 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/wgPymD-NBQU.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:30:21 [INFO] Prepared 64 frames for video wgPymD-NBQU
+17:30:36 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/wgPymD-NBQU.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:30:37 [INFO] Prepared 64 frames for video wgPymD-NBQU
+17:30:52 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/tjrvKA4w9-Y.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:30:52 [INFO] Prepared 64 frames for video tjrvKA4w9-Y
+17:31:08 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/tjrvKA4w9-Y.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:31:09 [INFO] Prepared 64 frames for video tjrvKA4w9-Y
+17:31:24 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/tjrvKA4w9-Y.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:31:26 [INFO] Prepared 64 frames for video tjrvKA4w9-Y
+17:31:40 [INFO] [frames=64] 60/99 done (correct so far=30)
+17:31:41 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/A9fQPzZ1-hg.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:31:43 [INFO] Prepared 64 frames for video A9fQPzZ1-hg
+17:31:58 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/A9fQPzZ1-hg.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:32:00 [INFO] Prepared 64 frames for video A9fQPzZ1-hg
+17:32:15 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/A9fQPzZ1-hg.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:32:17 [INFO] Prepared 64 frames for video A9fQPzZ1-hg
+17:32:32 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/4jmMWohs1XM.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:32:34 [INFO] Prepared 64 frames for video 4jmMWohs1XM
+17:32:49 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/4jmMWohs1XM.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:32:51 [INFO] Prepared 64 frames for video 4jmMWohs1XM
+17:33:06 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/4jmMWohs1XM.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:33:08 [INFO] Prepared 64 frames for video 4jmMWohs1XM
+17:33:24 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/TGom0uiW130.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:33:26 [INFO] Prepared 64 frames for video TGom0uiW130
+17:33:42 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/TGom0uiW130.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:33:44 [INFO] Prepared 64 frames for video TGom0uiW130
+17:33:59 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/TGom0uiW130.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:34:02 [INFO] Prepared 64 frames for video TGom0uiW130
+17:34:18 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/w0Wmc8C0Eq0.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:34:20 [INFO] Prepared 64 frames for video w0Wmc8C0Eq0
+17:34:34 [INFO] [frames=64] 70/99 done (correct so far=37)
+17:34:35 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/w0Wmc8C0Eq0.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:34:38 [INFO] Prepared 64 frames for video w0Wmc8C0Eq0
+17:34:53 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/w0Wmc8C0Eq0.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:34:57 [INFO] Prepared 64 frames for video w0Wmc8C0Eq0
+17:35:13 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/7D-gxaie6UI.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:35:15 [INFO] Prepared 64 frames for video 7D-gxaie6UI
+17:35:30 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/7D-gxaie6UI.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:35:33 [INFO] Prepared 64 frames for video 7D-gxaie6UI
+17:35:48 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/7D-gxaie6UI.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:35:50 [INFO] Prepared 64 frames for video 7D-gxaie6UI
+17:36:06 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/0RxMZBLeqRI.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:36:09 [INFO] Prepared 64 frames for video 0RxMZBLeqRI
+17:36:26 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/0RxMZBLeqRI.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:36:29 [INFO] Prepared 64 frames for video 0RxMZBLeqRI
+17:36:44 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/0RxMZBLeqRI.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:36:47 [INFO] Prepared 64 frames for video 0RxMZBLeqRI
+17:37:03 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/xKiRmesHWIA.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:37:05 [INFO] Prepared 64 frames for video xKiRmesHWIA
+17:37:20 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/xKiRmesHWIA.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:37:22 [INFO] Prepared 64 frames for video xKiRmesHWIA
+17:37:37 [INFO] [frames=64] 80/99 done (correct so far=41)
+17:37:37 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/xKiRmesHWIA.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:37:39 [INFO] Prepared 64 frames for video xKiRmesHWIA
+17:37:54 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/uC8TK7GH85o.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:37:57 [INFO] Prepared 64 frames for video uC8TK7GH85o
+17:38:12 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/uC8TK7GH85o.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:38:15 [INFO] Prepared 64 frames for video uC8TK7GH85o
+17:38:30 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/uC8TK7GH85o.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:38:32 [INFO] Prepared 64 frames for video uC8TK7GH85o
+17:38:48 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/zxKPjD8urG4.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:38:50 [INFO] Prepared 64 frames for video zxKPjD8urG4
+17:39:05 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/zxKPjD8urG4.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:39:07 [INFO] Prepared 64 frames for video zxKPjD8urG4
+17:39:23 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/zxKPjD8urG4.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:39:25 [INFO] Prepared 64 frames for video zxKPjD8urG4
+17:39:40 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/BoBapnk6TB8.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:39:42 [INFO] Prepared 64 frames for video BoBapnk6TB8
+17:39:57 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/BoBapnk6TB8.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:39:59 [INFO] Prepared 64 frames for video BoBapnk6TB8
+17:40:13 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/BoBapnk6TB8.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:40:15 [INFO] Prepared 64 frames for video BoBapnk6TB8
+17:40:29 [INFO] [frames=64] 90/99 done (correct so far=46)
+17:40:30 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HProiNnmGwI.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:40:32 [INFO] Prepared 64 frames for video HProiNnmGwI
+17:40:48 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HProiNnmGwI.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:40:50 [INFO] Prepared 64 frames for video HProiNnmGwI
+17:41:05 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HProiNnmGwI.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:41:07 [INFO] Prepared 64 frames for video HProiNnmGwI
+17:41:23 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/O7zcPvQDIMU.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:41:24 [INFO] Prepared 64 frames for video O7zcPvQDIMU
+17:41:39 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/O7zcPvQDIMU.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:41:41 [INFO] Prepared 64 frames for video O7zcPvQDIMU
+17:41:57 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/O7zcPvQDIMU.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:41:59 [INFO] Prepared 64 frames for video O7zcPvQDIMU
+17:42:14 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/H8fGd3fCJbg.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:42:16 [INFO] Prepared 64 frames for video H8fGd3fCJbg
+17:42:31 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/H8fGd3fCJbg.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:42:33 [INFO] Prepared 64 frames for video H8fGd3fCJbg
+17:42:49 [INFO] Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/H8fGd3fCJbg.mp4, backend=ffmpeg, sample_fps=1.000, frames=64, total=64, raw_fps=1.000
+17:42:51 [INFO] Prepared 64 frames for video H8fGd3fCJbg
+17:43:05 [INFO] [frames=64] 99/99 done (correct so far=49)
+17:43:08 [INFO] [frames=64] FINISHED correct=49/99
+17:43:08 [INFO] summary written: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/video-mme-cookbook/diag/results_scale_20260811_170954_summary.txt
+
+VideoMME 分层精度复跑  ts=20260811_170954
+帧数曲线=[1, 8, 64]  官方 CookBook pipeline (temp=0.2, max_tokens=100, @1fps)
+total questions=99 (short/medium/long 各 33)
+
+ frames |     short |    medium |      long |   overall | degraded%
+----------------------------------------------------------------------
+      1 |     15/33 |     12/33 |     13/33 |     40/99 |        0%
+      8 |     17/33 |     17/33 |     15/33 |     49/99 |        0%
+     64 |     17/33 |     18/33 |     14/33 |     49/99 |        0%
+
