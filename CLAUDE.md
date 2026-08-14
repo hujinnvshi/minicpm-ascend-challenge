@@ -9,12 +9,13 @@ MiniCPM-o 4.5 全模态推理优化参赛仓库（赛道一·**子赛道 A: llam
 ## 关键约束（红线，必读）
 
 - **CANN 不支持 Q4_K_M 量化算子** → LLM 必须用 **F16**（Q4_K_M fallback CPU）。**Q8_0 实测不提速**（dequant-bound），量化对 910B 双工 decode 无收益，别再追。
-- **单 compute NPU**：`npu-smi` `Total Count=1`；CANN 报 `dev_count=2` 是双 die 聚合假象，dev1 不可单独用。NPU id = **1**（`/dev/davinci1`）。
+- **单 compute NPU**：`npu-smi` `Total Count=1`；CANN 报 `dev_count=2` 是双 die 聚合假象，dev1 不可单独用。**npu-smi card id 因机器而异（先 `npu-smi info` 看 NPU 列表取 id）：旧机 1/5，新机（2026-08-14）= 7**（`-i 7`）。binary 用 dev0（逻辑 0 = die0）。
 - **判断"NPU 是否在算"**：用 `npu-smi info -t usages -i 1` **细粒度（≤0.5s）采样**，看 `Aicore Usage Rate` + `HBM Bandwidth Usage Rate`（后者高=真在 NPU 算）。**不能看单次/粗均值**（曾因此误判"AICore 4%=没走 NPU"，实测 burst 60–84%）。
 - **perf-duplex 的 exit 0/2/3 是本工具"双工实时交互"门槛，非官方排名指标**。官方性能只看 **SPEAK→WAV RTF**（基线 1.087，我方 0.83）。`analyze_perf.py` 的 `e2e RTF` = SPEAK 轮完整链路 RTF（≈官方口径）。
 - 图模式 `USE_ACL_GRAPH` 在 910B **不支持**（头文件缺）。
 - **双die device 锁定**（2026-08-10 新设备 910B/beta.1 验证）：双 die 被 CANN 枚举为 device0+device1，**dev1（die1）不可用**。perf-duplex 双工流水线会跑到 dev1，在 `aclnn_repeat_interleave`（RoPE 用）崩溃 exit139。跑 perf/duplex 前**必须** `ASCEND_RT_VISIBLE_DEVICES=0 CUDA_VISIBLE_DEVICES=0`（→ aclrtGetDeviceCount=1，只看 die0）。npu-smi 查询用 `-i 5`，binary 用 dev0。详见 `docs/session-2026-08-10-newenv.md`。
 - 优化**不得改推理数学**（仅流水线/调度层）→ 精度 = F16 基线，准入必过。
+- **NUMA 亲和（2026-08-14 新机纠正，易踩）**：vocoder/推理进程**必须绑 NPU 同 NUMA node**，不能照抄 `taskset -c 192-223`。查法：`cat /sys/bus/pci/devices/<NPU_bus>/numa_node`（NPU bus 从 `npu-smi info` 取，本机 `0000:42:00.0`）→ 绑该 node 的 CPU。**旧机 NPU 在 node6 → `192-223`；新机（npu id=7）NPU 在 node2 → `taskset -c 64-95`**。照抄 192-223 会跨 NUMA DMA，使 RTF 退化到 0.68（正确绑核 0.57-0.59）。详见 `docs/experiments.md` 2026-08-14 节。
 
 ## 常用命令
 
@@ -48,7 +49,7 @@ npu-smi info -t usages -i 1
 
 - **`code/llama.cpp-omni/`** —— llama.cpp fork（本赛框架）。优化的两处落点：
   - `ggml/src/ggml-cann/ggml-cann.cpp`：**6 处 CANN 补丁**（`set/get_tensor_async`+`event_record/wait` 加 per-thread `ggml_cann_set_device`；SQR 断言放宽；`host_buffer` 默认 false 让权重上 device）。详见 `docs/cann-patches.md`。
-  - `tools/omni/omni.cpp`：**双工流水线 + P1.7 队列解耦**。流水线 = 音频帧 → encoder(CPU) → LLM decode(NPU, `duplex_do_decode`/`stream_decode`) → TTS-model(NPU, `ctx_tts_llama`) → token2wav/T2W(NPU Flow + CPU vocoder) → wav，多线程 + 队列。**LLM↔TTS 队列**（`TTSThreadInfo` cap，`omni_init` ~4296，env `OMNI_TTS_QUEUE` 默认 16）= 主吞吐杠杆（P1.7：1→16 使 LLM P50 8295→977ms）。环境旋钮：`OMNI_TTS_QUEUE` / `OMNI_TTS_GPU_LAYERS` / `OMNI_ETH_PROBE`(micro-probe) / `OMNI_STEP_SIZE` / `OMNI_ASSISTANT_PROMPT` / `OMNI_T2W_THREADS`(P3+P4:token2wav CPU 线程,默认 16;**推荐 24 + `taskset -c 192-223`(NUMA node6)→RTF 0.57**,不绑核 24 反慢至 0.72) / `OMNI_T2W_PROFILE`(=1 打印 token2mel/vocoder 分段)。
+  - `tools/omni/omni.cpp`：**双工流水线 + P1.7 队列解耦**。流水线 = 音频帧 → encoder(CPU) → LLM decode(NPU, `duplex_do_decode`/`stream_decode`) → TTS-model(NPU, `ctx_tts_llama`) → token2wav/T2W(NPU Flow + CPU vocoder) → wav，多线程 + 队列。**LLM↔TTS 队列**（`TTSThreadInfo` cap，`omni_init` ~4296，env `OMNI_TTS_QUEUE` 默认 16）= 主吞吐杠杆（P1.7：1→16 使 LLM P50 8295→977ms）。环境旋钮：`OMNI_TTS_QUEUE` / `OMNI_TTS_GPU_LAYERS` / `OMNI_ETH_PROBE`(micro-probe) / `OMNI_STEP_SIZE` / `OMNI_ASSISTANT_PROMPT` / `OMNI_T2W_THREADS`(P3+P4:token2wav CPU 线程,默认 16;**推荐 24 + NUMA 绑 NPU 同 node** → RTF 0.57-0.59;**先查 `cat /sys/bus/pci/devices/<NPU_bus>/numa_node`**(NPU bus 从 `npu-smi info` 取)→ 绑该 node CPU：旧机 node6→`taskset -c 192-223`,**新机(npu id=7)node2→`taskset -c 64-95`**,照抄 192-223 跨 NUMA 使 RTF 退化到 0.68;不绑核 24 反慢至 0.72) / `OMNI_T2W_PROFILE`(=1 打印 token2mel/vocoder 分段)。
 - **`code/MiniCPM-o-Demo/`** —— 官方 Demo。3 进程：`gateway.py`(Python,:8006/+8007) + `worker.py`(Python,:22400) + backend(`llama-omni-server`,:22500)。前端预构建在 `static/`（无需 bun）。WS 推理端点 `/v1/worker/{chat,duplex}`（runtime 协议）。
 - **`code/daily-omni/`** —— Daily-Omni benchmark 代码（`test_model_api/`，API 测试 + `MODEL_FUNCTION_MAP` adapter 模式）。
 - **`benchmark/seed-tts-eval/`** —— TTS-Seed 数据（`seedtts_testset/`，gitignored）+ 官方 eval 参考脚本（`eval_ref/`，自 vllm-omni 移植，含 TTS system prompt + WER/SIM 指标）。

@@ -669,3 +669,41 @@ init_from_host_caches 校验 cache_host.n_timesteps != n_timesteps → 拒绝
 - **根因**：step1 串行 bit-精确 vs step2 async 改内容 → **ggml 跨 backend（NPU+CANN vs CPU）并发非 thread-safe**（async vocoder 与主线程 t2m 共享 ggml state 污染内容）。**这是 P5 失败真因**（不只 CPU 竞争，还有并发改内容）。
 - **决策**：off env 关 = bit-精确零破坏 RTF 0.57；overlap on 改内容违反"不改数学"红线 → 不可用 → **接受 0.57（beat 基线 1.087 共 48%）**。
 - **教训**：ggml 跨 backend 并发需先验证 context 隔离；未来多 backend overlap 需重构 t2m/vocoder 为独立 ggml context（大改 + 高风险）。性能优化终点 = 0.57。
+
+---
+
+## 实验 2026-08-14：系统层参数优化 — NUMA 亲和修正（RTF 0.68→0.59）
+
+> 分支 `bench-huawei-adapt`。**纯运行时，不重编**。新机器（npu-smi id=**7**，Atlas 910B3 die0，64GB）环境校准发现。plan 见 `/root/.claude/plans/resilient-inventing-planet.md`。
+
+**起因**：用户要求系统参数优化。A0 baseline 探测发现新机器 NPU 的 NUMA 归属与旧配置不符 —— 这是测出 0.68（而非记忆里 0.57）的根因。
+
+**关键发现 — NUMA 亲和失效（唯一真实系统杠杆）**：
+- 新机器 NPU（PCI `0000:42:00.0`）`numa_node=2`（查法：`cat /sys/bus/pci/devices/0000:42:00.0/numa_node`）。
+- 旧配置（CLAUDE.md / 记忆）绑 `taskset -c 192-223`（node6）→ **vocoder 线程跨 NUMA 与 NPU（node2）搬数据**。
+- 旧机器测 0.57 时 NPU 大概率在 node6 故绑 192-223 正确；新机器 NPU 在 node2，配置失效 → 实测 0.68。
+
+**A/B（各 3 次，e2e RTF，SPEAK→WAV 口径，F16，`OMNI_T2W_THREADS=24`）**：
+
+| vocoder 绑核 | 3 次 e2e RTF | 中位 | 说明 |
+|---|---|---|---|
+| node6 `192-223`（旧，跨 NUMA） | 0.68 / 0.65 / 0.69 | **0.68** | NPU 在 node2，跨 NUMA DMA |
+| node2 `64-95`（NPU 同 node） | 0.55 / 0.59 / 0.65 | **0.59** | 本地 DMA，RTF −13% |
+| node2 + SLOG=0 + nice-10（系统包） | 0.60 / 0.55 / 0.58 | **0.58** | 中位 ≈ node2，方差 0.10→0.05 |
+
+**其余系统项（均为边际 / 不可行）**：
+- A1 CPU governor = `performance`、A4 THP = `[always]`：**OS 镜像已最优，跳过**。
+- A3 关 NUMA balancing：**容器内 `/proc/sys` 只读，不可改**（Read-only fs）。
+- A5 `ASCEND_SLOG_PRINT=0` + A6 `nice -n -10`：中位无显著收益（0.59→0.58，噪声内），**主要降方差**。
+- A7 perf-duplex 参数：无 `-b/-ub` batch；`--stream-interval` 是"模拟真实流式"口径参数（动则偏离 SPEAK→WAV 口径，不动）。
+
+**结论**：
+- 系统层真实杠杆 = **NUMA 亲和**（查 NPU `numa_node` → 绑对应 CPU）。推荐配置：`OMNI_T2W_THREADS=24 taskset -c 64-95`（本机）+ `ASCEND_SLOG_PRINT=0`（降方差）。
+- RTF = **0.58–0.59**（中位，新机器物理限），vs 旧错误配置 0.68；仍 beat 基线 1.087 共 ~46%。
+- **方法可推广**：换机器先 `cat /sys/bus/pci/devices/<NPU_bus>/numa_node`（NPU bus 从 `npu-smi info` 取），再绑该 node 的 CPU（numactl 缺失，用 taskset）。**不同机器 NPU node 不同**（旧机 node6 / 新机 node2）—— 旧 `taskset -c 192-223` 写死值不能跨机器照抄。
+- **Video-MME 精度**：本轮纯运行时空间 ≈ 0（评测参数锁死 + `OMNI_DEBUG` 探针需重编）；评测日志 grep 无 NaN/inf（B2），无 attention fp32 红线触发证据。精度提升杠杆（attention fp32 累加）在红线+重编，本轮按约束不做。
+
+**B1 温度对照（排除性验证，2026-08-14）**：videomme99 子集前 6 题，`TEMPERATURE=0.0`（greedy）vs `0.1`，其余官方锁定（top-p=0.8 / top-k=100 / repeat=1.02 / seed=42 / 64帧@1fps）。env：`LLM_MODEL_PATH=F16`、`PARQUET_PATH=videomme_subset_99q.parquet`、`VIDEO_DATA_DIR=appendix/videomme99/data`、`LLAMA_CLI_BIN=build/bin/llama-omni-eval-cli`，绑核 `taskset -c 64-95`。
+- 结果：**两温度逐题 Raw 完全一致**（题1 `\nC. Berries` / 题2 `A` / 题3 `C. 2.` / 题4 全`\n`退化 / 题5 `\n\nA` / 题6 `C`），准确率均 2/6。
+- 结论：低温度区间（0~0.1）**采样参数无杠杆**，temp=0 已最优 —— 排除性验证完成，符合 eval_cli 注释预期（temp>0 让 MCQ 跑偏）。
+- **副产品**：题4 temp=0/0.1 **均**输出全 `\n` 硬退化（Pred=''，非 NaN、确定性、非随机）→ 多帧退化在个别题仍有残留（非本轮纯运行时可解），留作 attention fp32 红线实验的潜在触发点（证据方向：长 context 非随机字符退化）。
