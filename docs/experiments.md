@@ -802,7 +802,22 @@ init_from_host_caches 校验 cache_host.n_timesteps != n_timesteps → 拒绝
 
 **头号嫌疑（未逐项消融）**：① chat 模板构造（C++ 手拼 `omni.cpp:11025` vs HF chat template + image-id 标签，HF 用 `<image>./</image>` + `use_image_id`，C++ 每帧 prefill `"\n"`）；② vision 预处理（**注意：此前路径A 的 cos0.995 是 HF-NPU vs HF-CPU,从未对比过 llama.cpp-vision vs HF-vision 的 embedding**）；③ 系统提示词。**下一步实验：两边 prefill 的 token 序列逐位 diff（HF 可直接打 input_ids,C++ 可加探针打 prefill tokens）→ 定位分歧点。**
 
-**战略含义**：若 C++ 侧协议对齐 HF 参考，空响应家族（+6~7pp）和大量临界错答可能一并恢复 → 这是对赛方/upstream 的**框架 bug 级发现**（官方 bench/huawei 引擎自带,非我方改动）;910C 跑 69.7% 与此的相容解释待查（同代码不同硬件数值下字母仍可险胜）。
+**五、prefill token 逐位 diff + 修复 A/B（同日,根因闭环）**：
+
+diff 结果（093-1）——两条铁证级协议分歧：
+1. **HF 每帧前有 `<image_id> N </image_id>` 编号（0..63 全带）；C++ 完全没有**（C++ 仅 `<image>`+64槽+`</image>`+`\n`）。模型训练时带帧编号 —— 64 帧视频的时序线索在官方 eval 路径中丢失。
+2. HF 无系统提示词；C++ 带**语音克隆系统提示**（`<|audio_end|>` + 中文"声音模式"指令 + 参考音频 embedding）。模板尾巴两边一致（`<think>\n\n</think>\n\n`）,排除。
+
+**修复 A/B**（omni.cpp simplex 分支加 env 门控 `OMNI_IMAGE_ID=1` → 每帧前插 `<image_id> N </image_id>`,static 计数器,单题进程诊断用）：
+
+| 题 | 修复前 | 加 image_id 后 | 首 token |
+|---|---|---|---|
+| 093 | `''`（EOS 12.27 居首） | **`. Scared.`** 正常生成 | EOS 跌出 top5 |
+| 097 | `''` | **`'C'`** 干净字母 | `'C'` 14.17 ≫ EOS 13.16 |
+
+**结论：根因闭环** —— 缺 image_id → 时序线索缺失 → 分布糊化 → EOS 临界空响应。补上后失败模式消失。剩余差距（093 答 A 文字而非 D）指向第二条分歧（语音系统提示词）待消融。
+
+**后续工作（正式化修复需做）**：① 计数器改为 ctx 字段并随 eval_reset 清零（static 版仅适用单题进程）；② 消融语音系统提示词；③ 官方 99q/339q 全复跑验证提升幅度；④ 精度红线（Daily/TTS）复验 + 对赛方透明披露（官方 bench/huawei 引擎的协议保真 bug,非我方改动数学——修复是向 HF 参考协议对齐）。
 
 ### 附：本次踩坑记录
 
