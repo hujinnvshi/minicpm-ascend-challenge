@@ -2535,6 +2535,23 @@ bool vision_image_batch_encode(vision_ctx * ctx, const int n_threads, const visi
     // for batch>1, output is contiguous: [embd * n_tokens * batch_size]
     ggml_backend_tensor_get(embeddings, vec, 0, ggml_nbytes(embeddings));
 
+    // [diag] Omni_DUMP_EMBED=<dir>: dump 最终 embedding(Resampler/projector 后,喂 LLM 的向量)
+    // 实验: llama.cpp-vision vs HF vision_hidden_states 直接对比(experiments.md 2026-08-14 实验B)
+    if (const char * dump_dir = std::getenv("Omni_DUMP_EMBED")) {
+        static int embed_dump_counter = 0;
+        char dump_path[512];
+        snprintf(dump_path, sizeof(dump_path), "%s/vis_embed_%03d_f32.bin", dump_dir, embed_dump_counter++);
+        FILE * f = fopen(dump_path, "wb");
+        if (f) {
+            int64_t hdr[4] = { embeddings->ne[0], embeddings->ne[1], embeddings->ne[2], (int64_t)ggml_nbytes(embeddings) };
+            fwrite(hdr, sizeof(int64_t), 4, f);
+            fwrite(vec, 1, ggml_nbytes(embeddings), f);
+            fclose(f);
+            LOG_INF("%s: [diag] dumped vision embedding #%d to %s [ne0=%lld ne1=%lld ne2=%lld]\n",
+                    __func__, embed_dump_counter - 1, dump_path, (long long)embeddings->ne[0], (long long)embeddings->ne[1], (long long)embeddings->ne[2]);
+        }
+    }
+
     return true;
 }
 

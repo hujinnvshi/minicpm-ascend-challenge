@@ -23,6 +23,10 @@ row = g.iloc[0]
 print(f"[{vid}] {row['videoID']}.mp4 {row['domain']}/{row['duration']} GT={row['answer']}", flush=True)
 
 video_path = f"{VDIR}/{row['videoID']}.mp4"
+# 帧临时目录 → 本地盘(NFS 96%满,写帧会 ENOSPC; save_frames_as_jpg 的 tmp_dir 是 import 时绑定的默认参数 → patch __defaults__)
+import eval_cpp_video_prep as _evp
+os.makedirs("/root/videomme_frames", exist_ok=True)
+_evp.save_frames_as_jpg.__defaults__ = ("/root/videomme_frames", 95)
 frames = prepare_video_frames(video_path, row["video_id"])
 print(f"[{vid}] {len(frames)} frames", flush=True)
 

@@ -836,6 +836,15 @@ diff 结果（093-1）——两条铁证级协议分歧：
 
 **七、NPU/CPU 漂移复验（修复后灵敏条件下,应询）**：旧四路排除的 CPU-vision 对照是在全`\n`退化下做的（退化掩盖漂移,不灵敏）。修复后重测:093 完整对齐协议下,**vision NPU = `'A'`（首 token 'A' 10.25）= vision CPU = `'A'`（685s 确认 CPU 生效）——答案级一致**。结合特征级（HF NPU vs CPU cos 0.993-0.998）:**NPU/CPU 漂移再次排除,不是精度下降原因**;下降真因 = 协议差异（六节）。残余的 llama.cpp vs HF 分歧（'A' vs 'D'）属**框架间**数值/预处理实现差（同一 llama.cpp 内换 vision 后端无差）,非同框架内 NPU/CPU 漂移。（小瑕疵:CPU 轮的 DBGTOPK 日志未落盘,答案级+特征级证据已足。）
 
+**八、残余分歧二分定位（实验A/B,plan 见 resilient-inventing-planet）**：
+
+- **实验A（text-only logits 纯净化）——机制性失败**：eval-cli 的 `frames=[]` 路径会跳过 prompt prefill（n_past=12 即开 decode,输出乱码）→ text-only 不受支持,实验作废（该限制已记录）。
+- **实验B（vision embedding 首次直接对比,093 frame_000 同一张 JPEG）**：
+  - C++ 侧:`vision.cpp:2536` 加 `Omni_DUMP_EMBED=<dir>` 探针（dump Resampler/projector 后 64×4096 fp32）;HF 侧:patch `get_vision_embedding` 截 `vision_hidden_states`(1,64,4096)。
+  - **结果:逐 token cosine mean=0.9992(min 0.9924/max 1.0000),|diff| mean=0.0149,范数比 0.9966** → **判读:实现级等价**（与 HF 内部 NPU vs CPU 波动 0.993-0.998 同量级）,**vision 预处理/实现无罪**。
+- **二分收口**:协议已对齐 + vision 等价 → **残余分歧(完整对齐后 'A' vs HF 'D',margin 0.8 vs 4.6)= LLM kernel 数值(ggml-cann vs torch_npu)在临界带上的翻转** —— 红线外不可修,按 plan 走"定性收尾+对外沟通"路线。
+- 附:期间发现 `/workspace/user_data` 是 **NFS(35T,96% 满)**,批量写帧会 ENOSPC —— 已删测试视频(8.4G,可从 zip 重解压)、帧目录改本地盘(`empty_repro.py` 已 patch `save_frames_as_jpg.__defaults__`)。
+
 ### 附：本次踩坑记录
 
 - `head -N` 关管道 → SIGPIPE 杀 cmake（机器手册 §8 原班坑）；构建输出必须落文件再 grep。
