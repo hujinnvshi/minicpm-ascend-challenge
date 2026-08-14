@@ -834,7 +834,7 @@ diff 结果（093-1）——两条铁证级协议分歧：
 - ②但答案仍与 HF 不同（'A' vs 'D',margin 形态也不同:0.8 vs 4.6）→ **残余分歧 = vision embedding 路径（llama.cpp-vision 预处理 vs HF processor,从未直接对比）或 kernel 数值**;
 - ③**全量策略性结论:99q 上单独 image_id 有害**;完整对齐(IMAGE_ID+TEXT_CHAT_SYS)的 99q 效果未测 —— 是下一个必要实验;若仍 <基线,则协议层故事对 KB 域不成立,退化修复的收益只集中于非 KB 的退化题。
 
-**遗留待办**：①99q 完整对齐版 A/B;②vision embedding 直接对比（llama.cpp vision vs HF processor 同图输出）;③若走修复路线:精度红线全复验+赛方披露。
+**七、NPU/CPU 漂移复验（修复后灵敏条件下,应询）**：旧四路排除的 CPU-vision 对照是在全`\n`退化下做的（退化掩盖漂移,不灵敏）。修复后重测:093 完整对齐协议下,**vision NPU = `'A'`（首 token 'A' 10.25）= vision CPU = `'A'`（685s 确认 CPU 生效）——答案级一致**。结合特征级（HF NPU vs CPU cos 0.993-0.998）:**NPU/CPU 漂移再次排除,不是精度下降原因**;下降真因 = 协议差异（六节）。残余的 llama.cpp vs HF 分歧（'A' vs 'D'）属**框架间**数值/预处理实现差（同一 llama.cpp 内换 vision 后端无差）,非同框架内 NPU/CPU 漂移。（小瑕疵:CPU 轮的 DBGTOPK 日志未落盘,答案级+特征级证据已足。）
 
 ### 附：本次踩坑记录
 
