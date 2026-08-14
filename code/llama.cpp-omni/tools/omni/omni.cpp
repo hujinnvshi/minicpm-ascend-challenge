@@ -10644,6 +10644,13 @@ bool stream_prefill(struct omni_context * ctx_omni, std::string aud_fname, std::
             // Step 3: 评估 suffix (assistant_prompt，包含 <|audio_end|><|im_end|>)
             eval_string(ctx_omni, ctx_omni->params, assistant_prompt.c_str(), ctx_omni->params->n_batch, &ctx_omni->n_past, false);
         } else {
+            // [diag] OMNI_TEXT_CHAT_SYS=1: 对齐 HF 文本参考协议——无语音克隆系统提示(无 ref audio),
+            // 直接 <|im_start|>user\n 开始(token diff 发现 HF 无 system message; 与 OMNI_IMAGE_ID 联用做协议对齐消融)
+            if (std::getenv("OMNI_TEXT_CHAT_SYS")) {
+                print_with_timestamp("[diag] OMNI_TEXT_CHAT_SYS: skip voice-clone system prompt (HF text-chat protocol)\n");
+                eval_string(ctx_omni, ctx_omni->params, "<|im_start|>user\n",
+                            ctx_omni->params->n_batch, &ctx_omni->n_past, false);
+            } else {
             const bool has_ref_audio_slot =
                 voice_clone_prompt.find("<|audio_start|>") != std::string::npos &&
                 assistant_prompt.find("<|audio_end|>") != std::string::npos;
@@ -10682,8 +10689,9 @@ bool stream_prefill(struct omni_context * ctx_omni, std::string aud_fname, std::
                 eval_string(ctx_omni, ctx_omni->params, assistant_prompt.c_str(),
                             ctx_omni->params->n_batch, &ctx_omni->n_past, false);
             }
+            } // [diag] OMNI_TEXT_CHAT_SYS else 闭合
         }
-        
+
         // 标记系统 prompt 已初始化
         ctx_omni->system_prompt_initialized = true;
         // 🔧 系统提示重建 = 新会话/新题开始,image_id 帧编号归零(对齐 HF 参考协议, OMNI_IMAGE_ID 门控)
