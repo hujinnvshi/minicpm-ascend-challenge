@@ -1,15 +1,16 @@
-# 赛事准备总览（2026-08-12 固化）
+# 赛事准备总览（2026-08-12 固化 · 2026-08-14 review-optimize 评审修订）
 
 > 赛事：MiniCPM-o 昇腾推理优化 · **赛道一 · 子赛道 A（llama.cpp-omni）**，核心指标 **SPEAK→WAV RTF**。
-> 环境：Atlas 910B3 单卡（die0，64GB HBM）+ CANN 9.1.0-beta.1 + aarch64。
-> 分支：`bench-huawei-adapt`（当前评测主分支，全部 push origin）。
+> 环境：Atlas 910B3 单卡（die0，64GB HBM）+ CANN 9.1.0-beta.3 + aarch64（2026-08-14 迁移后新机，NPU id=7，NUMA node2）。
+> 分支：`videomme-discussion`（当前，含 08-14 全部协议对齐修复；`bench-huawei-adapt` 停在 f617be9）。
 > ⚠️ **2026-08-12 独立复现**：见 `docs/verification-2026-08-12.md`（beta.3 环境实测）。口径审计结论：**Daily 已补全量（1196 题，79.8%，达准入）**；**Video-MME 仍为 99 题子集，与官方全量 2700 基线不可直接比**；RTF/TTS-WER 口径一致。
+> ⚠️ **2026-08-14 评审修订**：① NUMA 绑核随机器变化——新机 NPU node2 必须 `taskset -c 64-95`（照抄旧机 192-223 会退到 0.68），通用法见 `scripts/numa-bind.sh`；② RTF 上报口径更新为新机实测 0.58-0.59（0.57 为旧机值）；③ Video-MME 空响应根因已定位为 C++ prefill 缺 `<image_id>`（协议层可修，`OMNI_IMAGE_ID` 门控），"球在赛方"叙事部分失效——完整协议对齐 99q 实测见 `experiments.md` 2026-08-14 节；④ 提交包流程重写（`scripts/package-submission.sh` 现可产出完整包）。
 
 ## 一、准入状态（一表看清）
 
 | 项 | 官方基线 | 准入阈值 | 我们 | 状态 |
 |---|---|---|---|---|
-| **性能 SPEAK→WAV RTF**（排名核心）| 1.087 | <1.087 | **0.57**（24线程+NUMA）/ 0.68（默认）| ✅ **beat 48%** |
+| **Performance SPEAK→WAV RTF**（排名核心）| 1.087 | <1.087 | **0.58-0.59**（24线程+NUMA 绑 NPU 同 node,新机实测）/ 0.68（默认）| ✅ **beat ~46%** |
 | **Daily-Omni** 精度 | 79.5（全量1196）| ≥77.5 | **79.8%**（全量1196题，官方Overall，退化0）| ✅ 微超基线(+0.3pp)，达准入 |
 | **TTS-Seed WER** | 1.414 | ≤1.56（增幅≤10%）| **1.501%**（全量2020题）| ✅ 增幅 6.2% |
 | **TTS-Seed ASV/SIM** | 0.709 | ≥0.689（降幅≤0.02）| **0.694**（全量2020题）| ✅ 降幅 0.015 |
@@ -20,9 +21,10 @@
 
 ## 二、性能 RTF（排名核心）
 
-- **SPEAK→WAV RTF = 0.57**（`OMNI_T2W_THREADS=24 + taskset -c 192-223` NUMA）/ 0.68（默认16线程，零配置）
-- vs 官方基线 **1.087 → beat 37–48%**
-- 优化链：**P1.7**（LLM↔TTS 队列 1→16 解耦，P50 8295→977ms，主杠杆）+ **P3/P4**（vocoder 线程 8→24 + NUMA 绑核，0.64→0.57）+ **P6**（vocoder overlap 探索，bit-精确失败——ggml 跨 backend 并发限制，**0.57 是物理限**）
+- **SPEAK→WAV RTF = 0.58-0.59**（`OMNI_T2W_THREADS=24` + NUMA 绑 NPU 同 node，2026-08-14 新机实测）/ 0.68（默认16线程，零配置）
+- vs 官方基线 **1.087 → beat ~46%**
+- ⚠️ **NUMA 必须先查机器**：`scripts/numa-bind.sh`（自动探测）或 `cat /sys/bus/pci/devices/<NPU_bus>/numa_node`；新机 node2=`64-95`，旧机 node6=`192-223`，照抄会跨 NUMA 退化到 0.68
+- 优化链：**P1.7**（LLM↔TTS 队列 1→16 解耦，P50 8295→977ms，主杠杆）+ **P3/P4**（vocoder 线程 8→24 + NUMA 绑核）+ **P6**（vocoder overlap 探索，共享 ggml 进程内异步 bit-精确失败；独立进程形态未验证，理论 ~0.34-0.42）
 - 红线：仅流水线/调度层（队列/线程/NUMA），**不改推理数学**
 - 详见 `performance-report.md` / `experiments.md`(P0–P6) / `reproduce-guide.md` / `perf-ceiling-analysis.md`
 
@@ -54,8 +56,10 @@
 | 分支 | 内容 | 状态 |
 |---|---|---|
 | `main` | 完整提交（P1.7 + 报告 + 复现 + Demo 视频 + 规范）| ✅ push |
-| `bench-huawei-adapt`（当前）| 评测全套：Daily/TTS/Video-MME 达标数据 + 转换脚本 + 诊断 + 澄清邮件 + P6 overlap 记录 | ✅ push（4676184）|
+| `videomme-discussion`（**当前**）| 08-14 协议对齐修复（image_id/EOS 定位/完整消融）+ 全部评测数据 + 诊断 | ✅ push（e3a89cf）|
+| `bench-huawei-adapt` | 评测全套（Daily/TTS/Video-MME 达标数据 + 转换脚本 + 诊断 + 澄清邮件）| ✅ push（f617be9；被 videomme-discussion 赶上并超出）|
 | `perf-vocoder-overlap` | P6 性能实验（step1 拆分 bit-精确 + step2 overlap 失败）| ✅ push（669dca4，**未 merge**，信息性）|
+| `review-optimize`（评审改进）| 打包流程重写 + 文档数字统一 + NUMA 自适应 + 权重 setup + D1 协议对齐 A/B | 见本分支提交 |
 
 ## 六、关键文档导航
 

@@ -1,6 +1,7 @@
 # 提交物清单与测评流程（2026-07-31 官网评审更新）
 
 > 来源：官网赛事详情页（ascend.openbmb.cn/competition）7/31 更新 + 官方算力申请指南（飞书）
+> ⚠️ **2026-08-14 review-optimize 评审修订**：① 提交包生成流程已重写并端到端跑通（`scripts/package-submission.sh` —— 旧版因 code/llama.cpp-omni 无独立 .git 而 patch 恒空、demo/空包、benchmark 结果未入包，已全部修复，见 `dist/` 产物+MANIFEST）；② 性能 RTF 口径更新为新机实测 0.58-0.59（旧 0.57 为旧机值）、NUMA 绑核需按机器探测（`scripts/numa-bind.sh`）；③ TTS-Seed 全量 2020 口径 WER 1.501%/ASV 0.694（旧 0.20 为早期子集/不同口径）；④ Daily-Omni 全量 1196 题 79.8%（旧 88% 为 50 题子集口径）；⑤ Video-MME 空响应根因 = 缺 image_id（协议层，可修，见 experiments.md 08-14）。
 
 ## 一、测评流程（5 步，全部通过才排名）
 
@@ -43,7 +44,7 @@
 - [x] Video-MME 结果(`benchmark/video-mme-cookbook/` CookBook 官方 pipeline + ccec build `llama-omni-eval-cli` 跑通;smoke 0/2 **多帧退化**(910B4/CANN 硬件级,context 40960/FA 均不解,见 experiments.md P3);基线 69.0 极可能 910C 实测 — 见 `organizer-inquiry-final.md` Q1/Q3)
 
 ### 3. 性能测试报告（至少包含)
-- [x] RTF（含统计口径)— SPEAK→WAV e2e,中位 0.68(P8 三次 0.84/0.68/0.58)
+- [x] RTF（含统计口径)— SPEAK→WAV e2e,中位 **0.58-0.59**（24 线程 + NUMA 绑 NPU 同 node,新机 2026-08-14 实测;16 线程默认 0.68-0.69）（旧机 0.57,见 performance-report）
 - [x] 测试环境(910B4 / CANN 9.1.0-beta.3 / F16)
 - [x] 测试数据(perf-duplex 36 帧 duplex_omni_test_case)
 - [x] 测试次数(P8 ≥3 次:0.84/0.68/0.58 中位 0.68)
