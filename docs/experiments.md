@@ -736,3 +736,64 @@ init_from_host_caches 校验 cache_host.n_timesteps != n_timesteps → 拒绝
 4. **强化"51.5% 是真实水平"归因**：oghub attention 假设 + flash/fallback + NPU/CPU vision 全部实验排除。剩余出路仍为非代码路径：910C 复现 / 赛方确认 910B 独立基线 / 环境受限豁免。
 
 **可回滚状态**：源码已 `git checkout`（ENABLED/DISABLED 行均已去）；`build-cann/bin/llama-omni-eval-cli` 为 FA 实验版（**勿用于评测**，评测用 `build/bin` 0812 版）；`flashon.bak` 为 Aug10 旧版（无 `--seed`，同样勿用）。
+
+---
+
+## 实验 2026-08-14（晚）：域偏差假设证伪 + 空响应根因 = EOS 临界翻转（机制级定位）
+
+> 分支 `bench-huawei-adapt`。三个连续实验：60 题非 KB 对照 → 180 题分层验证 → 空响应逐 token 定位。
+
+### 一、域偏差假设：先起后落，最终证伪
+
+- **起因**：99q 子集 = 纯 Knowledge 域（parquet 前 99 行，全量占比仅 30%）→ 疑"51.5% 被子集偏难拖低"。
+- **60 题非 KB 对照**（五域分层，`videomme_subset_nonkb.parquet`）：63.3%（38/60）vs KB 51.5/53.5% → 表观 +10.8pp，域加权全量期望 ≈60%（但 z=1.33 未过显著）。
+- **180 题独立验证**（每域 12 视频严格 4/4/4 时长均衡、排除已测视频，`videomme_subset_domain180.parquet`）：**47.8%**（86/180）——直接打回。合并非 KB = 51.7% ≈ KB 52-53%。
+- **终局**：Kruskal p=0.26，KB vs 非KB p=0.37。**域差异假设未通过验证；"60% 期望"不成立；339 题合并 ≈52%，与最初 51.5% 一致**。观察到的域间点估计差（33-61%）在样本量内不可与噪声区分。
+
+### 二、空响应：从现象到机制（本轮最大成果）
+
+**现象规模**：KB 1/99 → 非KB60 7/60 → 180题 **31/180**，全为真空串 `''`（与 q4 的全`\n` 是两个签名）。
+
+**归属分解**（31 题）：
+- 3 题 = **视频文件损坏**（nO2B4haj2BQ.mp4 本地 0 字节；zip 源 397MB 正常 → 首次解压被 2min 超时杀断，续跑因"文件存在"跳过 —— **我方解压脚本 bug，已定位**）；
+- 28 题 = **帧正常、prefill 完第一步即 end-token**（涉及 23 视频，Film&TV 最多；与运行位置无关 → 非状态累积）。
+
+**机制定位**（env 门控探针 `OMNI_DEBUG_TOPK`，插入 `sample_with_hidden_and_token` 采样前；build-cann 诊断版 binary，`build/bin` 官方版未动）：
+
+093（drbi6HK1gSc，Film&TV short，3/3 空）首 token 真实分布：
+```
+#0 <|im_end|>  12.27  ← 真 argmax，greedy 正确采样（采样器无罪）
+#1 "A"         11.64  ← 答案字母，仅差 0.63 logit（~5%）
+#2 <think>      9.95
+```
+- **空响应 = 模型在 910B/F16 数值下 EOS 以 ~0.6 logit 微弱优势压过答案字母的临界翻转**。不是采样 bug、不是框架 bug。
+- **这是 910B vs 910C gap 的机制级解释**：~12% 题落在 EOS-answer 临界带（修复上限 +6~7pp），加答案选择上的同级临界翻转 → 17.5pp gap 的主体 = "临界决策落在哪边"。外部 910C 全量 69.7% 反推其空响应率必然 <3%，与该机制自洽。
+- **规则内不可修**（压 EOS = 改 logits = 改数学红线）。归因从"推测平台差异"升级为"定位到首 token 临界带"。
+
+**首版探针的教训**：第一版插在 `is_end_token` 命中处（采样后），读到的是 `eval_id_with_hidden` 把采样 token decode 之后的"下一步"分布 → 曾误判"greedy 选了 rank-4"。**采样探针必须放采样前**。
+
+### 三、Track B 同机对照（HF/torch_npu 复跑 3 个空响应题）— ⭐结论反转
+
+本机重建 venv-trackb（torch 2.8.0 + torch_npu 2.8.0.post5 + transformers 4.51.3，注意本版 chat API 用 `msgs=[{"role":"user","content":[img...,text]}]` 结构化消息）。脚本 `trackb_empty_margin.py`（官方 prompt 模板，64帧，greedy）。
+
+**结果：HF 三题全对，llama.cpp 同机三题全空**：
+
+| 题 | GT | llama.cpp-omni | HF/torch_npu（同 910B, F16） |
+|---|---|---|---|
+| 093-1 | D | `''` 空 | **'D' ✅**（7s） |
+| 097-3 | A | `''` 空 | **'A' ✅**（2s） |
+| 114-1 | D | `''` 空 | **'D' ✅**（6s） |
+
+**推翻"910B 环境级归因"**：EOS 临界空响应是 **llama.cpp-omni 特有现象**（同硬件同精度下 HF 不触发）。两种可能剩余解释：
+1. **协议层差异**（可修方向！）：C++ 的 prefill 构造 vs HF 参考 —— 手工拼的 `"<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"` 模板（omni.cpp:11025）token 边界 vs HF chat template、帧分隔符（C++ 每帧后 prefill `"\n"` vs HF `<image>./</image>`）、图像预处理细节。
+2. **数值层差异**（不可修）：ggml-cann vs torch_npu 的 kernel/累加顺序 → logits 微差 → 临界翻转。
+
+**与既有证据的合成**：旧 Track B（08-11 旧机）HF 在 KB99 子集 ~50% ≈ llama.cpp 51.5-53.5% —— 两框架在"有作答"的题上水平相当；HF 的优势集中在**不产生空响应**。若 llama.cpp 的 ~12% 空响应按 HF 行为恢复 → +6~7pp。910C 全量 69.7% 的 gap 仍部分未解（HF 在本机全量分未知），但"硬件末日论"已死：**瓶颈 = llama.cpp-omni ×（协议细节 ∨ 数值路径）**。
+
+**下一步（若继续）**：① 取 HF 首 token logits（EOS vs 'D' 的 margin）与 C++ 的 0.63 对比 —— margin 大 → 协议差异为主；② 逐项对齐协议变量（模板字符串 tokenize 对比、帧分隔符、预处理）做消融。注意任何引擎改动都需重新过精度红线与 bench/huawei 一致性。
+
+### 附：本次踩坑记录
+
+- `head -N` 关管道 → SIGPIPE 杀 cmake（机器手册 §8 原班坑）；构建输出必须落文件再 grep。
+- omni.cpp 属 **libomni.so**（target `omni`），exe link.txt 之外还需重链 lib；两个 link.txt 都要补 `-lascendcl`。
+- 新 API：`llama_n_vocab(model)` 已弃用 → `llama_vocab_n_tokens(llama_model_get_vocab(model))`；`llama_get_model` 返回 const。

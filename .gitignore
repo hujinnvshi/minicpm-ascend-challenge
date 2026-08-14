@@ -63,3 +63,4 @@ benchmark/video-mme/data/
 
 # G2 benchmark: Daily-Omni 转换产物（684 mp4+wav + jsonl, ~2.7GB, 不入库）
 benchmark/daily-omni-data/
+benchmark/video-mme-cookbook/diag/videomme_domain180_data/
