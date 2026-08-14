@@ -3,16 +3,17 @@
 > 赛事：MiniCPM-o 昇腾推理优化 · **赛道一 · 子赛道 A（llama.cpp-omni）**，核心指标 **SPEAK→WAV RTF**。
 > 环境：Atlas 910B3 单卡（die0，64GB HBM）+ CANN 9.1.0-beta.1 + aarch64。
 > 分支：`bench-huawei-adapt`（当前评测主分支，全部 push origin）。
+> ⚠️ **2026-08-12 独立复现**：见 `docs/verification-2026-08-12.md`（beta.3 环境实测）。口径审计结论：**Daily 已补全量（1196 题，79.8%，达准入）**；**Video-MME 仍为 99 题子集，与官方全量 2700 基线不可直接比**；RTF/TTS-WER 口径一致。
 
 ## 一、准入状态（一表看清）
 
 | 项 | 官方基线 | 准入阈值 | 我们 | 状态 |
 |---|---|---|---|---|
 | **性能 SPEAK→WAV RTF**（排名核心）| 1.087 | <1.087 | **0.57**（24线程+NUMA）/ 0.68（默认）| ✅ **beat 48%** |
-| **Daily-Omni** 精度 | 79.5 | ≥77.5 | **79.8%**（全量1196题，官方Overall）| ✅ 微超基线(+0.3pp)，达准入 |
+| **Daily-Omni** 精度 | 79.5（全量1196）| ≥77.5 | **79.8%**（全量1196题，官方Overall，退化0）| ✅ 微超基线(+0.3pp)，达准入 |
 | **TTS-Seed WER** | 1.414 | ≤1.56（增幅≤10%）| **1.501%**（全量2020题）| ✅ 增幅 6.2% |
 | **TTS-Seed ASV/SIM** | 0.709 | ≥0.689（降幅≤0.02）| **0.694**（全量2020题）| ✅ 降幅 0.015 |
-| **Video-MME** 精度 | 69.0 | ≥67.0 | **51.5%**（99题官方pipeline）| 📋 **待赛方**（证据充分，非代码问题）|
+| **Video-MME** 精度 | 69.0（全量2700）| ≥67.0 | **51.5%**（**99题子集**，复现 53.5%）| 📋 待赛方（子集口径，证据充分）|
 | **Demo** | — | 端到端稳定 | 3 进程跑通（gateway+worker+backend，含视频）| ✅ |
 
 **结论：性能 + Daily-Omni + TTS-Seed（WER/ASV）三项达标，Video-MME 代码层已穷尽、证据充分，球在赛方。**
@@ -29,7 +30,7 @@
 
 | Benchmark | 我们 | 怎么跑 | 文档 |
 |---|---|---|---|
-| **Daily-Omni 88%** | 超基线 79.5 | parquet→jsonl+音视频转换 + 官方 `run_all.sh --tasks daily-omni` | `daily-omni-eval.md` + `benchmark/daily-omni-convert/` |
+| **Daily-Omni 79.8%** | 微超基线 79.5（+0.3pp）| parquet→jsonl+音视频转换 + 官方 `run_all.sh --tasks daily-omni` | `daily-omni-eval.md` + `benchmark/daily-omni-convert/` |
 | **TTS-Seed WER 1.501% / ASV 0.694** | 两项达标 | 官方 `run_tts_eval_cpp_zh.sh` 全量2020（generate NPU + WER/SIM CPU）| `tts-seed-eval.md` + `benchmark/tts-seed-convert/` |
 | **Video-MME 51.5%** | gap（待赛方）| 官方不可改 `evaluation/` 99题 + Track B + vision 诊断 | `multiframe-degradation-fix.md` + `vision-npu-vs-cpu-diagnosis.md` |
 
