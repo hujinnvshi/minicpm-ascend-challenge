@@ -707,3 +707,32 @@ init_from_host_caches 校验 cache_host.n_timesteps != n_timesteps → 拒绝
 - 结果：**两温度逐题 Raw 完全一致**（题1 `\nC. Berries` / 题2 `A` / 题3 `C. 2.` / 题4 全`\n`退化 / 题5 `\n\nA` / 题6 `C`），准确率均 2/6。
 - 结论：低温度区间（0~0.1）**采样参数无杠杆**，temp=0 已最优 —— 排除性验证完成，符合 eval_cli 注释预期（temp>0 让 MCQ 跑偏）。
 - **副产品**：题4 temp=0/0.1 **均**输出全 `\n` 硬退化（Pred=''，非 NaN、确定性、非随机）→ 多帧退化在个别题仍有残留（非本轮纯运行时可解），留作 attention fp32 红线实验的潜在触发点（证据方向：长 context 非随机字符退化）。
+
+---
+
+## 实验 2026-08-14（下午）： 题4 退化根因四路排除（attention 路径 / vision backend 全排除）
+
+> 分支 `bench-huawei-adapt`。题4 = 99q 子集第 4 题（video `N1cdUjctpG8`，GT=C），B1 发现其在 temp=0/0.1 下均输出全 `\n`（确定性退化）。本轮用该样本做根因定位，四种组合全部实验。
+
+**四路结果（题4 输出一字不差的全 `\n`，Pred=''）**：
+
+| # | vision backend | attention 路径 | 题4 输出 | 耗时 |
+|---|---|---|---|---|
+| 1 | NPU | fallback（默认） | 全`\n` | ~25s |
+| 2 | NPU | fallback（DISABLED，**=1 无效对比**） | 全`\n` | ~25s |
+| 3 | **CPU**（参考精度） | fallback | 全`\n` | **15.2min** |
+| 4 | NPU | **FA**（FusedInferAttentionScoreV2，ENABLED） | 全`\n` | 0.3min |
+
+**关键中间发现（修正上午阶段1 的草率结论）**：
+- `llama-context.cpp:3397-3408`：**AUTO + CANN → flash_attn 强制 off**（注释原文："the fused attention operator is numerically unstable on some SOCs under long / multi-image shapes. Force-disable FA on CANN in AUTO mode; pass --flash-attn on to opt back in"）→ **生产路径从未走 FA，一直是 fallback（QK^T F32 累加 + softmax）**。
+- 上午阶段1 的 DISABLED 实验 = 默认同路径，**无效对比**；其"推翻 oghub 假设"的结论作废 —— oghub 说"FA 被关"是对的（只是关在 llama.cpp 层、是上游故意的，且 forcing off 理由正是多帧不稳）。
+- vision backend 切换 = `Omni_BACKEND_DEVICE=CPU`（vision.cpp:231，纯 env）；CPU vision 实测 **13.8s/帧**（64 帧 ≈883s）必然超 eval client 的 `INFER_TIMEOUT=300s`（evaluation/ 不可改），故绕过 client 直接驱动 eval-cli 的 stdin/stdout JSONL 协议（脚本 `benchmark/video-mme-cookbook/diag/q4_cpu_vision.py`，自控超时、vision backend 可选）。
+- eval-cli 重编：CMakeCache 链接缺 `-lascendcl` 会报 `aclrtGetDevice/aclrtSetDevice undefined`（--no-allow-shlib-undefined），需在 `link.txt` 补 `-L$ASCEND_TOOLKIT_HOME/aarch64-linux/lib64 -lascendcl` 后手动链接。
+
+**结论**：
+1. **vision NPU/CPU 漂移（cos 0.993–0.998）不是根因** —— CPU vision（参考精度）题4 输出一字不差。补上 08-12 诊断路径 B 的端到端缺口，与路径 A（特征级）闭环一致。
+2. **attention 路径（FA vs fallback）不是根因** —— 强制 FA（ACLNN FusedInferAttentionScoreV2，prefill `innerPrecise=2`）题4 输出一字不差。
+3. 退化是**确定性的、与 vision backend 和 attention 路径均无关** → 指向 LLM 更底层（RoPE / KV 累积 / 其他算子）或模型本身对该视频多帧 context 的行为，或 910B 环境数值特性 —— 均非"换 backend / 切路径"可解。
+4. **强化"51.5% 是真实水平"归因**：oghub attention 假设 + flash/fallback + NPU/CPU vision 全部实验排除。剩余出路仍为非代码路径：910C 复现 / 赛方确认 910B 独立基线 / 环境受限豁免。
+
+**可回滚状态**：源码已 `git checkout`（ENABLED/DISABLED 行均已去）；`build-cann/bin/llama-omni-eval-cli` 为 FA 实验版（**勿用于评测**，评测用 `build/bin` 0812 版）；`flashon.bak` 为 Aug10 旧版（无 `--seed`，同样勿用）。
