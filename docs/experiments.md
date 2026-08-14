@@ -790,7 +790,19 @@ init_from_host_caches 校验 cache_host.n_timesteps != n_timesteps → 拒绝
 
 **与既有证据的合成**：旧 Track B（08-11 旧机）HF 在 KB99 子集 ~50% ≈ llama.cpp 51.5-53.5% —— 两框架在"有作答"的题上水平相当；HF 的优势集中在**不产生空响应**。若 llama.cpp 的 ~12% 空响应按 HF 行为恢复 → +6~7pp。910C 全量 69.7% 的 gap 仍部分未解（HF 在本机全量分未知），但"硬件末日论"已死：**瓶颈 = llama.cpp-omni ×（协议细节 ∨ 数值路径）**。
 
-**下一步（若继续）**：① 取 HF 首 token logits（EOS vs 'D' 的 margin）与 C++ 的 0.63 对比 —— margin 大 → 协议差异为主；② 逐项对齐协议变量（模板字符串 tokenize 对比、帧分隔符、预处理）做消融。注意任何引擎改动都需重新过精度红线与 bench/huawei 一致性。
+**四、HF 首 token margin 实测（同日,决定性）**：monkeypatch 内层 `llm.generate` 截 `output_scores`：
+
+| 题 | HF 首 token top5(logit) | llama.cpp 同题探针 |
+|---|---|---|
+| 093-1 | **'D' -0.011** ≫ 'A' -4.59 ≫ 'B' -7.98（**EOS 不在 top5**） | EOS 12.27 > 'A' 11.64（'D' 不在 top5） |
+| 097-3 | **'A' -0.005** ≫ 'C' -6.0 | 空 |
+| 114-1 | **'D' -0.000** ≫ 'A' -11.5 | 空 |
+
+**结论升级：协议/输入差异坐实**。HF 极度自信（首字母压第二名 4.6~11.5 logit），llama.cpp 是 EOS 微弱领先的糊状分布 —— **~5 logit 整体重排远超 kernel 累加噪声量级（0.1~0.5）**。两框架给模型的 context 实质不同。
+
+**头号嫌疑（未逐项消融）**：① chat 模板构造（C++ 手拼 `omni.cpp:11025` vs HF chat template + image-id 标签，HF 用 `<image>./</image>` + `use_image_id`，C++ 每帧 prefill `"\n"`）；② vision 预处理（**注意：此前路径A 的 cos0.995 是 HF-NPU vs HF-CPU,从未对比过 llama.cpp-vision vs HF-vision 的 embedding**）；③ 系统提示词。**下一步实验：两边 prefill 的 token 序列逐位 diff（HF 可直接打 input_ids,C++ 可加探针打 prefill tokens）→ 定位分歧点。**
+
+**战略含义**：若 C++ 侧协议对齐 HF 参考，空响应家族（+6~7pp）和大量临界错答可能一并恢复 → 这是对赛方/upstream 的**框架 bug 级发现**（官方 bench/huawei 引擎自带,非我方改动）;910C 跑 69.7% 与此的相容解释待查（同代码不同硬件数值下字母仍可险胜）。
 
 ### 附：本次踩坑记录
 
