@@ -172,6 +172,7 @@ static void eval_reset(omni_context * ctx) {
     ctx->speek_done = true;                 // avoid stream_prefill(index=0) blocking
     ctx->system_prompt_initialized = false; // rebuild system prompt next turn
     ctx->simplex_round_idx = 0;
+    ctx->image_seq_idx = 0;                 // 🔧 帧编号归零(OMNI_IMAGE_ID 协议对齐,每题重置)
     {
         std::lock_guard<std::mutex> lk(ctx->text_mtx);
         ctx->text_queue.clear();

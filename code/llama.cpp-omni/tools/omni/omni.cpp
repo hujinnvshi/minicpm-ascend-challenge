@@ -1288,6 +1288,17 @@ static bool eval_id_with_hidden(struct omni_context * ctx_omni, common_params* p
 static bool eval_string(struct omni_context * ctx_omni, common_params* params, const char* str, int n_batch, int * n_past, bool add_bos, bool get_emb = false) {
     std::string              str2     = str;
     std::vector<llama_token> embd_inp = common_tokenize(ctx_omni->ctx_llama, str2, add_bos, true);
+    // [diag] OMNI_DEBUG_PREFILL=1: dump 每次 prefill 文本的 token(与 HF 逐位 diff 用)
+    if (std::getenv("OMNI_DEBUG_PREFILL")) {
+        const llama_vocab * vocab_dp = llama_model_get_vocab(llama_get_model(ctx_omni->ctx_llama));
+        fprintf(stderr, "[PREFILL-DUMP] n=%zu tokens:", embd_inp.size());
+        for (llama_token t : embd_inp) {
+            char piece_dp[64] = {0};
+            llama_token_to_piece(vocab_dp, t, piece_dp, sizeof(piece_dp), 0, true);
+            fprintf(stderr, " %s", piece_dp);
+        }
+        fprintf(stderr, "\n");
+    }
     return eval_tokens(ctx_omni, params, embd_inp, n_batch, n_past, get_emb);
 }
 
@@ -1333,6 +1344,29 @@ static const char * llama_loop(struct omni_context * ctx_omni, common_params *pa
 // 🔧 [双工模式] 支持 forbidden_token_ids，禁止采样 <|tts_pad|> 等 token
 static const char * sample_with_hidden_and_token(struct common_sampler * smpl, struct omni_context * ctx_omni, common_params* params, int * n_past, float *& hidden_states, llama_token & token_id) {
     float * logits = llama_get_logits_ith(ctx_omni->ctx_llama, -1);
+
+    // [diag] OMNI_DEBUG_TOPK=1: 采样前 dump 本步 top-5 logits(定位空响应:EOS 是真argmax还是被惩罚/过滤顶上来的)
+    if (std::getenv("OMNI_DEBUG_TOPK") && logits) {
+        const llama_vocab * vocab_dbg2 = llama_model_get_vocab(llama_get_model(ctx_omni->ctx_llama));
+        const int n_vocab_dbg2 = llama_vocab_n_tokens(vocab_dbg2);
+        int top_id[5]; float top_v[5];
+        for (int k = 0; k < 5; ++k) { top_id[k] = -1; top_v[k] = -1e30f; }
+        for (int i = 0; i < n_vocab_dbg2; ++i) {
+            float v = logits[i];
+            for (int k = 0; k < 5; ++k) {
+                if (v > top_v[k]) {
+                    for (int j = 4; j > k; --j) { top_v[j] = top_v[j-1]; top_id[j] = top_id[j-1]; }
+                    top_v[k] = v; top_id[k] = i; break;
+                }
+            }
+        }
+        print_with_timestamp("[DBGTOPK-PRE] n_past=%d top5:\n", *n_past);
+        for (int k = 0; k < 5; ++k) {
+            char piece_dbg2[64] = {0};
+            llama_token_to_piece(vocab_dbg2, top_id[k], piece_dbg2, sizeof(piece_dbg2), 0, true);
+            print_with_timestamp("[DBGTOPK-PRE] #%d id=%d logit=%.4f piece=%s\n", k, top_id[k], top_v[k], piece_dbg2);
+        }
+    }
     
     // 🔧 [双工模式] 在采样前调整 logits
     if (ctx_omni->duplex_mode) {
@@ -5058,6 +5092,13 @@ void llm_thread_func(omni_context* ctx_omni, common_params* params){
                     if (ctx_omni->duplex_mode) {
                         eval_string(ctx_omni, params, "<unit><image>", params->n_batch, &ctx_omni->n_past, false);
                     } else {
+                        // 🔧 [对齐 HF 参考协议] HF 每帧前有 <image_id>N</image_id>(训练时带帧编号=时序线索);
+                        // 官方 eval 路径缺失该编号曾致 EOS 临界空响应(experiments.md 2026-08-14 晚)。OMNI_IMAGE_ID env 门控。
+                        if (std::getenv("OMNI_IMAGE_ID")) {
+                            char id_buf[48];
+                            snprintf(id_buf, sizeof(id_buf), "<image_id> %d </image_id>", ctx_omni->image_seq_idx++);
+                            eval_string(ctx_omni, params, id_buf, params->n_batch, &ctx_omni->n_past, false);
+                        }
                         eval_string(ctx_omni, params, "<image>", params->n_batch, &ctx_omni->n_past, false);
                     }
                     
@@ -10645,6 +10686,8 @@ bool stream_prefill(struct omni_context * ctx_omni, std::string aud_fname, std::
         
         // 标记系统 prompt 已初始化
         ctx_omni->system_prompt_initialized = true;
+        // 🔧 系统提示重建 = 新会话/新题开始,image_id 帧编号归零(对齐 HF 参考协议, OMNI_IMAGE_ID 门控)
+        ctx_omni->image_seq_idx = 0;
 
         //把这步完成再开llm线程以防冲突
         ctx_omni->n_keep = ctx_omni->n_past;
@@ -11196,9 +11239,36 @@ bool stream_decode(struct omni_context * ctx_omni, std::string debug_dir, int ro
                     }
                 }
                 
+                // [diag] OMNI_DEBUG_TOPK=1: end-token 命中时 dump 本步 top-5 logits(定位空响应是行为还是数值临界)
+                if (std::getenv("OMNI_DEBUG_TOPK") && ctx_omni->ctx_llama) {
+                    const float * logits_dbg = llama_get_logits_ith(ctx_omni->ctx_llama, 0);
+                    if (logits_dbg) {
+                        const llama_model * mdl_dbg = llama_get_model(ctx_omni->ctx_llama);
+                        const llama_vocab * vocab_dbg = llama_model_get_vocab(mdl_dbg);
+                        const int n_vocab_dbg = llama_vocab_n_tokens(vocab_dbg);
+                        int top_id[5]; float top_v[5];
+                        for (int k = 0; k < 5; ++k) { top_id[k] = -1; top_v[k] = -1e30f; }
+                        for (int i = 0; i < n_vocab_dbg; ++i) {
+                            float v = logits_dbg[i];
+                            for (int k = 0; k < 5; ++k) {
+                                if (v > top_v[k]) {
+                                    for (int j = 4; j > k; --j) { top_v[j] = top_v[j-1]; top_id[j] = top_id[j-1]; }
+                                    top_v[k] = v; top_id[k] = i; break;
+                                }
+                            }
+                        }
+                        print_with_timestamp("[DBGTOPK] sampled=%d n_vocab=%d\n", sampled_token, n_vocab_dbg);
+                        for (int k = 0; k < 5; ++k) {
+                            char piece_dbg[64] = {0};
+                            llama_token_to_piece(vocab_dbg, top_id[k], piece_dbg, sizeof(piece_dbg), 0, true);
+                            print_with_timestamp("[DBGTOPK] #%d id=%d logit=%.4f piece=%s\n", k, top_id[k], top_v[k], piece_dbg);
+                        }
+                    }
+                }
+
                 if (is_end_token(ctx_omni, sampled_token)){
                     llm_finish = true;
-                    
+
                     // 🔧 [与 Python 对齐] 设置 llm_generation_done 标志
                     // TTS 线程会检查这个标志来决定是否添加 text_eos_embed
                     if (!ctx_omni->duplex_mode) ctx_omni->llm_generation_done.store(true);

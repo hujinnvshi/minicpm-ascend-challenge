@@ -483,6 +483,11 @@ struct omni_context {
     
     // 🔧 [单工模式] 当前轮次索引（用于创建 round_000、round_001 等子目录）
     int simplex_round_idx = 0;
+
+    // 🔧 [image_id 序号] 对齐 HF 参考协议：simplex 下每张图/帧 prefill 前的 <image_id>N</image_id> 编号。
+    // HF 训练格式带帧编号（64 帧视频的时序线索）；由 OMNI_IMAGE_ID env 门控启用（omni.cpp simplex 分支）。
+    // 每题/每轮清零：eval_reset（omni-eval-cli）与 stream_prefill(index=0) 系统提示重建时。
+    int image_seq_idx = 0;
     
     // ==================== 特殊 Token ID ====================
     // 在 omni_init 时从词表查找并缓存
