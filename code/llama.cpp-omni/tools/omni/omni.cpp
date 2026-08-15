@@ -4073,6 +4073,12 @@ struct omni_context * omni_init(struct common_params * params, int media_type, b
                                 const std::string & base_output_dir) {
     // process the prompt
     print_with_timestamp("=== omni_init start\n");
+    // [diag] OMNI_FORCE_FA=1: 强制 flash_attn(绕过 llama-context.cpp AUTO+CANN 的 forcing off)。
+    // 用途: FA×NZ=off 的净 A/B(此前四路排除是 NZ=on 污染数据)。默认零影响。
+    if (std::getenv("OMNI_FORCE_FA")) {
+        params->flash_attn_type = LLAMA_FLASH_ATTN_TYPE_ENABLED;
+        print_with_timestamp("[diag] OMNI_FORCE_FA: flash_attn_type=ENABLED\n");
+    }
     // if (params->prompt.empty() && params->interactive == false) {
     //     LOG_INF("prompt should be given or interactive mode should be on");
     //     return NULL;
