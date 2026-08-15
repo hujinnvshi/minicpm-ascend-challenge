@@ -107,6 +107,7 @@ curl -X PUT -H "content-type: application/json" \
 - [ ] build-cann 无报错,产物 3 个 binary 齐。
 - [ ] perf-duplex 出报告,**SPEAK→WAV RTF ≈ 0.58-0.59**(24线程+NUMA 绑 NPU 同 node)/ **0.68-0.69**(默认16)(<基线 1.087)。
 - [ ] NUMA 绑核先查 `cat /sys/bus/pci/devices/<NPU_bus>/numa_node`(勿照抄核号)。
+- [ ] 精度评测走官方 `run_all.sh` 路径(NZ=off 自动注入);**直跑必须 `export GGML_CANN_WEIGHT_NZ=off`**(NZ=on 致空串/换行复读,数据作废,见 nz-pollution-impact.md)。
 - [ ] npu-smi 采样 decode 期 AICore burst >60%(证 compute 在 NPU)。
 - [ ] `llm_debug/llm_text.txt` 输出正常(防乱码)。
 - [ ] 3 进程 Demo 启动,前端可访问,文本→流式回复正常。

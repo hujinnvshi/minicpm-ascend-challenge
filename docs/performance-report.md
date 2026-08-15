@@ -65,6 +65,7 @@
 - **CANN 不支持 Q4_K_M 量化算子** → LLM 用 F16(4090 的"量化最优"在 910B 失效;Q8_0 实测不提速,dequant-bound)。非异常,平台约束。
 - **P1.6 曾误判"AICore 4% = compute 没走 NPU"** → P1.7 npu-smi 细粒度采样澄清为时间均值伪影(实际 burst 60–84%),offload 一直正常。
 - 910B3 替代 910C:算力约为半颗 910C,RTF 绝对值偏高但口径统一即公平。
+- **NZ 标注(2026-08-15)**:RTF 于 `GGML_CANN_WEIGHT_NZ=on`(ggml-cann 默认)测得;NZ=off 对 RTF 的影响待 NPU/CPU 独占复测(首次对比被并行评测 CPU 竞争污染,见 `nz-pollution-impact.md` §三.1)。精度评测经官方 run_all 路径为 NZ=off 干净口径。
 
 ## 9. 复现(摘要)
 

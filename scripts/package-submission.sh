@@ -124,11 +124,17 @@ MiniCPM & 昇腾推理优化与应用创新挑战赛 - 赛道一 子赛道A (lla
   3) 精度: 见 docs/{daily-omni-eval,tts-seed-eval,videomme-baseline-clarification}.md
   4) Demo: bash scripts/demo.sh (3 进程 gateway/worker/backend, https://127.0.0.1:8006/)
 
-关键实测数字（2026-08-14 口径）:
+关键实测数字（2026-08-14/15 口径）:
   性能 RTF: 0.58-0.59（24 vocoder 线程 + NUMA 同 node; 默认 16 线程 0.68-0.69）
   Daily-Omni: 79.8% (全量 1196 题; 基线 79.5)
   TTS-Seed: WER 1.501% (基线 1.414) / ASV 0.694 (基线 0.709)
-  Video-MME: 51.5-53.5% (99 题子集; 官方基线 69.0 为全量 2700, 口径差异待赛方澄清, 见 docs/organizer-inquiry-2026-08-12.md)
+  Video-MME: 51.5-53.5% (99q KB 域) / 270 题合池 63.3%±5.7pp (NZ=off; 官方基线 69.0 全量口径待赛方澄清)
+
+🔴 评测纪律（必读）:
+  精度评测必须走官方 run_all.sh 路径（GGML_CANN_WEIGHT_NZ=off 自动注入）;
+  任何直跑必须显式 export GGML_CANN_WEIGHT_NZ=off（ggml-cann 默认 on, NZ=on 会致
+  空串/换行复读等异常输出, 直跑数据作废——详见 docs/nz-pollution-impact.md）。
+  NUMA 绑核必须按机器探测: scripts/numa-bind.sh（勿照抄核号）。
 EOF
 
 # ---- MANIFEST（评审校验: 文件清单 + 大小 + sha256） ----
