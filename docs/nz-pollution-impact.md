@@ -32,7 +32,8 @@
 
 ## 三、待完成验证（结果将回填本节）
 
-1. **perf NZ=on vs NZ=off RTF 对比**（2026-08-15 首测**被并行会话 CPU 竞争污染**，待独占重测）：4 次 run 时机器上并行会话 3 个 eval 进程在跑（load 24-53），vocoder（CPU）被挤占 → RTF 全部 0.91-1.18（独占时 0.58-0.59）。NZ=on e2e 1.01/1.05 vs NZ=off 1.12/1.18，差异在竞争噪声内不可判定。**待办：NPU+CPU 独占时重测（各 ≥2 次）**；在重测前，性能报告需注明"RTF 0.58-0.59 于 NZ=on（默认）测得，NZ=off 影响待验证"。
+1. **🔴 RTF × NZ（战略级，最高优先）**：官方 `run_eval.py` 的 **RTS（RTF 性能评测）任务也注入 `GGML_CANN_WEIGHT_NZ=off`**（L321，与精度任务同）。并行会话实测（5771843，**但对照不对称——NZ=on 用历史独占 0.58，NZ=off 为同期新测**，且时段 CPU 竞争 load 15-53）：NZ=off 三跑 e2e RTF **1.08 / TTS 0.91** vs NZ=on 0.58 → **NZ 贡献 ~50% 性能，若官方 RTF 口径为 NZ=off，RTF 优势归零（1.08 ≈ 基线 1.087 边缘）**。我方首测（同竞争时段）NZ=on 1.01/1.05 vs off 1.12/1.18 亦被污染不可判。**待办（NPU+CPU 独占）：同条件 NZ=on vs off 各 ≥2 次，确定真实影响**；同时确认官方 RTF 评测脚本是否强制 NZ=off（run_eval.py rts 是官方代码事实，但比赛实际流程待查）。若 NZ=off 确认使 RTF≈1.0：出路 a) 申诉"FAQ 的 off 论证仅针对精度任务，RTS 无精度指标"（并行会话方案 A：精度 off + RTS on，env 覆盖+披露）；b) 研究 ggml-cann NZ 路径性能差异（NZ=on 快 50% 的机理，合规内恢复性能）；c) 接受 NZ=off 下排名（全队同口径，比优化）。
+   运行记录：tools/omni/output/rtf_nz{on,off}_r{1,2}.json（被污染，勿用）；并行会话 NZ=off 三跑产物待查。
 2. **TTS-Seed NZ=off 生成复核**（未做）：**venv-tts 已随机器迁移丢失**（/workspace/user_data/venv-tts 不存在，run-tts.env 亦未随包入库——benchmark/tts-seed-convert/ 只有转换脚本），重建需重装 torch/torchaudio/s3prl/funasr 并复踩 tts-seed-eval.md 记录的 5 个坑（transformers 降级 4.44.2、torchcodec、sitecustomize stub、hf-mirror wavlm、funasr 慢 import），约 1-2h。**建议子集 200 条先验**（生成 ~30min + WER/SIM CPU）——此项决定 TTS 准入数字（WER 1.501 vs 线 1.56 余量 0.059；ASV 0.694 vs 线 0.689 余量 0.005）是否有效，**优先级最高**。
 
 ## 四、对策略的影响
