@@ -12,8 +12,8 @@
 |---|---|---|---|---|
 | **Performance SPEAK→WAV RTF**（排名核心）| 1.087 | <1.087 | **1.01**（NZ=on 默认，干净 binary 独占实测）/ 1.08（NZ=off 官方口径，擦线）| ✅ **beat ~7%**（NZ=on）/ ⚠️ 擦线（NZ=off，待赛方确认 rts NZ 选择权）|
 | **Daily-Omni** 精度 | 79.5（全量1196）| ≥77.5 | **79.8%**（全量1196题，官方Overall，退化0）| ✅ 微超基线(+0.3pp)，达准入 |
-| **TTS-Seed WER** | 1.414 | ≤1.56（增幅≤10%）| **1.501%**（全量2020题）| ✅ 增幅 6.2% |
-| **TTS-Seed ASV/SIM** | 0.709 | ≥0.689（降幅≤0.02）| **0.694**（全量2020题）| ✅ 降幅 0.015 |
+| **TTS-Seed WER** | 1.414 | ≤1.56（增幅≤10%）| **0.97%**（全量2020题，NZ=off 官方口径）| ✅ 大幅优于基线（-31%）|
+| **TTS-Seed ASV/SIM** | 0.709 | ≥0.689（降幅≤0.02）| **0.708**（全量2020题，NZ=off 官方口径）| ✅ 持平基线（-0.001）|
 | **Video-MME** 精度 | 69.0（全量2700）| ≥67.0 | **51.5%**（**99题子集**，复现 53.5%）| 📋 待赛方（子集口径，证据充分）|
 | **Demo** | — | 端到端稳定 | 3 进程跑通（gateway+worker+backend，含视频）| ✅ |
 
@@ -33,7 +33,7 @@
 | Benchmark | 我们 | 怎么跑 | 文档 |
 |---|---|---|---|
 | **Daily-Omni 79.8%** | 微超基线 79.5（+0.3pp）| parquet→jsonl+音视频转换 + 官方 `run_all.sh --tasks daily-omni` | `daily-omni-eval.md` + `benchmark/daily-omni-convert/` |
-| **TTS-Seed WER 1.501% / ASV 0.694** | 两项达标 | 官方 `run_tts_eval_cpp_zh.sh` 全量2020（generate NPU + WER/SIM CPU）| `tts-seed-eval.md` + `benchmark/tts-seed-convert/` |
+| **TTS-Seed WER 0.97% / ASV 0.708** | 两项达标 | 官方 `run_tts_eval_cpp_zh.sh` 全量2020（NZ=off 官方口径生成 + WER/SIM CPU）| `tts-seed-eval.md` + `benchmark/tts-seed-convert/` + `eval_results/cpp-zh-20260815_121818-42/` |
 | **Video-MME 51.5%** | gap（待赛方）| 官方不可改 `evaluation/` 99题 + Track B + vision 诊断 | `multiframe-degradation-fix.md` + `vision-npu-vs-cpu-diagnosis.md` |
 
 **Video-MME gap 证据链（非代码问题）**：
