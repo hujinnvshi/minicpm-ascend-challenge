@@ -30,6 +30,27 @@ __pycache__/
 # ===== Node =====
 node_modules/
 
+# ===== 根级 cmake 构建产物（并行会话根级 cmake 生成，非提交物；官方已跟踪文件不受影响） =====
+code/llama.cpp-omni/CMakeCache.txt
+code/llama.cpp-omni/CMakeFiles/
+code/llama.cpp-omni/CTestTestfile.cmake
+code/llama.cpp-omni/DartConfiguration.tcl
+code/llama.cpp-omni/cmake_install.cmake
+code/llama.cpp-omni/compile_commands.json
+code/llama.cpp-omni/bin/
+code/llama.cpp-omni/**/CMakeFiles/
+code/llama.cpp-omni/**/CTestTestfile.cmake
+code/llama.cpp-omni/**/DartConfiguration.tcl
+code/llama.cpp-omni/**/cmake_install.cmake
+code/llama.cpp-omni/**/Makefile
+code/llama.cpp-omni/ggml/ggml-config.cmake
+code/llama.cpp-omni/ggml/ggml-version.cmake
+code/llama.cpp-omni/license.cpp
+code/llama.cpp-omni/llama.pc
+
+# ===== ASV/TTS eval 本地产物(大文件/本地配置, 不入 git) =====
+benchmark/seed-tts-eval/sv/wavlm_large_s3prl.pt
+
 # ===== 提交打包产物 =====
 dist/
 *.tar.gz
