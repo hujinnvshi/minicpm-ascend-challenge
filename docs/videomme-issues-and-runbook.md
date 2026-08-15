@@ -88,3 +88,5 @@ taskset -c <NPU同node的CPU段> /workspace/venv-g23/bin/python3 evaluation/vide
 2. **基准对齐**:同子集分数与 §二 相差 >5pp → 环境差异信号(记录 CANN 版本/机器)。
 3. **确定性**:抽 3 题重跑应逐字节一致(>96% 同答案为正常,个别边界题可翻)。
 4. 数据回传:`output_videomme_cpp.json` + 环境信息(npu-smi/version.cfg/内核),入库后合成跨环境对照。
+
+> **换机注意(08-15 补)**:本机的 `evaluation/videomme/tmp_frames` 是指向 `/root/frames_local` 的软链(P3 NFS 规避),已 gitignore。**新设备克隆后需自建**:`mkdir -p evaluation/videomme/tmp_frames`(若 `/workspace/user_data` 为 NFS 且批量写帧 ENOSPC,同样软链到本地盘)。测试视频统一解压到 `/root/` 下的本地目录,通过 `VIDEO_DATA_DIR` env 指定。
