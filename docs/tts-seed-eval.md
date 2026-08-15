@@ -58,6 +58,8 @@ bash run_tts_eval_cpp_zh.sh
 
 设备：generate 走 NPU（`--t2w-device gpu:0`，CANN 映射）；WER/SIM 走 CPU 16 线程并行（合规不改 evaluation/）。
 
+**⚠️ 生成偶发卡死 + 断点续跑（2026-08-15 实测）**：全量生成（2020 条, manifest 模式）可能**偶发在某条 decode 卡死**（C++ 进程 CPU 满载但 1h+ 无新 wav；无报错）。处理：`kill -9 <python> <llama-omni-tts-eval>` → 重跑 `generate_cpp.py`（**manifest 自动 skip_existing 跳过已有 wav**，从断点继续）。稳定速率 ~5-12s/条（2020 条约 4-7h）。
+
 ## 五、全量结果（2020 题，output/cpp-zh-20260812_024010-42）
 
 | 指标 | 全量(2020题) | 基线 | 准入阈值 | 判定 |
