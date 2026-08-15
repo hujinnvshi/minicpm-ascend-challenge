@@ -98,3 +98,14 @@ taskset -c <NPU同node的CPU段> /workspace/venv-g23/bin/python3 evaluation/vide
 **依据链**:官方通知"默认关闭"(非禁止)/ README 优先级明文 / rts 判分零精度检查 / FAQ 理由为文本生成症状。
 **风险与对策**:README FAQ 有"必须保持 off"无限定表述 → 提交报告透明披露 + 已向赛方发澄清(三合一邮件)。
 **精度保证数字**(NZ=off 实测): Daily 79.8%✅ / TTS 待 NZ=off 复跑 / Video-MME 270题合池 63.3%±5.7pp(全量待跑)。
+
+## 六、smoke 四任务自测记录(2026-08-15,提交门槛预演)
+
+**结果:3/4 通过** —— videomme ✅ / rts ✅ / daily-omni ✅(修路径后) / **tts ❌(仅 WER 打分环境)**。
+
+修复清单(全部为本机环境问题,非代码):
+1. config.env 被并行会话反复还原 → **改用 `EVAL_CONFIG=config.local.env` 机制**(独立文件,官方支持);
+2. eval-daily.env 含旧机路径(claude_code/、venv-omni)→ 已 sed 为本机路径;
+3. venv-g23 补装 torch/funasr/pytorch-wpe —— WER 打分仍报 funasr 包结构缺失,**待续**:需对齐旧机的 funasr 版本或换打分专用 venv(wav 生成本身成功,仅打分环节)。
+
+教训:**多 agent 并用同一工作区会互相破坏(config.env 还原/build 清理/git lock/分支切换均因此)**。规避:配置走 EVAL_CONFIG 独立文件;build 目录用后即验;关键 artifact 即时 commit。
