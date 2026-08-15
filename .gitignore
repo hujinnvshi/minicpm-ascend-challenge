@@ -8,6 +8,10 @@ code/*/output_*/
 code/*/tools/omni/output*/
 code/*/tools/omni/logs/
 
+# ===== 评测临时产物 =====
+code/llama.cpp-omni/evaluation/videomme/tmp_frames/
+code/llama.cpp-omni/evaluation/output/
+
 # ===== 大体积示例数据（需要时从上游重新获取） =====
 code/daily-omni/example_videos/
 code/daily-omni/assets/
