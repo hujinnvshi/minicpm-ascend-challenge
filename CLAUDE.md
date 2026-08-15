@@ -15,7 +15,9 @@ MiniCPM-o 4.5 全模态推理优化参赛仓库（赛道一·**子赛道 A: llam
 - 图模式 `USE_ACL_GRAPH` 在 910B **不支持**（头文件缺）。
 - **双die device 锁定**（2026-08-10 新设备 910B/beta.1 验证）：双 die 被 CANN 枚举为 device0+device1，**dev1（die1）不可用**。perf-duplex 双工流水线会跑到 dev1，在 `aclnn_repeat_interleave`（RoPE 用）崩溃 exit139。跑 perf/duplex 前**必须** `ASCEND_RT_VISIBLE_DEVICES=0 CUDA_VISIBLE_DEVICES=0`（→ aclrtGetDeviceCount=1，只看 die0）。npu-smi 查询用 `-i 5`，binary 用 dev0。详见 `docs/session-2026-08-10-newenv.md`。
 - 优化**不得改推理数学**（仅流水线/调度层）→ 精度 = F16 基线，准入必过。
-- **NUMA 亲和（2026-08-14 新机纠正，易踩）**：vocoder/推理进程**必须绑 NPU 同 NUMA node**，不能照抄 `taskset -c 192-223`。查法：`cat /sys/bus/pci/devices/<NPU_bus>/numa_node`（NPU bus 从 `npu-smi info` 取，本机 `0000:42:00.0`）→ 绑该 node 的 CPU。**旧机 NPU 在 node6 → `192-223`；新机（npu id=7）NPU 在 node2 → `taskset -c 64-95`**。照抄 192-223 会跨 NUMA DMA，使 RTF 退化到 0.68（正确绑核 0.57-0.59）。详见 `docs/experiments.md` 2026-08-14 节。
+- **NUMA 亲和（2026-08-14 新机纠正，易踩）**：vocoder/推理进程**必须绑 NPU 同 NUMA node**，不能照抄 `taskset -c 192-223`。查法：`cat /sys/bus/pci/devices/<NPU_bus>/numa_node`（NPU bus 从 `npu-smi info` 取，本机 `0000:42:00.0`）→ 绑该 node 的 CPU。**旧机 NPU 在 node6 → `192-223`；新机（npu id=7）NPU 在 node2 → `taskset -c 64-95`**。照抄 192-223 会跨 NUMA DMA，使 RTF 退化到 0.68（正确绑核 0.57-0.59）。详见 `docs/experiments.md` 2026-08-14 节。一键：`scripts/numa-bind.sh`（自动探测）。
+- **🔴 NZ 纪律（2026-08-15 大反转，必读）**：官方要求 **`GGML_CANN_WEIGHT_NZ=off`**（否则空串/换行复读等异常输出；ggml-cann.cpp:1286/1554 默认 `value_or("on")`），off **只经 run_all.sh→run_eval.py 官方路径注入**。**一切直跑（eval_cpp_pipeline.py 直接起 / 诊断 binary）必须显式 `export GGML_CANN_WEIGHT_NZ=off`**，否则数据作废。08-14 晚"空响应=EOS 临界/缺 image_id"整套归因建立在 NZ=ON 直跑上，**作废**；NZ=off 下空响应≈0（99q 仅 1/99）。详见 `docs/nz-pollution-impact.md`。
+- **Video-MME 最新认知（2026-08-15）**：NZ=off 下 image_id/去系统提示/FA 四杠杆 45 题**逐字节零翻转**（63%±6pp = 本机规则内天花板）；270 题合池实测 **63.3%±5.7pp**（准入 67 在区间上沿，全量 2700 仍为唯一裁决）；51.5-53.5% 是 99q KB 域历史口径（KB 视频异质性极大 78/44/52）。协议对齐路线正式关闭（不启用，门控留作探针）。
 
 ## 常用命令
 
@@ -84,4 +86,4 @@ npu-smi info -t usages -i 1
 
 ## 当前进度（一句话）
 
-性能(SPEAK→WAV RTF 0.83<1.087)✅ + Demo(3 进程+视频)✅ + 报告/复现✅ 已 push main；**卡在等官方 llama.cpp-omni benchmark 脚本跑 3 项精度数**（F16 不改数学，预期=基线）。详见 `docs/session-2026-08-05.md`。
+性能(SPEAK→WAV RTF **0.58-0.59**<1.087)✅ + Demo(3 进程+视频)✅ + Daily 79.8%✅ + TTS 1.501/0.694✅（**NZ=on 下生成，待 NZ=off 复核**）+ Video-MME 51.5-53.5%（99q KB）/ 270 题合池 **63.3%±5.7pp**（NZ=off，准入 67 在区间上沿，待赛方基线口径）✅/⚠️；**NZ 污染大反转已闭环**（08-14 晚空响应归因作废，协议对齐路线关闭，NZ 纪律见红线）。提交物打包流程已重写并跑通（`scripts/package-submission.sh`）。分支：`review-optimize`（评审改进 + 全部最新实验）。详见 `docs/nz-pollution-impact.md` + `docs/experiments.md` 08-14/15 节。
