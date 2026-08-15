@@ -26,11 +26,15 @@ echo "[1/7] 完整可构建源码 → code/llama.cpp-omni/（排除 build 产物
 if [ ! -d "$LLAMA" ]; then echo "FATAL: $LLAMA 不存在"; exit 1; fi
 rsync -a \
   --exclude 'build' --exclude 'build-cann' --exclude 'build-huawei' \
-  --exclude 'cmake-build-*' --exclude 'models/' --exclude '*.gguf' --exclude '*.safetensors' \
+  --exclude 'cmake-build-*' --exclude '*.safetensors' \
+  --exclude 'bin/' --exclude 'obj/' \
+  --exclude 'CMakeFiles/' --exclude 'CMakeCache.txt' --exclude 'CTestTestfile.cmake' \
+  --exclude 'DartConfiguration.tcl' --exclude 'cmake_install.cmake' \
   --exclude 'tools/omni/output/' --exclude 'tools/omni/logs/' \
   --exclude 'evaluation/output/' --exclude 'evaluation/appendix/' \
   --exclude 'evaluation/*/__pycache__/' --exclude 'evaluation/*/log/' \
   --exclude 'evaluation/tts_seed/eval_results/' --exclude '*.bak' \
+  --exclude 'evaluation/judge-final/sessions/20*' --exclude 'evaluation/config.local.env' \
   "$LLAMA/" "$PKG_DIR/code/llama.cpp-omni/"
 # 记录评测用 binary 版本信息（评审重跑时对照）
 BIN_VER=""
