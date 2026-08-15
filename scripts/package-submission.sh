@@ -29,6 +29,8 @@ rsync -a \
   --exclude 'cmake-build-*' --exclude 'models/' --exclude '*.gguf' --exclude '*.safetensors' \
   --exclude 'tools/omni/output/' --exclude 'tools/omni/logs/' \
   --exclude 'evaluation/output/' --exclude 'evaluation/appendix/' \
+  --exclude 'evaluation/*/__pycache__/' --exclude 'evaluation/*/log/' \
+  --exclude 'evaluation/tts_seed/eval_results/' --exclude '*.bak' \
   "$LLAMA/" "$PKG_DIR/code/llama.cpp-omni/"
 # 记录评测用 binary 版本信息（评审重跑时对照）
 BIN_VER=""
