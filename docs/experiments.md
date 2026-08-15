@@ -865,10 +865,21 @@ diff 结果（093-1）——两条铁证级协议分歧：
 1. **帧丢失**：video 001-010 全部正常（64 帧 prep + 3 题成功）。video 011 起：011-1 成功、011-2 立即 `frame not found: tmp_frames/011/frame_002.jpg`（同一秒）→ 其后 011-3、301-1/2/3、302-1/2/3 全部 frame not found。301/302 的 prep 日志正常（"Prepared 64 frames"）但 8-26s 后帧不可读。011 的 prep 日志行缺失。单 worker 顺序执行（NUM_GPUS=1）排除并发互踩；cleanup_all_frames 只在 finally。
 2. **CLI CANN kernel 崩溃**（cli_gpu0.log）：`MTE accesses an invalid GM address / AIV vector core exception`（Cast/Add kernel 失败,device_id=0, retCode=0x31, 507057）→ `ggml_abort` at `ggml-cann.cpp:2224 aclrtSynchronizeStream`，栈在 stream_prefill→eval_tokens→decode。CLI 崩溃→client 重启（3 次用尽→GPU 不可恢复→整轮丢弃）。
 
-**待确认**：帧丢失/崩溃是否与【对齐门控】或【重编 binary】相关 → 隔离对照进行中：build/bin（0812 官方评测版, 无门控, 即 08-12 复现 53.5% 的同一 binary）跑 smoke 33（覆盖 video 001-011, 即含 011）：
-- 若对照组也丢帧/崩 → 环境/长视频/ffmpeg 因素,与门控无关
-- 若对照组正常 → 对齐门控或重编引入,需逐位检查 prefill token 序列（含 image_id 的 token 数变化 → kernel 形状越界嫌疑）
+**隔离对照（build/bin 0812 官方评测版，无门控）= smoke 33（video 001-011，含 011）：20/33 = 60.6%，0 ERROR，011 正常通过**（run 20260814_235530）。对照组无帧丢失、无 CLI 崩溃。
 
-（占位, 结果见下节；D1 结论以对照组 + 重跑对齐组为准）
+**关键鉴别（2026-08-15 凌晨）**：
+1. `build-cann/bin/libllama.so.0` + `libggml-cann.so.0` mtime = **08-14 05:58**（早于 08-14 全天的 omni.cpp/协议对齐改动 17:27），且含 14 处 FA/FusedInferAttentionScore 符号（build/bin 为 0）→ **build-cann 的 llama/ggml-cann 层是 FA 实验期构建残留，非当前源码**（08-14 晚 CAUTION"build-cann 为 FA 实验版勿用于评测"即指此）。23:32 的增量构建只触及 omni/eval-cli target，未重编 llama 层。
+2. 对齐组首轮（build-cann 残留 llama 层 + 门控）在 video 011 起崩溃/丢帧；对照组（build/bin 干净 llama 层 + 无门控）同段全过 → **罪魁 = build-cann 残留 llama 层（FA 实验构建），与门控 env 无必然关系**（需干净 binary + 门控复跑确认）。
+3. **修复**：`cmake --build build-cann --target llama-omni-eval-cli llama-omni-eval-daily-cli --clean-first`（全量重编，进行中）→ 干净 binary 复跑对齐组 99q（门控）与基线组 99q（同 binary 无门控），完成严格 A/B。
+
+> 附带确认：官方评测 binary（build/bin）+ 当前数据/机器 = 60.6%（前 33 题）与 08-11 99q 51.5%（33 视频平均）自洽（前 11 视频段偏高，整体被长视频段拉低），评测链路本身健康。
+
+**结论**：D1 的真正阻碍不是协议对齐，而是测试环境用了 FA 残留 binary；干净重编后 A/B 结果见下节。
 
 **九、99q 完整对齐 A/B 终局(修复路线关闭)**:IMAGE_ID+TEXT_CHAT_SYS 完整对齐在 KB99 = **28.3%**(28/99)—— 比单 image_id(35.4%)更差,远低于基线(53.5%);无字母响应 27/99 不降反升。**合成洞察:HF(旧机 Track B)在同 KB99 子集 ≈50%,与官方协议 llama.cpp 打平** —— "HF 全对"现象集中于非 KB 域(093 等),KB 域两框架同为 ~50%。**定论:协议对齐不能恢复 HF 等价(实验B 已证 LLM 数值残余)且 KB 有害 → 修复路线关闭,不启用;OMNI_IMAGE_ID/OMNI_TEXT_CHAT_SYS 保留为 env 门控诊断探针(默认零影响);官方评测用默认协议 + build/bin。** Video-MME 最终立场回到:官方口径 51.5-53.5% + 完整证据链(协议 diff、机制定位、数值等价性、HF 对照)→ 对赛方沟通(基线口径/910C 确认/豁免)。
+
+**十、🔴 NZ 污染大反转（2026-08-15,重审准入要求时发现）**：官方 evaluation/README FAQ 原文——"**必须保持 `GGML_CANN_WEIGHT_NZ=off`,否则可能出现空串、换行复读等异常输出**";而 ggml-cann 代码默认 `value_or("on")`(ggml-cann.cpp:1286/1554),config.env 的 off **只经 run_eval.sh/run_all.sh 官方路径生效**。**我们所有直跑(eval_cpp_pipeline.py 直接起,60q/180q/99q A/B/全部微测/实验A/B 的 C++ 侧)从未 export NZ → 全部 NZ=ON = 官方明令禁止的配置!**
+- **决定性验证**:093 + 官方协议 + 官方 binary + `GGML_CANN_WEIGHT_NZ=off` → **`'D'` = 正确 = 与 HF 一致**(NZ=on 同配置 = 空响应)。
+- **NZ 污染审计**:✅可信(NZ=off 官方路径)= 0812 的 51.5/53.5%(1/99 空)、Daily 79.8%、TTS、RTF 全部(官方/脚本路径);❌污染(NZ=on 直跑)= 60q 63.3%(7空)、180q 47.8%(31空)、99q+image_id 35.4%、99q完整对齐 28.3%、093/097/114 空响应、TOPK margin 0.63、image_id/TEXT_CHAT_SYS 全部 A/B、"LLM kernel 数值残余"、实验B 的 C++ embedding dump。
+- **待重测(全部 NZ=off)**:99q 官方协议 NZ=off(跑分中)、空响应真实率、协议变量(image_id 等)的真实影响、RTF 在 NZ=off 下的性能代价(NZ 是性能优化,off 可能变慢)。
+- **教训(惨痛)**:①直跑官方 pipeline 必须**完整继承 config.env 全部 env**(尤其 GGML_CANN_WEIGHT_NZ/ACL_GRAPH=off),否则测的是官方禁止配置;②"官方 FAQ 早就写了症状"——重审原始文档优先于深挖机制。
