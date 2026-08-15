@@ -931,3 +931,20 @@ diff 结果（093-1）——两条铁证级协议分歧：
 - **四处原文**:①README §2"否则**精度任务**可能异常或崩溃"(任务限定);②README FAQ"**必须保持** off,否则空串、换行复读"(无限定,最硬反证,但症状全精度类);③config.env 注释"off(F16 精度/vision 稳定性)";④官方通知"**默认关闭**(config.env 中已默认配置)"(默认≠强制)。
 - **rts 判分代码级核对**:judge_support/e2e_timing 零精度检查(无转写/WER/SIM),音频仅按时长时间线拼接 → rts=纯速度任务。
 - **判决**: 方案A(精度off+rts on)可辩护但不干净 —— FAQ"必须"无任务限定;且赛方若用自家 config.env 一把跑全部任务,分任务 env 覆盖不会被执行(提交说明须要求分任务跑)。**必须问赛方,不可先斩后奏**;询问姿态="官方文档两处措辞矛盾,请求澄清"。官方 RTF 口径(SPEAK→WAV compute pooled)较我方 e2e 乐观,NZ 差距 ~40% 在任何口径下存在。
+
+## 十一、RTF 优化 A/B 矩阵（2026-08-15 晚，性能配置穷尽验证）
+
+**背景**：NZ 口径定论后（NZ=on 1.01 / NZ=off 1.08），尝试配置层优化寻找额外收益。
+
+**方法**：perf-duplex 36 帧用例，NPU+CPU 独占，24 vocoder 线程 + NUMA 64-95，每变体 1 次，NZ=on。
+
+| 变体 | avg decode/chunk | vs base | 判定 |
+|---|---|---|---|
+| base（默认） | 456.6ms | — | 基准 |
+| OMNI_T2M_DEVICE=cpu（flow 切 CPU） | 460.1ms | +0.8% | ❌ 更差（TTS 输出延迟 10s+，CPU flow 慢） |
+| GGML_CANN_ACL_GRAPH=on | 456.1ms | -0.1% | ❌ 持平 |
+| GGML_CANN_OPERATOR_FUSION=1 | 454.1ms | -0.5% | ❌ 噪声级 |
+| GGML_CANN_PREFILL_USE_GRAPH=1 | 449.3ms | -1.6% | ❌ 噪声级 |
+
+**结论**：配置层 RTF 优化穷尽（≤1.6% 噪声级）。BF16 转换无收益预期（910B AICore FP16/BF16 算力相同）且引入精度风险，关闭。**性能叙事定型：NZ=on 1.01（beat 7%）/ NZ=off 1.08（擦线），依赖赛方 Q5（rts NZ 选择权）**。
+产物：tools/omni/output/rtf_ab_{base,t2m_cpu,graph,fusion,pgraph}.{json,log}
