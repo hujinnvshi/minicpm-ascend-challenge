@@ -55,7 +55,8 @@ BIN=build-cann/bin/llama-omni-perf-duplex
 MODEL=/workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-F16.gguf
 PREFIX=$PWD/tools/omni/assets/test_case/duplex_omni_test_case/duplex_omni_test_case_
 REF=$PWD/tools/omni/assets/default_ref_audio/default_ref_audio.wav
-# [P3+P4] 推荐: vocoder 24 threads + NUMA 绑 NPU 同 node → RTF 0.58-0.59 (默认 16 不绑核 0.68-0.69)
+# 🔴 2026-08-15 口径更正：RTF 0.58-0.59 作废（FA 残留 binary 历史值）。干净 binary 独占实测：NZ=on e2e 1.01 / NZ=off 1.08（详见 nz-pollution-impact.md §三.1）
+# [P3+P4] 推荐: vocoder 24 threads + NUMA 绑 NPU 同 node → RTF 0.58-0.59 (默认 16 不绑核 0.68-0.69)【历史值，作废】
 # ★ 必须先查 NPU 的 NUMA node 再绑对应 CPU（不同机器 node 不同！旧机 node6=192-223，本机 node2=64-95）:
 #   NPU bus 从 `npu-smi info` 取（本机 0000:42:00.0）→ cat /sys/bus/pci/devices/<NPU_bus>/numa_node
 #   照抄 192-223 到 NPU 在 node2 的机器 = 跨 NUMA DMA, RTF 退化到 0.68

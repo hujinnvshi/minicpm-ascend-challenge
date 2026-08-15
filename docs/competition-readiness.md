@@ -4,13 +4,13 @@
 > 环境：Atlas 910B3 单卡（die0，64GB HBM）+ CANN 9.1.0-beta.3 + aarch64（2026-08-14 迁移后新机，NPU id=7，NUMA node2）。
 > 分支：`videomme-discussion`（当前，含 08-14 全部协议对齐修复；`bench-huawei-adapt` 停在 f617be9）。
 > ⚠️ **2026-08-12 独立复现**：见 `docs/verification-2026-08-12.md`（beta.3 环境实测）。口径审计结论：**Daily 已补全量（1196 题，79.8%，达准入）**；**Video-MME 仍为 99 题子集，与官方全量 2700 基线不可直接比**；RTF/TTS-WER 口径一致。
-> ⚠️ **2026-08-14 评审修订**：① NUMA 绑核随机器变化——新机 NPU node2 必须 `taskset -c 64-95`（照抄旧机 192-223 会退到 0.68），通用法见 `scripts/numa-bind.sh`；② RTF 上报口径更新为新机实测 0.58-0.59（0.57 为旧机值）；③ Video-MME 空响应根因已定位为 C++ prefill 缺 `<image_id>`（协议层可修，`OMNI_IMAGE_ID` 门控），"球在赛方"叙事部分失效——完整协议对齐 99q 实测见 `experiments.md` 2026-08-14 节；④ 提交包流程重写（`scripts/package-submission.sh` 现可产出完整包）。
+> ⚠️ **2026-08-15 评审修订**：① NUMA 绑核随机器变化——新机 NPU node2 必须 `taskset -c 64-95`（照抄旧机 192-223 会退到 0.68），通用法见 `scripts/numa-bind.sh`；② **🔴 性能 RTF 口径更正（2026-08-15 独占 A/B 定论）：0.58-0.59 作废（FA 残留 binary 历史值），干净重编后 NZ=on e2e 1.01 / NZ=off 1.08（NZ 贡献 ~7%，NZ=off 与基线 1.087 擦线），详见 `nz-pollution-impact.md`**；③ Video-MME 空响应归因已作废（NZ 污染，NZ=off 下空响应≈0）；④ 提交包流程重写（`scripts/package-submission.sh` 现可产出完整包）。
 
 ## 一、准入状态（一表看清）
 
 | 项 | 官方基线 | 准入阈值 | 我们 | 状态 |
 |---|---|---|---|---|
-| **Performance SPEAK→WAV RTF**（排名核心）| 1.087 | <1.087 | **0.58-0.59**（24线程+NUMA 绑 NPU 同 node,新机实测）/ 0.68（默认）| ✅ **beat ~46%** |
+| **Performance SPEAK→WAV RTF**（排名核心）| 1.087 | <1.087 | **1.01**（NZ=on 默认，干净 binary 独占实测）/ 1.08（NZ=off 官方口径，擦线）| ✅ **beat ~7%**（NZ=on）/ ⚠️ 擦线（NZ=off，待赛方确认 rts NZ 选择权）|
 | **Daily-Omni** 精度 | 79.5（全量1196）| ≥77.5 | **79.8%**（全量1196题，官方Overall，退化0）| ✅ 微超基线(+0.3pp)，达准入 |
 | **TTS-Seed WER** | 1.414 | ≤1.56（增幅≤10%）| **1.501%**（全量2020题）| ✅ 增幅 6.2% |
 | **TTS-Seed ASV/SIM** | 0.709 | ≥0.689（降幅≤0.02）| **0.694**（全量2020题）| ✅ 降幅 0.015 |
