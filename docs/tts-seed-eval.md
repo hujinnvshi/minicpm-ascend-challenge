@@ -16,9 +16,11 @@
 |---|---|---|
 | transformers 5.15 import 卡 | >180s 无输出 | 降到 **4.44.2**（funasr 兼容）|
 | extract 缺 torchcodec | `TorchCodec is required` | `pip install torchcodec` |
-| torchaudio 2.11 移除 set_audio_backend/sox_effects | s3prl import 崩 | `venv-tts/.../sitecustomize.py` 加 stub（no-op）|
-| s3prl wavlm 联网下 wavlm_large.pt（HF 封）| ConnectionError | **hf-mirror.com**（国内 HF 镜像，可达）下 1.2GB → s3prl 缓存 `~/.cache/s3prl/download/{sha256}.wavlm_large.pt` |
+| torchaudio 2.11 移除 set_audio_backend/sox_effects | s3prl import 崩 | `venv-tts/.../sitecustomize.py` 加 **sys.modules 级** stub（`from torchaudio.sox_effects import X` 需要真模块,属性注入不够）|
+| s3prl wavlm 联网下 wavlm_large.pt（HF 封）| ConnectionError | **hf-mirror.com** 下官方 converted_ckpts `wavlm_large.pt`（sha256 **6fb4b3c3...**,1.26GB）→ s3prl 缓存；⚠️ **必须官方版**：其它来源副本（如 9130cbd4）与 s3prl 0.4.18 WavLM 结构不匹配（grep_linear 等 Unexpected keys）→ expert.py strict 加载崩 → SIM 全 0 |
 | funasr 1.4.1 import 慢 | ~300s（aarch64 加载大量模型注册）| 只是慢，给足时间能成功 |
+| **torchaudio.load aarch64 极慢（2026-08-15 新增）** | 61s/条（7.5s 音频）| sitecustomize 用 soundfile 实现替换 `torchaudio.load`（0.06s；s3tokenizer.load_audio 依赖）|
+| **s3tokenizer quantize 极慢（2026-08-15 新增）** | onnx2torch torch CPU 4min+/条 | venv 包内 patch `load_model` → **onnxruntime 直跑** speech_tokenizer_v2_25hz.onnx（0.13s/条,快 2000 倍；smoke 验证 WER/ASV 与 onnx2torch 逐位一致）|
 
 **关键发现**：Step-Audio ONNX 本机已有（`MiniCPM-o-4_5/assets/token2wav/`）；wavlm_large.pt 用 hf-mirror 下；paraformer 用 funasr+modelscope 自动下。**国内镜像（modelscope + hf-mirror）能补齐所有缺口**，HF 封不是死结。
 
