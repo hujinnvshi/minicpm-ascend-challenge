@@ -926,3 +926,8 @@ diff 结果（093-1）——两条铁证级协议分歧：
 2. **TTS 口径缺口**: 0812 全量 TTS(WER 1.501/ASV 0.694)经 `run_tts_eval_cpp_zh.sh` → source `pipeline.env`,**该文件无 NZ 设置 → NZ=on 生成**;官方评测走 config.env(NZ=off)→ 数字不同口径且余量薄(WER +6.2%/ASV -0.015),**需 NZ=off 复跑核实**。
 3. **合规出路分析**: 官方 README 对 NZ=off 的理由是"否则**精度任务**可能异常"——rts 性能任务**无精度指标**;config.env 属参赛者自配("复制并编辑"),优先级 env>config.env。**方案A: 精度任务 NZ=off + rts 任务 NZ=on(env 覆盖,报告透明披露)** —— 有据可依但需赛方确认;方案B: 全程 off → RTF≈基线,排名优势放弃。
 4. **待办**: ①向赛方问询 NZ 在 rts 任务的选择权(并入澄清邮件);②TTS 全量 NZ=off 复跑(~数小时);③官方 rts 口径(RTS judge 的 pooled compute RTF)与 perf-duplex e2e 的差异校准。
+
+**十八、NZ 选择权官方文档逐字核对(2026-08-15)**:
+- **四处原文**:①README §2"否则**精度任务**可能异常或崩溃"(任务限定);②README FAQ"**必须保持** off,否则空串、换行复读"(无限定,最硬反证,但症状全精度类);③config.env 注释"off(F16 精度/vision 稳定性)";④官方通知"**默认关闭**(config.env 中已默认配置)"(默认≠强制)。
+- **rts 判分代码级核对**:judge_support/e2e_timing 零精度检查(无转写/WER/SIM),音频仅按时长时间线拼接 → rts=纯速度任务。
+- **判决**: 方案A(精度off+rts on)可辩护但不干净 —— FAQ"必须"无任务限定;且赛方若用自家 config.env 一把跑全部任务,分任务 env 覆盖不会被执行(提交说明须要求分任务跑)。**必须问赛方,不可先斩后奏**;询问姿态="官方文档两处措辞矛盾,请求澄清"。官方 RTF 口径(SPEAK→WAV compute pooled)较我方 e2e 乐观,NZ 差距 ~40% 在任何口径下存在。
