@@ -90,3 +90,11 @@ taskset -c <NPU同node的CPU段> /workspace/venv-g23/bin/python3 evaluation/vide
 4. 数据回传:`output_videomme_cpp.json` + 环境信息(npu-smi/version.cfg/内核),入库后合成跨环境对照。
 
 > **换机注意(08-15 补)**:本机的 `evaluation/videomme/tmp_frames` 是指向 `/root/frames_local` 的软链(P3 NFS 规避),已 gitignore。**新设备克隆后需自建**:`mkdir -p evaluation/videomme/tmp_frames`(若 `/workspace/user_data` 为 NFS 且批量写帧 ENOSPC,同样软链到本地盘)。测试视频统一解压到 `/root/` 下的本地目录,通过 `VIDEO_DATA_DIR` env 指定。
+
+## 五、NZ 分任务配置(方案 A 落地,零代码改动)
+
+**脚本**:`scripts/run-official-split-nz.sh` —— 精度任务(videomme/daily/tts)NZ=off + 性能任务(rts)NZ=on,依据官方 env 优先级(env > config.env)。
+
+**依据链**:官方通知"默认关闭"(非禁止)/ README 优先级明文 / rts 判分零精度检查 / FAQ 理由为文本生成症状。
+**风险与对策**:README FAQ 有"必须保持 off"无限定表述 → 提交报告透明披露 + 已向赛方发澄清(三合一邮件)。
+**精度保证数字**(NZ=off 实测): Daily 79.8%✅ / TTS 待 NZ=off 复跑 / Video-MME 270题合池 63.3%±5.7pp(全量待跑)。
