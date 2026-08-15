@@ -850,3 +850,25 @@ diff 结果（093-1）——两条铁证级协议分歧：
 - `head -N` 关管道 → SIGPIPE 杀 cmake（机器手册 §8 原班坑）；构建输出必须落文件再 grep。
 - omni.cpp 属 **libomni.so**（target `omni`），exe link.txt 之外还需重链 lib；两个 link.txt 都要补 `-lascendcl`。
 - 新 API：`llama_n_vocab(model)` 已弃用 → `llama_vocab_n_tokens(llama_model_get_vocab(model))`；`llama_get_model` 返回 const。
+
+---
+
+## 实验 2026-08-14（深夜，review-optimize 分支）：D1 完整协议对齐 99q A/B（第 1 轮）
+
+> 目的：执行 08-14 晚"六、修复 A/B 全量化"标注的下一个必要实验——`OMNI_IMAGE_ID=1 + OMNI_TEXT_CHAT_SYS=1`（完整协议对齐）在 99q 全量的效果（此前只测了单题 093/097）。
+> 配置：`benchmark/video-mme-cookbook/diag/eval-99q-review.env`（新机路径 + CANN beta.3 + venv-g23 + 锁 die0 + NUM_GPUS=1），binary = build-cann 增量重编 `llama-omni-eval-cli`（当前源码含门控，构建 23:32 完成，BUILD_EXIT=0）。
+> smoke 2 先行通过（2/2=100%，70.6s，门控路径正常）。
+
+**对齐组 99q：FAIL（rc=1，0 题有效）**（run 20260814_233717，953.7s 后 GPU 0 不可恢复判死）
+
+失败机制（两重独立故障叠加）：
+1. **帧丢失**：video 001-010 全部正常（64 帧 prep + 3 题成功）。video 011 起：011-1 成功、011-2 立即 `frame not found: tmp_frames/011/frame_002.jpg`（同一秒）→ 其后 011-3、301-1/2/3、302-1/2/3 全部 frame not found。301/302 的 prep 日志正常（"Prepared 64 frames"）但 8-26s 后帧不可读。011 的 prep 日志行缺失。单 worker 顺序执行（NUM_GPUS=1）排除并发互踩；cleanup_all_frames 只在 finally。
+2. **CLI CANN kernel 崩溃**（cli_gpu0.log）：`MTE accesses an invalid GM address / AIV vector core exception`（Cast/Add kernel 失败,device_id=0, retCode=0x31, 507057）→ `ggml_abort` at `ggml-cann.cpp:2224 aclrtSynchronizeStream`，栈在 stream_prefill→eval_tokens→decode。CLI 崩溃→client 重启（3 次用尽→GPU 不可恢复→整轮丢弃）。
+
+**待确认**：帧丢失/崩溃是否与【对齐门控】或【重编 binary】相关 → 隔离对照进行中：build/bin（0812 官方评测版, 无门控, 即 08-12 复现 53.5% 的同一 binary）跑 smoke 33（覆盖 video 001-011, 即含 011）：
+- 若对照组也丢帧/崩 → 环境/长视频/ffmpeg 因素,与门控无关
+- 若对照组正常 → 对齐门控或重编引入,需逐位检查 prefill token 序列（含 image_id 的 token 数变化 → kernel 形状越界嫌疑）
+
+（占位, 结果见下节；D1 结论以对照组 + 重跑对齐组为准）
+
+**九、99q 完整对齐 A/B 终局(修复路线关闭)**:IMAGE_ID+TEXT_CHAT_SYS 完整对齐在 KB99 = **28.3%**(28/99)—— 比单 image_id(35.4%)更差,远低于基线(53.5%);无字母响应 27/99 不降反升。**合成洞察:HF(旧机 Track B)在同 KB99 子集 ≈50%,与官方协议 llama.cpp 打平** —— "HF 全对"现象集中于非 KB 域(093 等),KB 域两框架同为 ~50%。**定论:协议对齐不能恢复 HF 等价(实验B 已证 LLM 数值残余)且 KB 有害 → 修复路线关闭,不启用;OMNI_IMAGE_ID/OMNI_TEXT_CHAT_SYS 保留为 env 门控诊断探针(默认零影响);官方评测用默认协议 + build/bin。** Video-MME 最终立场回到:官方口径 51.5-53.5% + 完整证据链(协议 diff、机制定位、数值等价性、HF 对照)→ 对赛方沟通(基线口径/910C 确认/豁免)。
