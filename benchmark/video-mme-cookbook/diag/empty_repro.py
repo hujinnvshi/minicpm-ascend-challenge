@@ -6,8 +6,8 @@
 import sys, os, json, subprocess, time
 
 REPO = "/workspace/user_data/temp_project/minicpm-ascend-challenge"
-SUBSET = f"{REPO}/benchmark/video-mme-cookbook/diag/videomme_subset_domain180.parquet"
-VDIR   = f"{REPO}/benchmark/video-mme-cookbook/diag/videomme_domain180_data"
+SUBSET = os.environ.get("REPRO_PARQUET", f"{REPO}/benchmark/video-mme-cookbook/diag/videomme_subset_domain180.parquet")
+VDIR   = os.environ.get("REPRO_VDATA", f"{REPO}/benchmark/video-mme-cookbook/diag/videomme_domain180_data")
 os.environ.setdefault("LLAMA_CLI_BIN", f"{REPO}/code/llama.cpp-omni/build/bin/llama-omni-eval-cli")
 sys.path.insert(0, f"{REPO}/code/llama.cpp-omni/evaluation/videomme")
 from eval_cpp_config import USER_PROMPT_TEMPLATE, LLAMA_CLI_BIN
