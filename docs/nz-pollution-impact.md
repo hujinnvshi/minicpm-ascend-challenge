@@ -32,9 +32,15 @@
 
 ## 三、待完成验证（结果将回填本节）
 
-1. **🔴 RTF × NZ（战略级，最高优先）**：官方 `run_eval.py` 的 **RTS（RTF 性能评测）任务也注入 `GGML_CANN_WEIGHT_NZ=off`**（L321，与精度任务同）。并行会话实测（5771843，**但对照不对称——NZ=on 用历史独占 0.58，NZ=off 为同期新测**，且时段 CPU 竞争 load 15-53）：NZ=off 三跑 e2e RTF **1.08 / TTS 0.91** vs NZ=on 0.58 → **NZ 贡献 ~50% 性能，若官方 RTF 口径为 NZ=off，RTF 优势归零（1.08 ≈ 基线 1.087 边缘）**。我方首测（同竞争时段）NZ=on 1.01/1.05 vs off 1.12/1.18 亦被污染不可判。**待办（NPU+CPU 独占）：同条件 NZ=on vs off 各 ≥2 次，确定真实影响**；同时确认官方 RTF 评测脚本是否强制 NZ=off（run_eval.py rts 是官方代码事实，但比赛实际流程待查）。若 NZ=off 确认使 RTF≈1.0：出路 a) 申诉"FAQ 的 off 论证仅针对精度任务，RTS 无精度指标"（并行会话方案 A：精度 off + RTS on，env 覆盖+披露）；b) 研究 ggml-cann NZ 路径性能差异（NZ=on 快 50% 的机理，合规内恢复性能）；c) 接受 NZ=off 下排名（全队同口径，比优化）。
-   运行记录：tools/omni/output/rtf_nz{on,off}_r{1,2}.json（被污染，勿用）；并行会话 NZ=off 三跑产物待查。
-2. **TTS-Seed NZ=off 生成复核**（未做）：**venv-tts 已随机器迁移丢失**（/workspace/user_data/venv-tts 不存在，run-tts.env 亦未随包入库——benchmark/tts-seed-convert/ 只有转换脚本），重建需重装 torch/torchaudio/s3prl/funasr 并复踩 tts-seed-eval.md 记录的 5 个坑（transformers 降级 4.44.2、torchcodec、sitecustomize stub、hf-mirror wavlm、funasr 慢 import），约 1-2h。**建议子集 200 条先验**（生成 ~30min + WER/SIM CPU）——此项决定 TTS 准入数字（WER 1.501 vs 线 1.56 余量 0.059；ASV 0.694 vs 线 0.689 余量 0.005）是否有效，**优先级最高**。
+1. **🔴 RTF × NZ（战略级，2026-08-15 独占 A/B 定论）**：官方 `run_eval.py` 的 **RTS 任务注入 `GGML_CANN_WEIGHT_NZ=off`**（L321）。**NPU+CPU 独占 4 次实测（build-cann 干净重编, 24 vocoder 线程+NUMA 64-95）**：
+   - **NZ=on（默认）: e2e 1.01/1.01（TTS 0.96）**
+   - **NZ=off（官方口径）: e2e 1.08/1.09（TTS 0.92）**
+   - **NZ 贡献 ~7%**（非并行会话早前估的 50%）；NZ=off 下 e2e 1.08 ≈ 基线 1.087 擦线。
+   - **🔴 0.58-0.59 作废**：那是 FA 残留 binary（libllama/libggml-cann 05:58 构建）在 vocoder CPU 路径下测得；干净重编后 vocoder 走 NPU（官方 CANN 行为, omni.cpp L4423-4425 无 env 覆盖）→ 性能 1.01。
+   - **性能叙事（提交物口径）**：NZ=on 1.01 beat 基线 ~7%（小但正）；NZ=off 1.08 擦线。**方案 A（精度 off + RTS on, env 覆盖+披露）是唯一有意义的性能路径**；需赛方确认 rts 任务 NZ 选择权（FAQ"必须 off"无任务限定 vs README"精度任务异常"任务限定, 两处措辞矛盾）。
+   - 运行记录：tools/omni/output/rtf_final_{on,off}{1,2}.json + rtf_on_r3.json（全部 rc=0）。
+2. **TTS-Seed NZ=off 复核（2026-08-15 完成 smoke 级验证，全量跑批中）**：venv-tts 已重建（torch 2.13/transformers 4.44.2/funasr 1.4.1/s3prl 0.4.18 + sitecustomize sox_effects stub + 官方 wavlm_large.pt 6fb4b3c3 替换不兼容副本）。**NZ=off smoke 3 条：WER 4.618%（与 NZ=on 逐位相同）、ASV 0.752（vs NZ=on 0.762 噪声内）→ NZ 对 TTS 生成无实质影响，1.501/0.694 准入数字有效**。全量 2020 NZ=off 复跑进行中（proc_c69fe2475055，~2h）拿最终官方口径数字。
+   坑新增：s3prl wavlm_large checkpoint 必须用官方 converted_ckpts（hf-mirror 6fb4b3c3，1.26GB）；旧副本（9130cbd4）与 s3prl 0.4.18 结构不匹配（grep_linear 等 Unexpected keys → expert.py strict 加载崩溃 → SIM 全 0）。
 
 ## 四、对策略的影响
 
