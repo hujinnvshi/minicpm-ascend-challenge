@@ -39,15 +39,15 @@
 - [x] 依赖与环境配置文件(`docs/cann-patches.md` + `docs/reproduce-guide.md` §1)
 
 ### 2. Benchmark 评测结果（3 个全要）
-- [x] Daily-Omni 结果(`benchmark/daily-omni/result.json` + `daily_omni_test.py`;单帧/低帧 6.7%/12.5%,**多帧(8帧)触发模型退化**——已做交错打包+whisper KV 修复(commit `c9d9499`)均生效但未解高帧,真因在视觉路径;**已问组委会**多帧配置/门槛,见 `organizer-inquiry-email.md`)
-- [x] TTS-Seed 结果(`benchmark/seed-tts-eval/gen/zh/result.json`;WER 0.20 官方同口径达标 ✅;SIM 0.84 base-plus,**官方 UniSpeech SV 口径本地不可实现**——`wavlm_large_finetune.pth` 是 UniSpeech GRP variant,s3prl 标准 WavLM 不兼容,见 `docs/asv-official-plan.md` C 实证;已问组委会 Q5,见 `organizer-inquiry-final.md`)
-- [x] Video-MME 结果(`benchmark/video-mme-cookbook/` CookBook 官方 pipeline + ccec build `llama-omni-eval-cli` 跑通;smoke 0/2 **多帧退化**(910B4/CANN 硬件级,context 40960/FA 均不解,见 experiments.md P3);基线 69.0 极可能 910C 实测 — 见 `organizer-inquiry-final.md` Q1/Q3)
+- [x] Daily-Omni 结果(`benchmark/daily-omni/result.json` + `daily_omni_test.py`;官方 pipeline 全量 1196 题 **79.8%**（NZ=off 官方路径,基线 79.5,准入 ≥77.5）✅ 微超基线——详见 `docs/daily-omni-eval.md` + `docs/entry-review-2026-08-15.md`)
+- [x] TTS-Seed 结果(`benchmark/seed-tts-eval/gen/zh/result.json`;**NZ=off 全量 2020:WER 0.97% / ASV 0.708**（基线 1.414/0.709,准入 ≤1.56/≥0.689）✅ 大幅达标;NZ=on 旧口径 1.501/0.694 作废——详见 `docs/tts-seed-eval.md` + `docs/nz-pollution-impact.md`)
+- [x] Video-MME 结果(`benchmark/video-mme-cookbook/` CookBook 官方 pipeline;270 题合池 **63.3%±5.7pp**（99q KB 域 51.5-53.5%）❌ 点估计 <67 准入——**基线口径申诉路径**（69.0 疑 910C/vLLM 口径）,申诉邮件见 `docs/organizer-inquiry-2026-08-15.md` Q1-Q4)
 
 ### 3. 性能测试报告（至少包含)
 - [x] RTF（含统计口径)— SPEAK→WAV e2e,**1.01**（NZ=on 默认，干净 binary 独占实测 2 次）/ **1.08**（NZ=off 官方口径 2 次，与基线 1.087 擦线）；旧 0.58-0.59 系 FA 残留 binary 历史值，作废（见 performance-report §1 更正横幅 + nz-pollution-impact.md）
 - [x] 测试环境(910B4 / CANN 9.1.0-beta.3 / F16)
 - [x] 测试数据(perf-duplex 36 帧 duplex_omni_test_case)
-- [x] 测试次数(P8 ≥3 次:0.84/0.68/0.58 中位 0.68)
+- [x] 测试次数(NZ A/B 独占 4 次:NZ=on 1.01/1.01、NZ=off 1.08/1.09;旧 P8 0.84/0.68/0.58 系 FA 残留 binary 历史值,作废)
 - [x] 统计方式(analyze_perf.py 按时间戳匹配 SPEAK↔audio 轮)
 - [x] 优化前后对比(P1.7 队列解耦 8.5× + P3 vocoder 多线程,见 §6)
 - [x] 资源使用情况(HBM ~24G / AICore burst 60-84%)
@@ -63,7 +63,7 @@
 - [x] 原始性能瓶颈分析(experiments P0–P5 + perf-ceiling-analysis)
 - [x] 采用的优化方法(cann 6 补丁 + P1.7 队列 + P3 vocoder + P6/P7 video)
 - [x] 各项优化带来的性能变化(experiments P1.7 RTF 0.83→P3 0.64→P4 0.57)
-- [x] 效果保持情况(F16 不改推理数学,RTF 0.57–0.68 < 1.087)
+- [x] 效果保持情况(F16 不改推理数学;RTF 1.01–1.08 < 1.087（NZ=on 口径 beat, NZ=off 擦线）)
 - [x] 完整复现步骤(reproduce-guide + scripts/)
 - [x] 关键技术说明(cann-patches + decisions + optimization-methodology)
 
