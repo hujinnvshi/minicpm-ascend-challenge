@@ -948,3 +948,23 @@ diff 结果（093-1）——两条铁证级协议分歧：
 
 **结论**：配置层 RTF 优化穷尽（≤1.6% 噪声级）。BF16 转换无收益预期（910B AICore FP16/BF16 算力相同）且引入精度风险，关闭。**性能叙事定型：NZ=on 1.01（beat 7%）/ NZ=off 1.08（擦线），依赖赛方 Q5（rts NZ 选择权）**。
 产物：tools/omni/output/rtf_ab_{base,t2m_cpu,graph,fusion,pgraph}.{json,log}
+
+## 十二、L2 参数层验证（n_timesteps A/B，2026-08-17）——CLOSED（5 步是功能拐点）
+
+**背景**：赛道 B 先例（vLLM-Omni steps 10→9 获 -6% RTF）启发探索 llama.cpp-omni 的 Token2Wav flow-matching 迭代数。
+
+**前置发现**：两条 T2W 路径步数不同——omni.cpp（perf-duplex/RTF 评测）写死 **5**；tts-eval（精度评测）走 switch_prompt_bundle 默认 **10**（token2wav-impl.h L2283）。官方设计 = 性能侧 5 步快跑、质量侧 10 步全质量。
+
+**改动**：omni.cpp 加 `OMNI_T2W_STEPS` env（默认 5 = 官方行为，可回退）；tts-eval 不动（官方精度口径零风险）。构建坑：libomni.so 链接缺 ascendcl（官方 tools/omni/CMakeLists.txt 未链 + ccec --no-allow-shlib-undefined 严格模式）→ link.txt 手动注入 -lascendcl（build 产物修复，非源码）。
+
+**A/B 结果**（NZ=off 独占，36 帧 duplex 用例，24 vocoder 线程+NUMA 64-95，各 ×3）：
+| steps | avg decode | audio_chunks | e2e RTF | 判定 |
+|---|---|---|---|---|
+| 5（官方） | 418.5ms | 11（正常） | 1.06×3 | 基线 |
+| 4 | 408.5ms | **0（TTS 静默失败）** | 无法计算 | ❌ 功能失败——flow 4 步不收敛，无音频输出 |
+| 6 | 919-1689ms | — | 11s 级 | ❌ 异常退化（数值/NPU 路径问题，原因未查——非优化方向） |
+
+**结论**：**5 步是功能拐点**（最少可用步数，官方选择有据）；4 步收益是 LLM 侧假象（无音频合成）；6 步异常。**L2 参数层 CLOSED**——n_timesteps 无可优化空间。OMNI_T2W_STEPS env 保留（合规、默认行为不变、可回退工具）。
+
+**附注**：NZ 影响 LLM 的 speak 判定（NZ=on speak 16 / NZ=off speak 8）——08-15 的 1.01/1.08 定论混有 speak 数差异（NZ 间接效应，对比仍有效）；今日 NZ=off 官方口径锚点 e2e **1.06**（speak 8，比 08-15 的 1.08 更准）。
+产物：tools/omni/output/rtf_l2_s{4,5,6}_*.json
