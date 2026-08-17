@@ -3,7 +3,7 @@
 > 状态:2026-08-15 版（review-optimize 评审修订 + NZ 口径定论）。
 > **🔴 2026-08-15 性能口径更正**：**0.58-0.59 作废**——那是 FA 残留 binary（libllama/libggml-cann 05:58 构建）+ vocoder CPU 路径的历史值；全量干净重编（官方 bench/huawei + 6 补丁）后 vocoder 走 NPU（官方 CANN 行为）。**新口径（NPU+CPU 独占 4 次实测,24 vocoder 线程+NUMA 64-95）**：
 > - **NZ=on（默认配置）: e2e 1.01 / 1.01（TTS 0.96）** → beat 基线 1.087 ~7%
-> - **NZ=off（官方 config.env 口径）: e2e 1.08 / 1.09（TTS 0.92）** → 与基线 1.087 擦线
+> - **NZ=off（官方 config.env 口径）: e2e 1.06（2026-08-17 speak 8 官方口径独占 ×3；旧 1.08/1.09 为 speak 16 锚点，噪声内一致）** → 与基线 1.087 擦线（-2.5%）
 > - 运行记录 `tools/omni/output/rtf_final_{on,off}{1,2}.json` + `rtf_on_r3.json`；详见 `nz-pollution-impact.md` §三.1。
 > - 本报告以下旧段落（0.57/0.58/0.68/0.83）均为历史 binary/配置数据，**仅作优化史留档，不用于提交物性能声明**。
 > 北极星指标:**SPEAK→WAV 完整链路 RTF**(单并发 F16),官方基线 **1.087**。
