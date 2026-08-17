@@ -948,3 +948,47 @@ diff 结果（093-1）——两条铁证级协议分歧：
 
 **结论**：配置层 RTF 优化穷尽（≤1.6% 噪声级）。BF16 转换无收益预期（910B AICore FP16/BF16 算力相同）且引入精度风险，关闭。**性能叙事定型：NZ=on 1.01（beat 7%）/ NZ=off 1.08（擦线），依赖赛方 Q5（rts NZ 选择权）**。
 产物：tools/omni/output/rtf_ab_{base,t2m_cpu,graph,fusion,pgraph}.{json,log}
+
+## 十二、L2 参数层验证（n_timesteps A/B，2026-08-17）——CLOSED（5 步是功能拐点）
+
+**背景**：赛道 B 先例（vLLM-Omni steps 10→9 获 -6% RTF）启发探索 llama.cpp-omni 的 Token2Wav flow-matching 迭代数。
+
+**前置发现**：两条 T2W 路径步数不同——omni.cpp（perf-duplex/RTF 评测）写死 **5**；tts-eval（精度评测）走 switch_prompt_bundle 默认 **10**（token2wav-impl.h L2283）。官方设计 = 性能侧 5 步快跑、质量侧 10 步全质量。
+
+**改动**：omni.cpp 加 `OMNI_T2W_STEPS` env（默认 5 = 官方行为，可回退）；tts-eval 不动（官方精度口径零风险）。构建坑：libomni.so 链接缺 ascendcl（官方 tools/omni/CMakeLists.txt 未链 + ccec --no-allow-shlib-undefined 严格模式）→ link.txt 手动注入 -lascendcl（build 产物修复，非源码）。
+
+**A/B 结果**（NZ=off 独占，36 帧 duplex 用例，24 vocoder 线程+NUMA 64-95，各 ×3）：
+| steps | avg decode | audio_chunks | e2e RTF | 判定 |
+|---|---|---|---|---|
+| 5（官方） | 418.5ms | 11（正常） | 1.06×3 | 基线 |
+| 4 | 408.5ms | **0（TTS 静默失败）** | 无法计算 | ❌ 功能失败——flow 4 步不收敛，无音频输出 |
+| 6 | 919-1689ms | — | 11s 级 | ❌ 异常退化（数值/NPU 路径问题，原因未查——非优化方向） |
+
+**结论**：**5 步是功能拐点**（最少可用步数，官方选择有据）；4 步收益是 LLM 侧假象（无音频合成）；6 步异常。**L2 参数层 CLOSED**——n_timesteps 无可优化空间。OMNI_T2W_STEPS env 保留（合规、默认行为不变、可回退工具）。
+
+**附注**：NZ 影响 LLM 的 speak 判定（NZ=on speak 16 / NZ=off speak 8）——08-15 的 1.01/1.08 定论混有 speak 数差异（NZ 间接效应，对比仍有效）；今日 NZ=off 官方口径锚点 e2e **1.06**（speak 8，比 08-15 的 1.08 更准）。
+产物：tools/omni/output/rtf_l2_s{4,5,6}_*.json
+
+## 十三、L4 内存 env 试测（2026-08-17）——CLOSED（无收益）
+
+**方法**：ggml-cann 内存类 env 逐档 A/B（NZ=off 独占，steps=5，36 帧，24 线程+NUMA，各 ×3）。
+
+| env | avg decode | audio_chunks | e2e RTF | 判定 |
+|---|---|---|---|---|
+| 基线（无） | 418.5ms | 11 | 1.06×3 | 基准 |
+| GGML_CANN_MEM_POOL=1 | — | 11 | 1.06×3 | ❌ 持平 |
+| GGML_CANN_NO_PINNED=1 | — | 11 | 1.07-1.08 | ❌ 更慢（+1-2%） |
+| GGML_CANN_DISABLE_BUF_POOL_CLEAN=1 | — | 11 | 1.05-1.06 | ❌ 持平 |
+
+**结论**：内存 env 无收益。**L4 内核层（内存档）CLOSED**；剩余仅算子级深度优化（HOLD，风险最高）。产物：tools/omni/output/rtf_l4_{pool,nopinned,nopoolclean}_*.json
+
+## 十四、L2+L4 验证总判定（2026-08-17）——RTF 优化空间收口
+
+| 层 | 结论 |
+|---|---|
+| L1 配置层（08-15） | CLOSED——5 变体收益 ≤1.6% 噪声级 |
+| L2 参数层（08-17） | CLOSED——5 步是功能拐点（4 步 TTS 静默失败 / 6 步异常退化） |
+| L4 内存 env（08-17） | CLOSED——3 档无收益 |
+| L4 算子层 | HOLD——唯一未探索，风险最高，decode 已 NPU 速度主导 |
+
+**性能叙事最终形态**（NZ=off 官方口径）：e2e **1.06**（speak 8 锚点，08-17 独占 ×3+，08-15 的 1.08 为 speak 16 旧锚点——噪声内一致）/ NZ=on 1.01。

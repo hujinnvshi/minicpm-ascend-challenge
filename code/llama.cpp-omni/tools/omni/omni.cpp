@@ -4395,6 +4395,14 @@ struct omni_context * omni_init(struct common_params * params, int media_type, b
             // OMNI_T2M_DEVICE overrides the platform default below, mirroring
             // what OMNI_VOC_DEVICE does for the vocoder a few lines down.
             const char * t2m_dev_env = getenv("OMNI_T2M_DEVICE");
+            // OMNI_T2W_STEPS: flow-matching 迭代数（默认 5 = 官方行为；可回退）
+            int t2w_steps = 5;
+            const char * t2w_steps_env = getenv("OMNI_T2W_STEPS");
+            if (t2w_steps_env && t2w_steps_env[0]) {
+                t2w_steps = std::atoi(t2w_steps_env);
+                if (t2w_steps < 1) t2w_steps = 1;
+                print_with_timestamp("Token2Wav: n_timesteps overridden by OMNI_T2W_STEPS=%d\n", t2w_steps);
+            }
 #ifdef GGML_USE_CANN
             std::string device_token2mel = token2wav_device;
             print_with_timestamp("Token2Wav: CANN detected, flow_matching using NPU (%s)\n", device_token2mel.c_str());
@@ -4478,12 +4486,12 @@ struct omni_context * omni_init(struct common_params * params, int media_type, b
 
             init_ok = ctx_omni->token2wav_session->init_from_prompt_cache_gguf(
                     encoder_gguf, flow_matching_gguf, flow_extra_gguf, prompt_cache_gguf,
-                    vocoder_gguf, device_token2mel, device_vocoder, 5, 1.0f, coreml_model_path);
+                    vocoder_gguf, device_token2mel, device_vocoder, t2w_steps, 1.0f, coreml_model_path);
             if (!init_ok && use_prompt_bundle) {
                 print_with_timestamp("Token2Wav: prompt_cache failed, fallback to prompt_bundle from %s\n", prompt_bundle_dir.c_str());
                 init_ok = ctx_omni->token2wav_session->init_from_prompt_bundle(
                         encoder_gguf, flow_matching_gguf, flow_extra_gguf, prompt_bundle_dir,
-                        vocoder_gguf, device_token2mel, device_vocoder, 5, 1.0f);
+                        vocoder_gguf, device_token2mel, device_vocoder, t2w_steps, 1.0f);
             }
             // Fallback to CPU
             if (!init_ok) {
@@ -4492,7 +4500,7 @@ struct omni_context * omni_init(struct common_params * params, int media_type, b
                 ctx_omni->token2wav_session = std::make_unique<omni::flow::Token2WavSession>();
                 init_ok = ctx_omni->token2wav_session->init_from_prompt_cache_gguf(
                         encoder_gguf, flow_matching_gguf, flow_extra_gguf, prompt_cache_gguf,
-                        vocoder_gguf, "cpu", "cpu", 5, 1.0f);
+                        vocoder_gguf, "cpu", "cpu", t2w_steps, 1.0f);
             }
             
             if (init_ok) {
