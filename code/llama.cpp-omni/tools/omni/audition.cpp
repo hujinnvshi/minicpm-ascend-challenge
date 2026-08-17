@@ -4,6 +4,7 @@
 #include "ggml.h"
 #include "ggml-cpp.h"
 #include "ggml-cpu.h"
+#include "ggml-cann.h"
 #include "ggml-alloc.h"
 #include "ggml-backend.h"
 #include "gguf.h"
@@ -244,6 +245,11 @@ struct audition_ctx {
                 if (!backend) {
                     LOG_WRN("%s: Warning: Failed to initialize \"%s\" backend, falling back to default GPU backend\n", __func__, backend_name);
                 }
+            }
+            if (!backend) {
+#ifdef GGML_USE_CANN
+                backend = ggml_backend_cann_init(0);
+#endif
             }
             if (!backend) {
                 backend = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_GPU, nullptr);

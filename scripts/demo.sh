@@ -6,7 +6,8 @@ cd "$(dirname "$0")/.."
 export PATH=/usr/local/bin:$PATH
 source /workspace/venv-g23/bin/activate
 VENV=/workspace/venv-g23/bin/python
-SERVER=code/llama.cpp-omni/build-cann/bin/llama-omni-server
+REPO_ROOT="$(pwd)"
+SERVER="$REPO_ROOT/code/llama.cpp-omni/build-cann/bin/llama-omni-server"
 MODEL=/workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-F16.gguf
 cd code/MiniCPM-o-Demo
 $VENV gateway.py --port 8006 --internal-port 8007 --host 0.0.0.0 --https \

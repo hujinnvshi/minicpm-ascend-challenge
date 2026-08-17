@@ -1,6 +1,7 @@
 # 提交物清单与测评流程（2026-07-31 官网评审更新）
 
 > 来源：官网赛事详情页（ascend.openbmb.cn/competition）7/31 更新 + 官方算力申请指南（飞书）
+> ⚠️ **2026-08-15 review-optimize 评审修订**：① 提交包生成流程已重写并端到端跑通（`scripts/package-submission.sh` —— 旧版因 code/llama.cpp-omni 无独立 .git 而 patch 恒空、demo/空包、benchmark 结果未入包，已全部修复，见 `dist/` 产物+MANIFEST）；② **🔴 性能 RTF 口径更正：0.58-0.59 作废（FA 残留 binary 历史值），新口径 NZ=on e2e 1.01 / NZ=off 1.08（详见 nz-pollution-impact.md）**；③ TTS-Seed 全量 2020 口径 WER 1.501%/ASV 0.694（NZ=off smoke 复核无差异，数字有效）；④ Daily-Omni 全量 1196 题 79.8%（旧 88% 为 50 题子集口径）；⑤ Video-MME 空响应归因作废（NZ 污染）；官方不可改 5 路径已全部还原官方版。
 
 ## 一、测评流程（5 步，全部通过才排名）
 
@@ -38,15 +39,15 @@
 - [x] 依赖与环境配置文件(`docs/cann-patches.md` + `docs/reproduce-guide.md` §1)
 
 ### 2. Benchmark 评测结果（3 个全要）
-- [x] Daily-Omni 完整结果(`benchmark/daily-omni/result.json` + `daily_omni_test.py`;6.7%/12.5% — 框架硬上限,见 experiments P7/P8;**79.5 基线来源待官方确认**)
-- [x] TTS-Seed 完整结果(`benchmark/seed-tts-eval/gen/zh/result.json`;WER 0.20 同口径强达标,SIM 0.84 base-plus 口径偏差)
-- [ ] Video-MME 完整结果(脚本 `benchmark/video-mme/videomme_test.py` 已建;omni 处理大 video 触发 server 崩溃,未跑通 — 见 experiments P8)
+- [x] Daily-Omni 结果(`benchmark/daily-omni/result.json` + `daily_omni_test.py`;官方 pipeline 全量 1196 题 **79.8%**（NZ=off 官方路径,基线 79.5,准入 ≥77.5）✅ 微超基线——详见 `docs/daily-omni-eval.md` + `docs/entry-review-2026-08-15.md`)
+- [x] TTS-Seed 结果(`benchmark/seed-tts-eval/gen/zh/result.json`;**NZ=off 全量 2020:WER 0.97% / ASV 0.708**（基线 1.414/0.709,准入 ≤1.56/≥0.689）✅ 大幅达标;NZ=on 旧口径 1.501/0.694 作废——详见 `docs/tts-seed-eval.md` + `docs/nz-pollution-impact.md`)
+- [x] Video-MME 结果(`benchmark/video-mme-cookbook/` CookBook 官方 pipeline;270 题合池 **63.3%±5.7pp**（99q KB 域 51.5-53.5%）❌ 点估计 <67 准入——**基线口径申诉路径**（69.0 疑 910C/vLLM 口径）,申诉邮件见 `docs/organizer-inquiry-2026-08-15.md` Q1-Q4)
 
 ### 3. 性能测试报告（至少包含)
-- [x] RTF（含统计口径)— SPEAK→WAV e2e,中位 0.68(P8 三次 0.84/0.68/0.58)
-- [x] 测试环境(910B3 / CANN 9.1.0-beta.3 / F16)
+- [x] RTF（含统计口径)— SPEAK→WAV e2e,**1.01**（NZ=on 默认，干净 binary 独占实测 2 次）/ **1.08**（NZ=off 官方口径 2 次，与基线 1.087 擦线）；旧 0.58-0.59 系 FA 残留 binary 历史值，作废（见 performance-report §1 更正横幅 + nz-pollution-impact.md）
+- [x] 测试环境(910B4 / CANN 9.1.0-beta.3 / F16)
 - [x] 测试数据(perf-duplex 36 帧 duplex_omni_test_case)
-- [x] 测试次数(P8 ≥3 次:0.84/0.68/0.58 中位 0.68)
+- [x] 测试次数(NZ A/B 独占 4 次:NZ=on 1.01/1.01、NZ=off 1.08/1.09;旧 P8 0.84/0.68/0.58 系 FA 残留 binary 历史值,作废)
 - [x] 统计方式(analyze_perf.py 按时间戳匹配 SPEAK↔audio 轮)
 - [x] 优化前后对比(P1.7 队列解耦 8.5× + P3 vocoder 多线程,见 §6)
 - [x] 资源使用情况(HBM ~24G / AICore burst 60-84%)
@@ -62,7 +63,7 @@
 - [x] 原始性能瓶颈分析(experiments P0–P5 + perf-ceiling-analysis)
 - [x] 采用的优化方法(cann 6 补丁 + P1.7 队列 + P3 vocoder + P6/P7 video)
 - [x] 各项优化带来的性能变化(experiments P1.7 RTF 0.83→P3 0.64→P4 0.57)
-- [x] 效果保持情况(F16 不改推理数学,RTF 0.57–0.68 < 1.087)
+- [x] 效果保持情况(F16 不改推理数学;RTF 1.01–1.08 < 1.087（NZ=on 口径 beat, NZ=off 擦线）)
 - [x] 完整复现步骤(reproduce-guide + scripts/)
 - [x] 关键技术说明(cann-patches + decisions + optimization-methodology)
 

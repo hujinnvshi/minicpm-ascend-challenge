@@ -8,6 +8,10 @@ code/*/output_*/
 code/*/tools/omni/output*/
 code/*/tools/omni/logs/
 
+# ===== 评测临时产物 =====
+code/llama.cpp-omni/evaluation/videomme/tmp_frames
+code/llama.cpp-omni/evaluation/output/
+
 # ===== 大体积示例数据（需要时从上游重新获取） =====
 code/daily-omni/example_videos/
 code/daily-omni/assets/
@@ -25,6 +29,27 @@ __pycache__/
 
 # ===== Node =====
 node_modules/
+
+# ===== 根级 cmake 构建产物（并行会话根级 cmake 生成，非提交物；官方已跟踪文件不受影响） =====
+code/llama.cpp-omni/CMakeCache.txt
+code/llama.cpp-omni/CMakeFiles/
+code/llama.cpp-omni/CTestTestfile.cmake
+code/llama.cpp-omni/DartConfiguration.tcl
+code/llama.cpp-omni/cmake_install.cmake
+code/llama.cpp-omni/compile_commands.json
+code/llama.cpp-omni/bin/
+code/llama.cpp-omni/**/CMakeFiles/
+code/llama.cpp-omni/**/CTestTestfile.cmake
+code/llama.cpp-omni/**/DartConfiguration.tcl
+code/llama.cpp-omni/**/cmake_install.cmake
+code/llama.cpp-omni/**/Makefile
+code/llama.cpp-omni/ggml/ggml-config.cmake
+code/llama.cpp-omni/ggml/ggml-version.cmake
+code/llama.cpp-omni/license.cpp
+code/llama.cpp-omni/llama.pc
+
+# ===== ASV/TTS eval 本地产物(大文件/本地配置, 不入 git) =====
+benchmark/seed-tts-eval/sv/wavlm_large_s3prl.pt
 
 # ===== 提交打包产物 =====
 dist/
@@ -54,3 +79,14 @@ benchmark/seed-tts-eval/gen/
 benchmark/**/tts_wav/
 benchmark/demo-evidence/video_*/
 # demo runtime self-regenerated certs (keep committed originals only)
+
+# ASV/TTS eval 本地产物(大文件/本地配置, 不入 git)
+benchmark/seed-tts-eval/sv/wavlm-large/
+benchmark/video-mme-cookbook/.env
+benchmark/video-mme-cookbook/log/
+benchmark/video-mme/data/
+
+# G2 benchmark: Daily-Omni 转换产物（684 mp4+wav + jsonl, ~2.7GB, 不入库）
+benchmark/daily-omni-data/
+benchmark/video-mme-cookbook/diag/videomme_domain180_data/
+benchmark/video-mme-cookbook/diag/videomme99_data/

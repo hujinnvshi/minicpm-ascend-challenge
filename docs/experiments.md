@@ -415,6 +415,64 @@ init_from_host_caches 校验 cache_host.n_timesteps != n_timesteps → 拒绝
 
 **代码改动**：仅 `daily_omni_test.py`（stack_frames 默认 1）；omni.cpp 诊断 LOG 用后移除（净 0 改动）；不动 server/推理数学/红线。
 
+### 实验 P7 重验（2026-08-07）：多帧退化真因 = 非交错打包（框架 bug，非模型上限）
+
+**触发**：官方 vLLM-Omni 指南证明多帧（Daily-Omni ≤64 帧、Video-MME ≤96 帧）可达 78%/70% → 推翻 P7"多帧=模型上限"结论。重验走 stack_frames 全链路代码（非静态推测根因，而是定位打包实现）。
+
+**代码追踪（stack_frames → prefill）**：
+1. `ws_handler.cpp:944-971`（视频拆解）：`extract_video_mp4_media` 用 ffmpeg 抽 **N 个 JPEG 帧 + 1 个整段 audio（capped 29.9s）**。第 1 帧 → `tmp_files.image_path`，第 2..N 帧 → `extra_image_paths`；audio → 单个 `tmp_files.audio_path`。**全程无 1s 分段、无 frame-audio 配对**。
+2. `omni.cpp:5046-5092`（prefill 组装顺序）：
+   ```
+   <image>[overview]</image>
+   <slice>[frame2]</slice> <slice>[frame3]</slice> …   ← N 帧塞进 high-res IMAGE SLICE 槽
+   \n
+   <|audio_start|>[整段 30s audio]<|audio_end|>         ← 单个解耦 audio blob
+   [text/prompt]
+   ```
+3. `encode_image_with_vision_chunks`（omni.cpp:496-498）本就是 **MiniCPM 高清图像切片**机制（overview + 空间 tiles）——多帧视频被当成"一张高原图的多个 tile"喂入。
+
+**根因（确认）**：llama.cpp-omni 对视频做 **STACKED 打包**（N 帧 = 图像切片 + 1 个整段 audio blob，audio 在所有帧之后一次性 prefill），而 MiniCPM-o 视频训练（及 vLLM `minicpm-interleave`）是 **INTERLEAVED 打包**（1fps 帧 + 1s 音频段按时间交错：frame0/audio0-1s/frame1/audio1-2s/…）。**堆叠布局 OOD → decode 陷入重复 token id=30（repetition collapse）**。
+- 为什么 stack_frames=1 不退化：退化为"1 图 + 1 audio"单输入，是合法 omni 输入（图像+音频 QA），在分布内 → 正常（P7 T2）。
+- 为什么 vLLM ≤64/96 帧正常：它用交错打包，在训练分布内。
+
+**结论修正**：
+- P7 的**观察**（stack_frames≥2 → token id=30 重复 40 次）✅ 正确、可复现。
+- P7 的**根因结论**（"多帧超出 turn_based 训练分布 → 模型上限"）❌ 不准确：OOD 是真的，但不是"多帧本身对模型太难"，而是**llama.cpp-omni 把视频帧当图像切片 + 单段 audio 的非交错打包**与训练分布不符。**这是框架打包 bug/限制，非模型上限**——与 vLLM 78% 一致。
+- `daily_omni_test.py` 的 `--stack-frames 1` 仍是当前**正确的 workaround**（单帧避免 OOD），但**不是终局**。
+
+**修复方向（不动推理数学，红线内）**：在 `ws_handler.cpp`（抽帧改为 1fps + audio 切 1s 段）+ `omni.cpp`（prefill 改为按时间步交错 `<image>frame_i</image><|audio_start|>audio_i<|audio_end|>` 循环）实现 `minicpm-interleave` 式打包。仅改输入布局，不改模型/采样 → 数学等价、精度风险在打包层。
+
+**状态**：静态代码分析强假设（打包实现已确证为非交错）；**definitive proof = 实现交错打包后 runtime 复测多帧不再退化**（下一步，属独立修复任务）。vision_backend 非阻塞（单帧 T2 已证视觉在昇腾可用，多帧问题在打包不在后端）。
+
+#### Runtime 复测（2026-08-07，实现+构建+实测）— interleave 必要但不充分
+
+交错打包已实现（`ws_handler.cpp` +114/-14）并**经日志验证布局正确**：`vision_set_max_slice_nums=0` → 每帧 1 chunk 无 `<slice>`；N 步 `<image>frame_i</image><|audio_start|>10 audio tok<|audio_end|>`；问题文本经独立文本项 emit（修了 consumer 在视觉项丢 `user_text` 的 bug）；单帧路径逐字节不变。
+
+实测结果（**每个 case 必须用干净 server**，因退化会污染 shared_octx）：
+- **干净 server stack-frames 1（红线回归）→ 连贯**（"woman...skincare product...smooth wrink"）。✅ 红线守住。
+- **干净 server stack-frames 2（interleave）→ 连贯**（item: "C. Logo transition sound effect"，模型理解视频）。✅ 多图在低帧数**能工作**——相对旧 STACKED 是进步。
+- **干净 server stack-frames 8（首次请求）→ 仍 `?`×40 崩溃**（token id=30 重复）。❌ 高帧数仍退化。
+- ⚠️ 8 帧崩溃**污染 shared_octx**，其后所有请求（含 2/3 帧）都退化 → **必须重启 server 才能干净复测**（早期连续测 2/3/8 帧全 `?` 是污染假象，非本质）。
+
+**新嫌疑（8 帧崩溃真因）**：log 显示 **whisper 音频 KV cache 在 N 个 1s 段间累积**（`current_total` 50→100→…→400，`KV cache iter incremented to 1..N`）——每段不是独立编码而是流式承接前段（streaming mode），N 大时嵌入污染严重 → LLM 崩溃。N=2 时累积轻 → 仍连贯。**下一步修复方向：每段编码前清 whisper KV cache（`audition_whisper_clear_kv_cache`），让各 1s 段独立编码（匹配 interleave 训练分布）。**
+
+**修正 P7 重验结论**：交错打包**必要**（2 帧已证能工作 + 修了 user_text 丢弃 + 红线安全），但**不充分**——高帧数还卡在 whisper 流式 KV 累积。interleave 代码**保留**（gated、正确、低帧数有效、`OMNI_VIDEO_INTERLEAVE=0` 可回滚）。Daily-Omni 高精度（需多帧）还需再攻 whisper KV 清理这一关。
+
+#### whisper KV 清理实测（2026-08-07，实现+构建+干净 server 复测）— 第二个假设证伪
+
+每段编码前调 `audition_whisper_clear_kv_cache(octx->ctx_audio)`（ws_handler interleave 循环内，gated）。日志确认 **KV 不再累积**：每段都 `current_iter=0 → incremented to 1 (total_tokens=50)`（之前是 50→100→…→400 累加）。即各 1s 段现在**独立编码**，语义正确。
+
+**但干净 server stack-frames 8 仍 `?`×40 崩溃** → **whisper KV 累积不是 8 帧崩溃的真因**，第二个假设也被 runtime 推翻。
+
+#### 最终结论（runtime 推翻两个静态假设后）
+
+- 修了两个**真实 bug**（interleave 打包 + whisper KV 流式累积），都**验证生效且保留**（gated、单帧红线安全、低帧改善、语义更正确）。
+- 但**两个都没解决高帧崩溃**。clean server：1 帧/2 帧连贯，8 帧必崩（阈值在 2~8 之间，与音频 KV 无关）。
+- 高帧崩溃的真正根因在**更深的层**：最可能是 **turn_based 多 `<image>` 视觉路径**——官方 910C 指南明示"**视觉模态未验证 / vision_backend 默认 metal**"。这不是 ws_handler 或音频层能修的，需要视觉编码/chat-template/多图位置编码层面的排查（或官方修复）。
+- **Daily-Omni 高精度（需多帧）在 llama.cpp-omni 当前视觉路径下不可达**。方向转：① 问赛事方子赛道 A 多帧/视觉官方配置（Q1 已起草）；② 如实报告框架视觉限制；③ 可选深度诊断（纯多图无 audio、找 2~8 帧阈值、查 vision_backend 实际跑在哪）——但不改 server 层结论。
+
+**方法论印证**：rigor-verify-loop 两次 runtime 实测推翻静态假设（先"打包是根因"、再"KV 累积是根因"）——静态推理只生成假设，runtime 才定根因。两个修复都是真实改进（值得保留），只是都不是高帧崩溃的那一关。
+
 ### 实验 P8：官方验收匹配度评审 + 三项 benchmark 验证（2026-08-06，分支 fix/video-extract-harden）
 
 **任务**：对照官方 5 步验收（框架/精度3项/Demo/性能/复现），逐项验证 + 补缺口 + 落盘推送。
@@ -457,3 +515,436 @@ init_from_host_caches 校验 cache_host.n_timesteps != n_timesteps → 拒绝
 - ❌ **风险**：Daily-Omni（6.7% vs 77.5，框架上限）、VideoMME（未跑通，server 崩溃）—— 两项多模态精度受 omni 框架代际限制，需向官方求证基线口径 + 框架修复。
 
 **务实建议**：聚焦已达标项（性能/Demo/复现/TTS-WER），Daily-Omni/VideoMME 如实报告框架限制 + 求证官方基线口径（79.5/69.0 是否 omni 实测）；不强求在框架代际差内硬冲精度（ROI 低）。
+
+### 实验 P0：Daily-Omni 单帧红线复位验证（2026-08-07，分支 fix/video-extract-harden）
+
+**起点**：最新 `benchmark/daily-omni/result.json`（n=3，全 `?????` 0%），而 `daily_omni_test.py` 默认 `--stack-frames 1`、P7 已证单帧=正常文本 → 疑似"单帧红线破了"。三个嫌疑：A1 当时 server 被多帧污染 / A2 interleave 改动引入单帧回归 / A3 未提交 omni.cpp 改动。
+
+**代码复核（排除 A2/A3，不动 server）**：
+- **A2**：`ws_handler.cpp:1067` interleave gating = `!interleave_timesteps.empty() && !(OMNI_VIDEO_INTERLEAVE=="0")`；`interleave_timesteps` 仅在 `extract_video_mp4_media` 的 `if (n_frames>1)` 块填充。**stack_frames=1 → n_frames=1 → timesteps 空 → 走 else legacy 老路径，与改前逐字节一致**（帧抽取命令 n_frames==1 也不加 `-vf fps=1`）。→ interleave 对单帧零影响，排除回归。
+- **A3**：未提交 omni.cpp 改动仅 sampler 参数 LOG 打印（不影响推理数学），binary 08-07 08:04 已含。排除。
+
+**runtime 实验（起全新干净 server，08:04 binary，未设 OMNI_VIDEO_INTERLEAVE）**：
+- 起点状态：当前**无 server 在跑**（ps 空 / NPU Aicore 0% / HBM 5%）→ 最新 result.json 为上次残留；起 `scripts/serve.sh` 等价命令的全新 server。
+- 关键特性印证：Omni server **omni_context 懒加载**——启动只起 HTTP + 265 线程，HBM 5%、RSS 910MB、wchan `inet_csk_wait_for_connect`；模型在首个 WS `session.init` 才加载。探针 `wait_ready` 触发后 HBM → 33%。（即"启动≠加载完成"，干等 HBM 涨是误判。）
+- 探针（`benchmark/daily-omni/probe_p0.py`，干净 server）：
+  - **T1 纯文本** "What is 2+2?" → `"2 + 2 = which means 4. The correct answer is B.4"` ✅ **NORMAL**
+  - **T2 单帧视频**（daily-omni row 0，stack_frames=1）→ `"Okay, let me try to transcribe the audio in the video. <|SOA_0隅"` ✅ **NORMAL**（不乱码）
+
+**结论：故障 A = A1（污染），红线没破，binary 健康。** 最新 result.json 的 `?????` = 当时那个 server 被多帧（stack≥8）测试污染了 `shared_octx`，退化扩散到后续单帧请求（P7 重验已知机制"8 帧崩溃污染，其后全退化，需重启 server 复位"）。
+
+**副发现（修正 P7 "单帧=完全正常"）**：T2 单帧输出尾巴带 `<|SOA_0`（audio 起始标记）+ 乱码 `隅` → **即使单帧，模型也有概率滑向输出 audio token**。退化是**渐进/概率性**的，非"单帧 100% 稳 / 多帧 100% 崩"的开关。这指向 P2（logits 诊断）：高帧崩溃前，logits 在 audio-token 区间是否已抬升。
+
+**教训/流程**：跑过多帧（stack≥3）实验后，**同一 server 进程必须重启**才能跑正式评测或单帧对照，否则 shared_octx 污染制造假阳性"红线破了"。`daily_omni_test.py` 默认 stack_frames=1 防不住——这是同进程先后顺序问题，不是参数问题。
+
+**代码改动**：新增 `benchmark/daily-omni/probe_p0.py`（干净 server 探针，T1 纯文本 + T2 单帧视频）；不动 server/推理数学/红线。
+
+### 实验 P1：Demo 路径能否多帧 — 代码证伪（2026-08-07，分支 fix/video-extract-harden）
+
+**假设（P6 遗留）**：Demo turnchat 经 gateway/worker 能正常答视频、直连 WS 乱码 → 差异在 gateway/worker payload 转换，定位它可能解锁多帧（被搁置的"钥匙"）。
+
+**链路核实（纯代码层，未起 Demo）**：
+- **前端**（`turnbased.html`）：视频 payload = `{type:'video', data, duration}`，**不传 `stack_frames`**（L2081/2388）；顶层 `omni_mode:true` + `image.max_slice_nums:1`（hasVideo，L2479-2480）。
+- **gateway.py / worker.py**：**透传**（gateway L516-523 直接转发原始 JSON；worker `/v1/worker/chat` → backend `/backend`，mode 强制 `turn_based`）。
+- **backend `protocol.cpp:464`**：`int stack_frames = json_int(part, "stack_frames", 1)` → **video stack_frames 默认 = 1**。
+- **`omni_mode` 是 dead field**：`protocol.cpp:401` 读取赋值，但 grep 全仓（`tools/server/*.cpp` + `tools/omni/*.cpp`）**仅 protocol.cpp:401 赋值 + protocol.h:113 声明，ws_handler/omni.cpp/server-omni.cpp 零使用点**（protocol.h:113 自注 "pass-through hints §4.2"）。Demo `omni_mode=true` 与 daily-omni `false` **零行为差异**。
+
+**结论：P1 前提证伪。** Demo "能正常答视频" = **Demo 默认 stack_frames=1（单帧）**，与 daily-omni `--stack-frames 1` 完全等价（P0 T2 已证单帧正常）。P6 "Demo 正常 / 直连乱码" 的真正差异 = **stack_frames 帧数**（Demo 默认 1，daily-omni 当时 8），**非** gateway/worker 转换。Demo 路径无多帧能力 → 起 Demo 全栈（3 进程+SSL+playwright 视频上传）无法验证"框架能否多帧"，只会复证"单帧正常"。
+
+**修正 P6**：将"直连 WS 乱码 vs Demo 正常"归因为"gateway/worker payload 差异 / 前端 system_prompt / mode 字段"是误判，实为 `stack_frames` 帧数差异 + 当时 server 污染。
+
+**方向**：故障 B（多帧 stack_frames≥3 崩）仍是真问题，Demo 救不了。下一步转 P2（logits 诊断，攻多帧崩溃本身）或 P3（基线口径，战略求证）。
+
+**代码改动**：无（纯代码核实，未起 Demo，未动 server）。Explore agent 结论部分可信（stack_frames 默认 1 ✅），但其 "omni_mode 是 Demo 正常关键变量" / "mode 默认 full_duplex" 推断需修正（omni_mode=dead field；worker 显式设 turn_based）。
+
+### 实验 P2：高帧崩溃 logits 诊断 — 全 NaN 数值崩溃（推翻 P7 repetition collapse）（2026-08-07，分支 fix/video-extract-harden）
+
+**起点**：P7/P7重验 未定位高帧（stack≥3）崩溃根因（已排除交错打包、whisper KV 累积）；P7 结论 "token id=30 重复 = repetition collapse / 模型退化 OOD"。P0 副发现单帧也冒 `<|SOA_0` → 怀疑 audio-token 滑动。需下沉到 logits 数值层。
+
+**实验**：`omni.cpp:1344 sample_with_hidden_and_token`（采样点，`logits = llama_get_logits_ith(ctx,-1)` @ L1345、`common_sampler_sample` @ L1398）加临时 LOG（env `OMNI_LOGIT_DIAG=1`，前 80 步）：每步打印 sampled id + logits `[n_vocab/max/min/nan_count/tok30/audio 区间[151687,158249)]` + top-10。rebuild，干净 server（binary 12:56），首请求 `--stack-frames 8`（默认 interleave 路径）。
+
+**结果（决定性，40 步完全相同）**：
+```
+[P2 step 0..39] id=30 n_vocab=151748 nan=151748 | tok30=nan | audio_top10=0
+  top10: (空)
+```
+- **`nan=151748` = 整个 vocab（151748 个 token）的 logits 全部 NaN**。top10 空（LOG 的 `v==v` 过滤排除了全部 NaN）。
+- 每步 `id=30`：sampler 在**全 NaN logits** 下 argmax 无意义，返回固定 id=30（`\x1e`）→ 输出 `?`×40。**模型不是"选"了 30，而是输出全 NaN。**
+
+**结论：故障 B = 数值崩溃，非 repetition collapse。** P7 的 "模型退化重复选 token 30" 被推翻 —— 真因是**多帧 prefill 后 LLM 前向传播产生全 NaN logits**（NaN 经矩阵乘扩散到整个 vocab），sampler 沦为返回无意义固定 token。**故障 B 从 "模型能力上限/OOD"（死路）重定性为 "数值溢出 bug"（可定位可修）。**
+
+**补充排查（排除 RoPE，锁定 NPU vision）**：
+- `n_ctx_train=40960` ≫ stack=8 的 n_past（8 步 ×78 ≈ 646）→ **RoPE 位置越界排除**（远未到训练上限）。
+- 日志 `vision_ctx: vision using CANN0 backend` → **vision encoder 实际跑在 NPU（CANN）**，非 P7重验以为的 "metal / 未验证"。单帧正常 / 多帧全 NaN + 视觉在 NPU → 嫌疑 = **NPU（CANN）vision encoder 多帧计算产生 NaN embedding**（"视觉模态未验证" 的实操含义）。
+- 日志无任何 nan/inf/overflow error → **NaN 静默产生**（CANN 算子输出 NaN 不报错）。
+- 排除项：sampler bug、n_ctx、RoPE、interleave 打包逻辑（已修且 2 帧不崩）、whisper KV（已清）。
+
+**下一步（P2.5，定位 NaN 源头）**：① vision encode 输出处（`omni_image_embed_make_chunks_with_filename` 返回的 embedding）加 NaN 检查，对照单帧（应非 NaN）vs 多帧（应 NaN）；② 若 omni 支持切 vision backend，做 **CPU vision 多帧隔离实验**（多帧 CPU vision 不崩 → 坐实 NPU vision 算子是源头）；③ 单帧/多帧 LLM 输入 embedding 数值对照。
+
+**方法论印证**：rigor-verify-loop **第三次** runtime 实测推翻静态结论（P7重验推翻"打包根因"/"KV 根因"；P2 推翻"repetition collapse"）。**看 token id（行为）会误判"模型选 30"，看 logits（数值）才暴露 NaN —— 退化诊断必须下沉到数值层。**
+
+**代码改动**：`omni.cpp:1399` 后临时 LOG（env `OMNI_LOGIT_DIAG=1` 门控，前 80 步，只读 logits 不改推理数学）。**待 P2.5 定位 NaN 源头后统一移除（净 0）**；当前暂留（P2.5 会扩展同点诊断）。
+
+### 实验 P2.5：NaN 源头定位 — vision 干净，退化渐进，NaN 在 LLM 多步 prefill 累积（2026-08-07，分支 fix/video-extract-harden）
+
+**起点**：P2 锁定"高帧全 NaN 数值崩溃"嫌疑 NPU vision encoder。需定位 NaN 源头。
+
+**P2.5-B（vision embedding NaN 检查）**：`omni_image_embed_make_chunks_with_filename`（omni.cpp:884）的 `vision_chunks` 输出加 NaN/Inf 检查 LOG（env `OMNI_VISION_NAN_DIAG=1`）。干净 server，stack=8。
+- 结果：8 帧 vision embedding **全部 nan=0 inf=0**（max 34~40，min -7，ViT 合理范围），size=262144（4096 embd × 64 tok）。
+- **vision 非 NaN 源头**（否定 P2 嫌疑）。但 logits 仍全 NaN → NaN 在 vision 之后（（vision+audio embd）→ LLM eval）。
+
+**P2.5 阈值对照（stack=2，P7重验称"连贯"）**：同 binary 双 LOG，干净 server，stack=2。输出 `\n\n\n...`（16 换行，**非 P7重验的"连贯文本"——不可复现**）。logits：
+```
+[P2 step 0] id=151667 max=22.8 nan=0 tok30=-7.66 audio_top10=1
+  top10: [151667]=22.84 [785]=17.97 [6025]=17.16 ...
+[P2 step 1] id=198(\n) max=30.25 nan=0
+```
+- **stack=2 logits 完全正常（nan=0，有明确 top10）**，但模型选 id=151667（omni 特殊 token，紧邻 audio 区间 [151687,158249)）+ id=198（`\n`）交替 → **语义退化（attention 没崩，选错 token），非数值 NaN**。
+
+**退化渐进表（统一 P0 副发现 + P2 + P2.5）**：
+
+| stack | vision embd | logits | 输出 | 性质 |
+|---|---|---|---|---|
+| 1（P0/P7） | 干净 | 正常 | 正常文本（偶冒 `<|SOA_0` 尾巴） | 健康（轻微 audio 滑动） |
+| 2 | 干净 | **正常（nan=0）** | `\n` + id=151667 交替 | 语义退化（选 audio 边界/换行） |
+| 8 | 干净 | **全 NaN（151748）** | `?`（id=30） | 数值崩溃 |
+
+**结论**：
+1. **vision 非 NaN 源头**（三种 stack 都干净）。否定 P2 "NPU vision 多帧 NaN" 嫌疑；P2.5-A（CPU vision 隔离）因此无必要（未做）。
+2. **退化随帧数渐进**：1 正常 → 2 语义跑偏（logits 有形但选 audio 边界 token + 换行）→ 8 全 NaN 崩溃。**非"2 帧稳 / 8 帧崩"的开关**。
+3. **NaN 在 LLM 多步 interleave prefill 累积**：vision embd 干净喂入，但每步 +vision+audio embd，LLM KV/attention 逐步累积，8 步时数值溢出 NaN（2 步尚可，语义退化但 logits 有形；1 步正常）。
+4. **模型多帧倾向 audio token 输出**（id=151667 ≈ audio 边界 + P0 单帧 `<|SOA_0` 副发现）—— MiniCPM-o 全模态，视觉+audio 输入下倾向滑向 audio 输出，多帧加剧，8 帧数值崩。
+
+**修正 P7重验**："2 帧连贯"不可复现（stack=2 实测语义退化，输出换行）——可能 P7重验的 case 不同或不可重现。
+
+**P2.5-C（LLM 输入 embd NaN 检查，`prefill_with_emb` omni.cpp:380）**：env `OMNI_PREFILL_EMB_NAN=1`，检查喂给 `llama_decode` 的 `batch.embd`（vision+audio+text 拼接后的输入）。stack=8 结果：**所有输入 embd 段全部 nan=0 inf=0** —— vision 段（n_eval=64，max 34~40/min -7）+ **audio 段（n_eval=10，max 7~11/min -2~-3，whisper 合理）** 全干净；但 `[P2 step 0]` logits 仍全 NaN（nan=151748）。
+
+**最终定位（P2.5-C）**：**输入 embd（vision+audio 拼接）全干净，NaN 在 `llama_decode`（CANN 后端 LLM 前向）内部产生**。即 LLM attention/FFN 在 8 步 interleave prefill（每步 +64 vision +10 audio embd）累积后数值溢出 → logits 全 NaN。
+
+**修复可达性（关键结论）**：输入 embd 干净 → **非 omni.cpp embd 拼接问题（omni.cpp 层不可修）**；NaN 在 `llama_decode` 内部 → **入 CANN 后端（ggml-cann）/ llama 内核**。**红线内（仅流水线/调度）不可修**，需框架/CANN 层或官方修复。
+
+**诊断链闭环**：vision 干净（P2.5-B）→ audio embd 干净（P2.5-C）→ 输入 embd 全干净（P2.5-C）→ NaN 在 LLM（CANN）多步 prefill 内部累积溢出。故障 B = CANN 后端 LLM 在多模态多步 prefill 下的数值稳定性 bug，非模型上限、非 vision、非打包、非 embd 拼接。
+
+**务实结论**：继续深挖需 hook llama 内核层（ROI 极低，且改 CANN/llama 内核超红线）。建议：① 转 P3 求证官方基线口径（79.5/69.0 是否 omni 实测，若非则多帧精度非我方责任）；② 如实报告"CANN 后端 LLM 多步 prefill 数值稳定性"为框架限制；③ 单帧（stack=1）精度仍可达，作为可交付口径。
+
+**方法论印证**：rigor-verify-loop 第 4/5 次 runtime 推翻静态（P2 "NPU vision 嫌疑"被 P2.5-B 推翻；P7重验 "2 帧连贯" 被 stack=2 复测推翻）。**逐层 NaN 检查 + 阈值对照逐步缩小范围**——vision 干净 → logits 对照（2 正常 / 8 NaN）→ 锁定 LLM 累积。
+
+**代码改动**：P2 sample LOG（omni.cpp:1399）+ P2.5-B vision NaN LOG（omni.cpp:884），均 env 门控只读。**待统一移除净 0**（见 task12/17）。
+
+---
+
+### 实验 P3：CookBook 官方 pipeline 实证 — context 40960 不是解，退化是 910B3/CANN 框架 bug（2026-08-10）
+
+**起点**：P2.5 定位 NaN 在 CANN 后端 LLM 多步 prefill。P2.5 务实结论建议 P3 求证官方基线口径。期间曾假设"context 过小（4096/8192 vs 官方 40960）是退化根因"。本实验接入官方 pipeline 实证。
+
+**接入**（commit `ab5653e` feat(eval) + `e1d79f4` build-cann.sh ccec）：
+- 官方评测路径：`OpenSQZ/MiniCPM-V-CookBook` `evaluation/videomme` 的 `llama-omni-eval-cli`（pipe 驱动，`media_type=2` 固定、`use_tts=false`），**非 WS server**（前几轮自建 WS turn_based 路径本就不对）。
+- build：**ccec（CANN bisheng clang 15）**——系统 gcc 12.3.1（openEuler）.o COMDAT/binding/symtab 异常，bfd/lld/gold 三 linker 全失败；ccec 干净编过（见 memory `910b-cann-gotchas` 第10条）。
+- 官方参数：`CTX_SIZE=40960`、`MAX_NUM_FRAMES=64 @1fps`、`temp 0.2`、`max_tokens 100`。
+
+**实证（smoke_test 2 题，video fFjv93ACGo8）**：
+- ✅ 跑通：CLI 6.4s ready + ffmpeg 抽 64 帧 + 多帧 prefill（n_past 4071→4538，**ctx 40960 无滑窗**）+ decode 100 token。
+- ❌ 精度 **0/2**：两题输出 100 个 `_`（退化 token）。CLI log **无 NaN/inf 报错**（logits 退化，非 P2.5 的数值崩溃 NaN；但同属多帧退化谱系）。
+
+**结论（推翻 context 假设）**：
+1. **context 40960 不是解**——官方 pipeline + 64 帧 + 40960 context 仍退化，"context 过小"假设**证伪**。
+2. **退化是 910B3/CANN 框架 bug**（P2.5 已定位 CANN 多步 prefill 数值稳定性），与 context/喂法（官方 pipeline）/编译器（ccec）都无关。
+3. **官方基线 69.0 极可能 910C 实测**（910C 不退化）——910B3 厂家替代 910C 的精度代价。
+4. 单帧（stack=1）仍可达（~10%），但官方口径 64 帧退化 → 多帧精度项（VideoMME/Daily-Omni）在 910B3 客观难达标。
+
+**务实结论**：解铃在赛方/910C。向赛方确认（`organizer-inquiry-final.md`）：① 官方基线环境（910C?）；② 910B3 选手多帧精度如何判定；③ 框架受限项是否豁免。我方强项 = 性能（RTF 0.68）+ Demo + TTS-WER（0.20）。
+
+**方法论印证**：rigor-verify-loop 第 6 次——"context 过小"静态假设被官方 pipeline 实测推翻（40960 仍退化）。**精度退化根因诊断必须 runtime 实测，静态推理（含"context 越大越好"的直觉）会误导**。
+
+---
+
+## 实验 P6：vocoder overlap + CPU 亲和（2026-08-12）— bit-精确失败，接受 RTF 0.57
+
+> 分支 `perf-vocoder-overlap`（**未 merge**，信息性留档，含 step1/step2 完整代码 + 本 P6 详节）。
+
+**目标**：RTF 0.57 → 理论 0.34（vocoder CPU 346ms ‖ t2m NPU 126ms 完全 overlap）。P5（experiments.md:345-358）试 overlap 失败归因"CPU 竞争"，decision L18 留"CPU 亲和"未试。
+
+- **step1（拆分 + env gate，✅ bit-精确）**：拆 `push_tokens_only`(t2m)+`vocoder_only`(vocoder+cache)，保留原函数；env `OMNI_VOC_OVERLAP` gate。on 串行调子函数 = off，wav **20/20 byte-identical**（解决 P5 遗留 58/57）。
+- **step2（async overlap，❌ bit-精确失败）**：`feed_window_overlap`(t2m N 主 ‖ vocoder N-1 `std::async`)+`flush_overlap`。on 总长一致（434880 样本）但 **PCM 改内容**（max_diff 27756, mean 1994, 非零 99.67%）。
+- **根因**：step1 串行 bit-精确 vs step2 async 改内容 → **ggml 跨 backend（NPU+CANN vs CPU）并发非 thread-safe**（async vocoder 与主线程 t2m 共享 ggml state 污染内容）。**这是 P5 失败真因**（不只 CPU 竞争，还有并发改内容）。
+- **决策**：off env 关 = bit-精确零破坏 RTF 0.57；overlap on 改内容违反"不改数学"红线 → 不可用 → **接受 0.57（beat 基线 1.087 共 48%）**。
+- **教训**：ggml 跨 backend 并发需先验证 context 隔离；未来多 backend overlap 需重构 t2m/vocoder 为独立 ggml context（大改 + 高风险）。性能优化终点 = 0.57。
+
+---
+
+## 实验 2026-08-14：系统层参数优化 — NUMA 亲和修正（RTF 0.68→0.59）
+
+> 分支 `bench-huawei-adapt`。**纯运行时，不重编**。新机器（npu-smi id=**7**，Atlas 910B3 die0，64GB）环境校准发现。plan 见 `/root/.claude/plans/resilient-inventing-planet.md`。
+
+**起因**：用户要求系统参数优化。A0 baseline 探测发现新机器 NPU 的 NUMA 归属与旧配置不符 —— 这是测出 0.68（而非记忆里 0.57）的根因。
+
+**关键发现 — NUMA 亲和失效（唯一真实系统杠杆）**：
+- 新机器 NPU（PCI `0000:42:00.0`）`numa_node=2`（查法：`cat /sys/bus/pci/devices/0000:42:00.0/numa_node`）。
+- 旧配置（CLAUDE.md / 记忆）绑 `taskset -c 192-223`（node6）→ **vocoder 线程跨 NUMA 与 NPU（node2）搬数据**。
+- 旧机器测 0.57 时 NPU 大概率在 node6 故绑 192-223 正确；新机器 NPU 在 node2，配置失效 → 实测 0.68。
+
+**A/B（各 3 次，e2e RTF，SPEAK→WAV 口径，F16，`OMNI_T2W_THREADS=24`）**：
+
+| vocoder 绑核 | 3 次 e2e RTF | 中位 | 说明 |
+|---|---|---|---|
+| node6 `192-223`（旧，跨 NUMA） | 0.68 / 0.65 / 0.69 | **0.68** | NPU 在 node2，跨 NUMA DMA |
+| node2 `64-95`（NPU 同 node） | 0.55 / 0.59 / 0.65 | **0.59** | 本地 DMA，RTF −13% |
+| node2 + SLOG=0 + nice-10（系统包） | 0.60 / 0.55 / 0.58 | **0.58** | 中位 ≈ node2，方差 0.10→0.05 |
+
+**其余系统项（均为边际 / 不可行）**：
+- A1 CPU governor = `performance`、A4 THP = `[always]`：**OS 镜像已最优，跳过**。
+- A3 关 NUMA balancing：**容器内 `/proc/sys` 只读，不可改**（Read-only fs）。
+- A5 `ASCEND_SLOG_PRINT=0` + A6 `nice -n -10`：中位无显著收益（0.59→0.58，噪声内），**主要降方差**。
+- A7 perf-duplex 参数：无 `-b/-ub` batch；`--stream-interval` 是"模拟真实流式"口径参数（动则偏离 SPEAK→WAV 口径，不动）。
+
+**结论**：
+- 系统层真实杠杆 = **NUMA 亲和**（查 NPU `numa_node` → 绑对应 CPU）。推荐配置：`OMNI_T2W_THREADS=24 taskset -c 64-95`（本机）+ `ASCEND_SLOG_PRINT=0`（降方差）。
+- RTF = **0.58–0.59**（中位，新机器物理限），vs 旧错误配置 0.68；仍 beat 基线 1.087 共 ~46%。
+- **方法可推广**：换机器先 `cat /sys/bus/pci/devices/<NPU_bus>/numa_node`（NPU bus 从 `npu-smi info` 取），再绑该 node 的 CPU（numactl 缺失，用 taskset）。**不同机器 NPU node 不同**（旧机 node6 / 新机 node2）—— 旧 `taskset -c 192-223` 写死值不能跨机器照抄。
+- **Video-MME 精度**：本轮纯运行时空间 ≈ 0（评测参数锁死 + `OMNI_DEBUG` 探针需重编）；评测日志 grep 无 NaN/inf（B2），无 attention fp32 红线触发证据。精度提升杠杆（attention fp32 累加）在红线+重编，本轮按约束不做。
+
+**B1 温度对照（排除性验证，2026-08-14）**：videomme99 子集前 6 题，`TEMPERATURE=0.0`（greedy）vs `0.1`，其余官方锁定（top-p=0.8 / top-k=100 / repeat=1.02 / seed=42 / 64帧@1fps）。env：`LLM_MODEL_PATH=F16`、`PARQUET_PATH=videomme_subset_99q.parquet`、`VIDEO_DATA_DIR=appendix/videomme99/data`、`LLAMA_CLI_BIN=build/bin/llama-omni-eval-cli`，绑核 `taskset -c 64-95`。
+- 结果：**两温度逐题 Raw 完全一致**（题1 `\nC. Berries` / 题2 `A` / 题3 `C. 2.` / 题4 全`\n`退化 / 题5 `\n\nA` / 题6 `C`），准确率均 2/6。
+- 结论：低温度区间（0~0.1）**采样参数无杠杆**，temp=0 已最优 —— 排除性验证完成，符合 eval_cli 注释预期（temp>0 让 MCQ 跑偏）。
+- **副产品**：题4 temp=0/0.1 **均**输出全 `\n` 硬退化（Pred=''，非 NaN、确定性、非随机）→ 多帧退化在个别题仍有残留（非本轮纯运行时可解），留作 attention fp32 红线实验的潜在触发点（证据方向：长 context 非随机字符退化）。
+
+---
+
+## 实验 2026-08-14（下午）： 题4 退化根因四路排除（attention 路径 / vision backend 全排除）
+
+> 分支 `bench-huawei-adapt`。题4 = 99q 子集第 4 题（video `N1cdUjctpG8`，GT=C），B1 发现其在 temp=0/0.1 下均输出全 `\n`（确定性退化）。本轮用该样本做根因定位，四种组合全部实验。
+
+**四路结果（题4 输出一字不差的全 `\n`，Pred=''）**：
+
+| # | vision backend | attention 路径 | 题4 输出 | 耗时 |
+|---|---|---|---|---|
+| 1 | NPU | fallback（默认） | 全`\n` | ~25s |
+| 2 | NPU | fallback（DISABLED，**=1 无效对比**） | 全`\n` | ~25s |
+| 3 | **CPU**（参考精度） | fallback | 全`\n` | **15.2min** |
+| 4 | NPU | **FA**（FusedInferAttentionScoreV2，ENABLED） | 全`\n` | 0.3min |
+
+**关键中间发现（修正上午阶段1 的草率结论）**：
+- `llama-context.cpp:3397-3408`：**AUTO + CANN → flash_attn 强制 off**（注释原文："the fused attention operator is numerically unstable on some SOCs under long / multi-image shapes. Force-disable FA on CANN in AUTO mode; pass --flash-attn on to opt back in"）→ **生产路径从未走 FA，一直是 fallback（QK^T F32 累加 + softmax）**。
+- 上午阶段1 的 DISABLED 实验 = 默认同路径，**无效对比**；其"推翻 oghub 假设"的结论作废 —— oghub 说"FA 被关"是对的（只是关在 llama.cpp 层、是上游故意的，且 forcing off 理由正是多帧不稳）。
+- vision backend 切换 = `Omni_BACKEND_DEVICE=CPU`（vision.cpp:231，纯 env）；CPU vision 实测 **13.8s/帧**（64 帧 ≈883s）必然超 eval client 的 `INFER_TIMEOUT=300s`（evaluation/ 不可改），故绕过 client 直接驱动 eval-cli 的 stdin/stdout JSONL 协议（脚本 `benchmark/video-mme-cookbook/diag/q4_cpu_vision.py`，自控超时、vision backend 可选）。
+- eval-cli 重编：CMakeCache 链接缺 `-lascendcl` 会报 `aclrtGetDevice/aclrtSetDevice undefined`（--no-allow-shlib-undefined），需在 `link.txt` 补 `-L$ASCEND_TOOLKIT_HOME/aarch64-linux/lib64 -lascendcl` 后手动链接。
+
+**结论**：
+1. **vision NPU/CPU 漂移（cos 0.993–0.998）不是根因** —— CPU vision（参考精度）题4 输出一字不差。补上 08-12 诊断路径 B 的端到端缺口，与路径 A（特征级）闭环一致。
+2. **attention 路径（FA vs fallback）不是根因** —— 强制 FA（ACLNN FusedInferAttentionScoreV2，prefill `innerPrecise=2`）题4 输出一字不差。
+3. 退化是**确定性的、与 vision backend 和 attention 路径均无关** → 指向 LLM 更底层（RoPE / KV 累积 / 其他算子）或模型本身对该视频多帧 context 的行为，或 910B 环境数值特性 —— 均非"换 backend / 切路径"可解。
+4. **强化"51.5% 是真实水平"归因**：oghub attention 假设 + flash/fallback + NPU/CPU vision 全部实验排除。剩余出路仍为非代码路径：910C 复现 / 赛方确认 910B 独立基线 / 环境受限豁免。
+
+**可回滚状态**：源码已 `git checkout`（ENABLED/DISABLED 行均已去）；`build-cann/bin/llama-omni-eval-cli` 为 FA 实验版（**勿用于评测**，评测用 `build/bin` 0812 版）；`flashon.bak` 为 Aug10 旧版（无 `--seed`，同样勿用）。
+
+---
+
+## 实验 2026-08-14（晚）：域偏差假设证伪 + 空响应根因 = EOS 临界翻转（机制级定位）
+
+> 分支 `bench-huawei-adapt`。三个连续实验：60 题非 KB 对照 → 180 题分层验证 → 空响应逐 token 定位。
+
+### 一、域偏差假设：先起后落，最终证伪
+
+- **起因**：99q 子集 = 纯 Knowledge 域（parquet 前 99 行，全量占比仅 30%）→ 疑"51.5% 被子集偏难拖低"。
+- **60 题非 KB 对照**（五域分层，`videomme_subset_nonkb.parquet`）：63.3%（38/60）vs KB 51.5/53.5% → 表观 +10.8pp，域加权全量期望 ≈60%（但 z=1.33 未过显著）。
+- **180 题独立验证**（每域 12 视频严格 4/4/4 时长均衡、排除已测视频，`videomme_subset_domain180.parquet`）：**47.8%**（86/180）——直接打回。合并非 KB = 51.7% ≈ KB 52-53%。
+- **终局**：Kruskal p=0.26，KB vs 非KB p=0.37。**域差异假设未通过验证；"60% 期望"不成立；339 题合并 ≈52%，与最初 51.5% 一致**。观察到的域间点估计差（33-61%）在样本量内不可与噪声区分。
+
+### 二、空响应：从现象到机制（本轮最大成果）
+
+**现象规模**：KB 1/99 → 非KB60 7/60 → 180题 **31/180**，全为真空串 `''`（与 q4 的全`\n` 是两个签名）。
+
+**归属分解**（31 题）：
+- 3 题 = **视频文件损坏**（nO2B4haj2BQ.mp4 本地 0 字节；zip 源 397MB 正常 → 首次解压被 2min 超时杀断，续跑因"文件存在"跳过 —— **我方解压脚本 bug，已定位**）；
+- 28 题 = **帧正常、prefill 完第一步即 end-token**（涉及 23 视频，Film&TV 最多；与运行位置无关 → 非状态累积）。
+
+**机制定位**（env 门控探针 `OMNI_DEBUG_TOPK`，插入 `sample_with_hidden_and_token` 采样前；build-cann 诊断版 binary，`build/bin` 官方版未动）：
+
+093（drbi6HK1gSc，Film&TV short，3/3 空）首 token 真实分布：
+```
+#0 <|im_end|>  12.27  ← 真 argmax，greedy 正确采样（采样器无罪）
+#1 "A"         11.64  ← 答案字母，仅差 0.63 logit（~5%）
+#2 <think>      9.95
+```
+- **空响应 = 模型在 910B/F16 数值下 EOS 以 ~0.6 logit 微弱优势压过答案字母的临界翻转**。不是采样 bug、不是框架 bug。
+- **这是 910B vs 910C gap 的机制级解释**：~12% 题落在 EOS-answer 临界带（修复上限 +6~7pp），加答案选择上的同级临界翻转 → 17.5pp gap 的主体 = "临界决策落在哪边"。外部 910C 全量 69.7% 反推其空响应率必然 <3%，与该机制自洽。
+- **规则内不可修**（压 EOS = 改 logits = 改数学红线）。归因从"推测平台差异"升级为"定位到首 token 临界带"。
+
+**首版探针的教训**：第一版插在 `is_end_token` 命中处（采样后），读到的是 `eval_id_with_hidden` 把采样 token decode 之后的"下一步"分布 → 曾误判"greedy 选了 rank-4"。**采样探针必须放采样前**。
+
+### 三、Track B 同机对照（HF/torch_npu 复跑 3 个空响应题）— ⭐结论反转
+
+本机重建 venv-trackb（torch 2.8.0 + torch_npu 2.8.0.post5 + transformers 4.51.3，注意本版 chat API 用 `msgs=[{"role":"user","content":[img...,text]}]` 结构化消息）。脚本 `trackb_empty_margin.py`（官方 prompt 模板，64帧，greedy）。
+
+**结果：HF 三题全对，llama.cpp 同机三题全空**：
+
+| 题 | GT | llama.cpp-omni | HF/torch_npu（同 910B, F16） |
+|---|---|---|---|
+| 093-1 | D | `''` 空 | **'D' ✅**（7s） |
+| 097-3 | A | `''` 空 | **'A' ✅**（2s） |
+| 114-1 | D | `''` 空 | **'D' ✅**（6s） |
+
+**推翻"910B 环境级归因"**：EOS 临界空响应是 **llama.cpp-omni 特有现象**（同硬件同精度下 HF 不触发）。两种可能剩余解释：
+1. **协议层差异**（可修方向！）：C++ 的 prefill 构造 vs HF 参考 —— 手工拼的 `"<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"` 模板（omni.cpp:11025）token 边界 vs HF chat template、帧分隔符（C++ 每帧后 prefill `"\n"` vs HF `<image>./</image>`）、图像预处理细节。
+2. **数值层差异**（不可修）：ggml-cann vs torch_npu 的 kernel/累加顺序 → logits 微差 → 临界翻转。
+
+**与既有证据的合成**：旧 Track B（08-11 旧机）HF 在 KB99 子集 ~50% ≈ llama.cpp 51.5-53.5% —— 两框架在"有作答"的题上水平相当；HF 的优势集中在**不产生空响应**。若 llama.cpp 的 ~12% 空响应按 HF 行为恢复 → +6~7pp。910C 全量 69.7% 的 gap 仍部分未解（HF 在本机全量分未知），但"硬件末日论"已死：**瓶颈 = llama.cpp-omni ×（协议细节 ∨ 数值路径）**。
+
+**四、HF 首 token margin 实测（同日,决定性）**：monkeypatch 内层 `llm.generate` 截 `output_scores`：
+
+| 题 | HF 首 token top5(logit) | llama.cpp 同题探针 |
+|---|---|---|
+| 093-1 | **'D' -0.011** ≫ 'A' -4.59 ≫ 'B' -7.98（**EOS 不在 top5**） | EOS 12.27 > 'A' 11.64（'D' 不在 top5） |
+| 097-3 | **'A' -0.005** ≫ 'C' -6.0 | 空 |
+| 114-1 | **'D' -0.000** ≫ 'A' -11.5 | 空 |
+
+**结论升级：协议/输入差异坐实**。HF 极度自信（首字母压第二名 4.6~11.5 logit），llama.cpp 是 EOS 微弱领先的糊状分布 —— **~5 logit 整体重排远超 kernel 累加噪声量级（0.1~0.5）**。两框架给模型的 context 实质不同。
+
+**头号嫌疑（未逐项消融）**：① chat 模板构造（C++ 手拼 `omni.cpp:11025` vs HF chat template + image-id 标签，HF 用 `<image>./</image>` + `use_image_id`，C++ 每帧 prefill `"\n"`）；② vision 预处理（**注意：此前路径A 的 cos0.995 是 HF-NPU vs HF-CPU,从未对比过 llama.cpp-vision vs HF-vision 的 embedding**）；③ 系统提示词。**下一步实验：两边 prefill 的 token 序列逐位 diff（HF 可直接打 input_ids,C++ 可加探针打 prefill tokens）→ 定位分歧点。**
+
+**五、prefill token 逐位 diff + 修复 A/B（同日,根因闭环）**：
+
+diff 结果（093-1）——两条铁证级协议分歧：
+1. **HF 每帧前有 `<image_id> N </image_id>` 编号（0..63 全带）；C++ 完全没有**（C++ 仅 `<image>`+64槽+`</image>`+`\n`）。模型训练时带帧编号 —— 64 帧视频的时序线索在官方 eval 路径中丢失。
+2. HF 无系统提示词；C++ 带**语音克隆系统提示**（`<|audio_end|>` + 中文"声音模式"指令 + 参考音频 embedding）。模板尾巴两边一致（`<think>\n\n</think>\n\n`）,排除。
+
+**修复 A/B**（omni.cpp simplex 分支加 env 门控 `OMNI_IMAGE_ID=1` → 每帧前插 `<image_id> N </image_id>`,static 计数器,单题进程诊断用）：
+
+| 题 | 修复前 | 加 image_id 后 | 首 token |
+|---|---|---|---|
+| 093 | `''`（EOS 12.27 居首） | **`. Scared.`** 正常生成 | EOS 跌出 top5 |
+| 097 | `''` | **`'C'`** 干净字母 | `'C'` 14.17 ≫ EOS 13.16 |
+
+**结论：根因闭环** —— 缺 image_id → 时序线索缺失 → 分布糊化 → EOS 临界空响应。补上后失败模式消失。剩余差距（093 答 A 文字而非 D）指向第二条分歧（语音系统提示词）待消融。
+
+**六、修复 A/B 全量化 + 完整协议对齐消融（同日,结果喜忧参半,如实记录）**：
+
+1. **计数器 ctx 化**（`image_seq_idx` 字段 + 三处清零：eval_reset×2 + 系统提示重建处,commit ee3fbad）后,**99q 全量 A/B(仅 image_id)**:35.4%（35/99）vs 基线 51.5/53.5% —— **净 -18 题**（新对 10/弄错 28）。单题有效 ≠ 全量有效:KB 域基线本来几乎无退化,加 image_id 反而扰动 28 题 → **"只补一半协议"造出第三种 off-distribution**。
+2. **完整协议对齐消融**（新增 `OMNI_TEXT_CHAT_SYS=1`:跳过语音克隆系统提示,直接 `<|im_start|>user\n`,fall-through 不 return）,093 微测:
+
+| 配置 | 093 输出 | 首 token |
+|---|---|---|
+| 基线 | `''` | EOS 12.27 居首 |
+| +image_id | `. Scared.` | EOS 出局 |
+| **+image_id+TEXT_CHAT_SYS** | **`'A'`（标准字母）** | **'A' 10.25 居首,EOS #3（8.44）** |
+| HF 参考 | `'D'`（GT） | 'D' -0.011 极度自信 |
+
+**结论修正（三层）**：
+- ①协议对齐**彻底消除退化模式**（空/`\n` → 标准字母作答）——这部分是实的;
+- ②但答案仍与 HF 不同（'A' vs 'D',margin 形态也不同:0.8 vs 4.6）→ **残余分歧 = vision embedding 路径（llama.cpp-vision 预处理 vs HF processor,从未直接对比）或 kernel 数值**;
+- ③**全量策略性结论:99q 上单独 image_id 有害**;完整对齐(IMAGE_ID+TEXT_CHAT_SYS)的 99q 效果未测 —— 是下一个必要实验;若仍 <基线,则协议层故事对 KB 域不成立,退化修复的收益只集中于非 KB 的退化题。
+
+**七、NPU/CPU 漂移复验（修复后灵敏条件下,应询）**：旧四路排除的 CPU-vision 对照是在全`\n`退化下做的（退化掩盖漂移,不灵敏）。修复后重测:093 完整对齐协议下,**vision NPU = `'A'`（首 token 'A' 10.25）= vision CPU = `'A'`（685s 确认 CPU 生效）——答案级一致**。结合特征级（HF NPU vs CPU cos 0.993-0.998）:**NPU/CPU 漂移再次排除,不是精度下降原因**;下降真因 = 协议差异（六节）。残余的 llama.cpp vs HF 分歧（'A' vs 'D'）属**框架间**数值/预处理实现差（同一 llama.cpp 内换 vision 后端无差）,非同框架内 NPU/CPU 漂移。（小瑕疵:CPU 轮的 DBGTOPK 日志未落盘,答案级+特征级证据已足。）
+
+**八、残余分歧二分定位（实验A/B,plan 见 resilient-inventing-planet）**：
+
+- **实验A（text-only logits 纯净化）——机制性失败**：eval-cli 的 `frames=[]` 路径会跳过 prompt prefill（n_past=12 即开 decode,输出乱码）→ text-only 不受支持,实验作废（该限制已记录）。
+- **实验B（vision embedding 首次直接对比,093 frame_000 同一张 JPEG）**：
+  - C++ 侧:`vision.cpp:2536` 加 `Omni_DUMP_EMBED=<dir>` 探针（dump Resampler/projector 后 64×4096 fp32）;HF 侧:patch `get_vision_embedding` 截 `vision_hidden_states`(1,64,4096)。
+  - **结果:逐 token cosine mean=0.9992(min 0.9924/max 1.0000),|diff| mean=0.0149,范数比 0.9966** → **判读:实现级等价**（与 HF 内部 NPU vs CPU 波动 0.993-0.998 同量级）,**vision 预处理/实现无罪**。
+- **二分收口**:协议已对齐 + vision 等价 → **残余分歧(完整对齐后 'A' vs HF 'D',margin 0.8 vs 4.6)= LLM kernel 数值(ggml-cann vs torch_npu)在临界带上的翻转** —— 红线外不可修,按 plan 走"定性收尾+对外沟通"路线。
+- 附:期间发现 `/workspace/user_data` 是 **NFS(35T,96% 满)**,批量写帧会 ENOSPC —— 已删测试视频(8.4G,可从 zip 重解压)、帧目录改本地盘(`empty_repro.py` 已 patch `save_frames_as_jpg.__defaults__`)。
+
+### 附：本次踩坑记录
+
+- `head -N` 关管道 → SIGPIPE 杀 cmake（机器手册 §8 原班坑）；构建输出必须落文件再 grep。
+- omni.cpp 属 **libomni.so**（target `omni`），exe link.txt 之外还需重链 lib；两个 link.txt 都要补 `-lascendcl`。
+- 新 API：`llama_n_vocab(model)` 已弃用 → `llama_vocab_n_tokens(llama_model_get_vocab(model))`；`llama_get_model` 返回 const。
+
+---
+
+## 实验 2026-08-14（深夜，review-optimize 分支）：D1 完整协议对齐 99q A/B（第 1 轮）
+
+> 目的：执行 08-14 晚"六、修复 A/B 全量化"标注的下一个必要实验——`OMNI_IMAGE_ID=1 + OMNI_TEXT_CHAT_SYS=1`（完整协议对齐）在 99q 全量的效果（此前只测了单题 093/097）。
+> 配置：`benchmark/video-mme-cookbook/diag/eval-99q-review.env`（新机路径 + CANN beta.3 + venv-g23 + 锁 die0 + NUM_GPUS=1），binary = build-cann 增量重编 `llama-omni-eval-cli`（当前源码含门控，构建 23:32 完成，BUILD_EXIT=0）。
+> smoke 2 先行通过（2/2=100%，70.6s，门控路径正常）。
+
+**对齐组 99q：FAIL（rc=1，0 题有效）**（run 20260814_233717，953.7s 后 GPU 0 不可恢复判死）
+
+失败机制（两重独立故障叠加）：
+1. **帧丢失**：video 001-010 全部正常（64 帧 prep + 3 题成功）。video 011 起：011-1 成功、011-2 立即 `frame not found: tmp_frames/011/frame_002.jpg`（同一秒）→ 其后 011-3、301-1/2/3、302-1/2/3 全部 frame not found。301/302 的 prep 日志正常（"Prepared 64 frames"）但 8-26s 后帧不可读。011 的 prep 日志行缺失。单 worker 顺序执行（NUM_GPUS=1）排除并发互踩；cleanup_all_frames 只在 finally。
+2. **CLI CANN kernel 崩溃**（cli_gpu0.log）：`MTE accesses an invalid GM address / AIV vector core exception`（Cast/Add kernel 失败,device_id=0, retCode=0x31, 507057）→ `ggml_abort` at `ggml-cann.cpp:2224 aclrtSynchronizeStream`，栈在 stream_prefill→eval_tokens→decode。CLI 崩溃→client 重启（3 次用尽→GPU 不可恢复→整轮丢弃）。
+
+**隔离对照（build/bin 0812 官方评测版，无门控）= smoke 33（video 001-011，含 011）：20/33 = 60.6%，0 ERROR，011 正常通过**（run 20260814_235530）。对照组无帧丢失、无 CLI 崩溃。
+
+**关键鉴别（2026-08-15 凌晨）**：
+1. `build-cann/bin/libllama.so.0` + `libggml-cann.so.0` mtime = **08-14 05:58**（早于 08-14 全天的 omni.cpp/协议对齐改动 17:27），且含 14 处 FA/FusedInferAttentionScore 符号（build/bin 为 0）→ **build-cann 的 llama/ggml-cann 层是 FA 实验期构建残留，非当前源码**（08-14 晚 CAUTION"build-cann 为 FA 实验版勿用于评测"即指此）。23:32 的增量构建只触及 omni/eval-cli target，未重编 llama 层。
+2. 对齐组首轮（build-cann 残留 llama 层 + 门控）在 video 011 起崩溃/丢帧；对照组（build/bin 干净 llama 层 + 无门控）同段全过 → **罪魁 = build-cann 残留 llama 层（FA 实验构建），与门控 env 无必然关系**（需干净 binary + 门控复跑确认）。
+3. **修复**：`cmake --build build-cann --target llama-omni-eval-cli llama-omni-eval-daily-cli --clean-first`（全量重编，进行中）→ 干净 binary 复跑对齐组 99q（门控）与基线组 99q（同 binary 无门控），完成严格 A/B。
+
+> 附带确认：官方评测 binary（build/bin）+ 当前数据/机器 = 60.6%（前 33 题）与 08-11 99q 51.5%（33 视频平均）自洽（前 11 视频段偏高，整体被长视频段拉低），评测链路本身健康。
+
+**结论**：D1 的真正阻碍不是协议对齐，而是测试环境用了 FA 残留 binary；干净重编后 A/B 结果见下节。
+
+### 补充裁决（2026-08-15 凌晨，手动直跑，完整 env + faulthandler）：
+
+**门控 + 干净 binary（全量重编 00:08）+ 完整 env 的 smoke 33（video 001-011）= 20/33 = 60.6%，0 ERROR，video 011 完全正常（79.8s）**——与基线组（build/bin 无门控）同段 **60.6% 完全相同**。
+
+归因修正：
+1. 对齐组 99q 首轮失败（FA 残留 llama 层）→ 全量重编（--clean-first, 00:08 libllama/libggml 更新）后修复；
+2. 干净 binary 的 99q 全量第 2 轮（00:15）在 001-1 后 python 静默死亡 → 手动直跑同配置全程健康 → 归因 **NPU 并行竞争**：并行 Claude Code 会话同时段在跑评测（00:07 前写了"九、终局"段、01:11 起跑 kb45），两进程共享单 NPU（16GB 模型×2 + 长 prefill）触发 CLI 崩溃/死锁。**评测必须 NPU 独占**（跑前 `ps aux | grep eval_cpp` 确认无并行评测）。
+3. **协议对齐在 KB 前段（001-011）无退化**（60.6% = 基线 60.6%）；"九、终局"的 28.3% 退化若属实集中在 012-033（非 KB 中长视频段）。两条证据并存：九节数据无产物目录佐证（不可复现核查），本节点数可复现（run 产物 output/20260815_001110 smoke8 + 本手动 run /tmp/d1-manual33.json）。
+
+### 🔴 NZ 污染对 D1 数据的影响（2026-08-15 凌晨，并行会话"十"节 + 本节点核对）：
+
+官方 evaluation/README FAQ：**必须保持 `GGML_CANN_WEIGHT_NZ=off`**（否则空串/换行复读等异常输出）；ggml-cann 代码默认 `value_or("on")`（ggml-cann.cpp:1286/1554），config.env 的 off 只经 run_all.sh/run_eval.sh 官方路径注入。
+
+- 本节点 smoke33 手动直跑：`source eval-99q-review.env`（含 `GGML_CANN_WEIGHT_NZ=off`）→ **NZ=off，配置干净** → 60.6% 有效；
+- 并行会话此前全部直跑实验（60q/180q/99q A/B、实验A/B、"九、终局"28.3%、b6b8bb8 单 image_id 35.4%）**均未 export NZ → NZ=ON = 官方禁止配置 → 数据作废，不可作为裁决依据**；
+- **"九、终局"的 28.3%（路线关闭）结论撤销/降级**：其数据基础（NZ=ON）无效；NZ=off 下 99q 全量协议对齐 A/B **尚未有效完成**（本节点 smoke33 前段 60.6% 无退化是 NZ=off 下唯一的干净证据，且指向"对齐无净影响"而非"有害"）。
+- **待办（NPU 独占时）**：NZ=off + 独占 NPU 下重跑 99q 全量对齐 vs 基线 A/B（各 ~47min），才能给出 D1 的最终裁决。当前机器 01:11 起并行会话 kb45（已修正 NZ=off）占 NPU，未重跑。
+
+**九、99q 完整对齐 A/B 终局(修复路线关闭)**:IMAGE_ID+TEXT_CHAT_SYS 完整对齐在 KB99 = **28.3%**(28/99)—— 比单 image_id(35.4%)更差,远低于基线(53.5%);无字母响应 27/99 不降反升。**合成洞察:HF(旧机 Track B)在同 KB99 子集 ≈50%,与官方协议 llama.cpp 打平** —— "HF 全对"现象集中于非 KB 域(093 等),KB 域两框架同为 ~50%。**定论:协议对齐不能恢复 HF 等价(实验B 已证 LLM 数值残余)且 KB 有害 → 修复路线关闭,不启用;OMNI_IMAGE_ID/OMNI_TEXT_CHAT_SYS 保留为 env 门控诊断探针(默认零影响);官方评测用默认协议 + build/bin。** Video-MME 最终立场回到:官方口径 51.5-53.5% + 完整证据链(协议 diff、机制定位、数值等价性、HF 对照)→ 对赛方沟通(基线口径/910C 确认/豁免)。
+
+**十、🔴 NZ 污染大反转（2026-08-15,重审准入要求时发现）**：官方 evaluation/README FAQ 原文——"**必须保持 `GGML_CANN_WEIGHT_NZ=off`,否则可能出现空串、换行复读等异常输出**";而 ggml-cann 代码默认 `value_or("on")`(ggml-cann.cpp:1286/1554),config.env 的 off **只经 run_eval.sh/run_all.sh 官方路径生效**。**我们所有直跑(eval_cpp_pipeline.py 直接起,60q/180q/99q A/B/全部微测/实验A/B 的 C++ 侧)从未 export NZ → 全部 NZ=ON = 官方明令禁止的配置!**
+- **决定性验证**:093 + 官方协议 + 官方 binary + `GGML_CANN_WEIGHT_NZ=off` → **`'D'` = 正确 = 与 HF 一致**(NZ=on 同配置 = 空响应)。
+- **NZ 污染审计**:✅可信(NZ=off 官方路径)= 0812 的 51.5/53.5%(1/99 空)、Daily 79.8%、TTS、RTF 全部(官方/脚本路径);❌污染(NZ=on 直跑)= 60q 63.3%(7空)、180q 47.8%(31空)、99q+image_id 35.4%、99q完整对齐 28.3%、093/097/114 空响应、TOPK margin 0.63、image_id/TEXT_CHAT_SYS 全部 A/B、"LLM kernel 数值残余"、实验B 的 C++ embedding dump。
+- **待重测(全部 NZ=off)**:99q 官方协议 NZ=off(跑分中)、空响应真实率、协议变量(image_id 等)的真实影响、RTF 在 NZ=off 下的性能代价(NZ 是性能优化,off 可能变慢)。
+- **教训(惨痛)**:①直跑官方 pipeline 必须**完整继承 config.env 全部 env**(尤其 GGML_CANN_WEIGHT_NZ/ACL_GRAPH=off),否则测的是官方禁止配置;②"官方 FAQ 早就写了症状"——重审原始文档优先于深挖机制。
+
+**十一、NZ=off 缩样验证(2026-08-15,45题/15视频,五域×3,时长5/5/5,官方协议+官方binary)**:**非KB 66.7%(30/45),无字母 0/45,时长梯度健康(73.3/66.7/60.0)** vs 污染对照(NZ=on)51.7%+38/240退化。分域:Sports 77.8/Artistic·Film·Life 66.7/Multilingual 55.6。**全量域加权估计 62.4%(±16.9pp)**——距准入67仅4.6pp,CI覆盖67;KB侧维持官方真值52.5%(0812,NZ=off)。RTF的NZ=off性能代价待测(perf-duplex binary被并行会话清理需重编)。**下一步: 全量2700官方--full(唯一可提交数字,~20h挂机)是唯一有意义的放大步骤。**
+
+**十二、45题逐题质量审计(2026-08-15,质量优先应询)**:
+1. **逐题明细**:45/45 全部干净单字母响应,零退化;30/45=66.7%。
+2. **错题分类**:15 错全部为"干净地选错"(模型理解错误,非框架);任务类型 Counting 33% 最弱、Temporal 50%、其余 60-78% —— 符合 VLM 通用能力画像,无异常崩塌。
+3. **帧数校验**:short 视频 45/57 帧=时长×1fps,其余 64 —— 输入侧与官方口径吻合。
+4. **分布校验**:GT(A13/D11/C11/B10)与 pred(B15/A12/D11/C7)均衡,无字母偏置/泄漏;66.7%≫25% 随机线。
+5. **每视频正确率**:无 0 分视频(无盲答),3 个满分(164/220/411),三个 33%(239/516/591)。
+6. **确定性校验**:091/516/723 重跑,帧数+响应逐字节一致 ✅。期间发现并修复 empty_repro.py 的 VDIR/SUBSET 硬编码 bug(曾致 0 帧裸跑,产生"非确定"假象 —— 已改 env 可覆盖)。
+**结论:45q 的 66.7% 为高质量可信数据;全量域加权 62.4%±16.9pp 估计有效,距准入 67 仅 4.6pp。**
+
+**十三、KB45 新鲜轮 + 复现性校验(2026-08-15)**:KB45(15视频,时长5/5/5,官方协议+NZ=off+官方binary)= **44.4%**(20/45),零退化;同题对照 0812 官方轮 46.7%。**复现性 43/45=96% 逐题同答案**(仅视频 303 两题边界翻转)—— 跨日/跨构建的子集方法论可信。**全量域加权更新: KB 44.4%×30% + 非KB 66.7%×70% = 60.0%±20pp**(距准入 67 约 7pp,点估计之下,CI 宽覆盖)。**合成判断: KB 域为真实短板(各轮 44-53% 一致),非KB 达 66.7%;正式数字仍需全量 2700 --full。**
+
+**十四、第二批独立非KB 45题(2026-08-15,全新15视频,与批1零重叠)**:60.0%(27/45),零退化,时长梯度平坦(60/60/60),GT/pred均衡,无零分视频。**跨批次域级复现: Artistic/Film 两批精确一致(66.7/66.7),Sports(77.8→33.3)/Multilingual(55.6→44.4)波动(n=9 正常)**。**非KB合并 63.3%±10pp(n=90)。全量域加权估计漂移轨迹: 62.4%→60.0%→57.7%(±17.6pp)——数据累积下收敛到 ~55-60% 区间,批1的66.7%偏运气。结论: 准入67在点估计下渐远,正式数字预期 ~52-60%,与外部910C 69.7%的 gap(~10-17pp)持续存在;三条出路(910C确认/基线口径/豁免)仍是主战场。小规模抽样已到收益边界(±17pp需4×数据才减半),继续加子集无意义。**
+
+**十五、题型分层 135 题估计 + 合池终值(2026-08-15)**:新样本按 12 类 task_type 全量占比分配(每类≥6),官方协议+NZ=off:**69.6%(94/135)**,零退化,域混合贴近全量(KB 27.4% vs 30%)。分题型:Temporal Perception 100%/Spatial Reasoning 83%/多数 68-79%/**Counting 23%(稳定最弱)**。**合池 n=270:简单 63.3%±5.7pp / 域加权 64.2% / 题型加权 61.4%**。**重要发现:KB 域内部视频异质性极大**(本批 KB 78.4% vs KB45 44.4% vs KB99 52.5% —— 同配置同域,批间差 34pp!)→ KB 是估计方差最大来源;非KB 各批稳定复现(63-66%)。**终值判断: 真值 ~63%±6pp(57-69),准入67在区间上沿可达但不占优;全量2700仍是唯一裁决。**估计轨迹(域加权): 62.4→60.0→57.7→64.2(合池) —— 单批噪声±10pp 级,任何单批结论都不可靠,以合池为准。
+
+**十六、可见杠杆清零扫描(2026-08-15,全部 NZ=off 净条件)**:四个候选杠杆在 nz36 45题上逐一 A/B——①OMNI_IMAGE_ID ②OMNI_TEXT_CHAT_SYS(去语音系统提示) ③OMNI_FORCE_FA(强制 flash_attn,omni.cpp 合规文件 env 门控) ④max_slice 全局默认(核查=1,与 HF 一致无差异)。**结果:①②③全部 66.7%(30/45),与基线零翻转(逐字节同答案)**。结论:NZ=off 是稳健操作点,输入构造/系统提示/attention 算子的变化都不再影响输出(NZ=on 时同类变化曾致 34pp 级摆动);**规则内提升空间正式归零,~63%±6pp 为本机硬件+数值栈天花板**。剩余路径:全量 2700(CI 内定夺)/其他环境复测(910C?)/赛方沟通。注:Arm2 首跑 json 被Arm3覆盖已重跑补齐。
+
+**十七、🔴 RTF 的 NZ 代价 + TTS 口径缺口(2026-08-15,战略级)**:
+1. **RTF@NZ=off 三跑**: TTS RTF **0.90/0.91/0.92**,e2e RTF **1.08/1.08/1.10**(中位 e2e 1.08)vs NZ=on 同机同配置 0.54-0.60(中位 0.58)。**NZ 权重格式贡献 ~50% 性能;官方 config.env 默认 NZ=off → 全程 off 则 e2e RTF ≈ 官方基线 1.087,性能优势归零**。
+2. **TTS 口径缺口**: 0812 全量 TTS(WER 1.501/ASV 0.694)经 `run_tts_eval_cpp_zh.sh` → source `pipeline.env`,**该文件无 NZ 设置 → NZ=on 生成**;官方评测走 config.env(NZ=off)→ 数字不同口径且余量薄(WER +6.2%/ASV -0.015),**需 NZ=off 复跑核实**。
+3. **合规出路分析**: 官方 README 对 NZ=off 的理由是"否则**精度任务**可能异常"——rts 性能任务**无精度指标**;config.env 属参赛者自配("复制并编辑"),优先级 env>config.env。**方案A: 精度任务 NZ=off + rts 任务 NZ=on(env 覆盖,报告透明披露)** —— 有据可依但需赛方确认;方案B: 全程 off → RTF≈基线,排名优势放弃。
+4. **待办**: ①向赛方问询 NZ 在 rts 任务的选择权(并入澄清邮件);②TTS 全量 NZ=off 复跑(~数小时);③官方 rts 口径(RTS judge 的 pooled compute RTF)与 perf-duplex e2e 的差异校准。
+
+**十八、NZ 选择权官方文档逐字核对(2026-08-15)**:
+- **四处原文**:①README §2"否则**精度任务**可能异常或崩溃"(任务限定);②README FAQ"**必须保持** off,否则空串、换行复读"(无限定,最硬反证,但症状全精度类);③config.env 注释"off(F16 精度/vision 稳定性)";④官方通知"**默认关闭**(config.env 中已默认配置)"(默认≠强制)。
+- **rts 判分代码级核对**:judge_support/e2e_timing 零精度检查(无转写/WER/SIM),音频仅按时长时间线拼接 → rts=纯速度任务。
+- **判决**: 方案A(精度off+rts on)可辩护但不干净 —— FAQ"必须"无任务限定;且赛方若用自家 config.env 一把跑全部任务,分任务 env 覆盖不会被执行(提交说明须要求分任务跑)。**必须问赛方,不可先斩后奏**;询问姿态="官方文档两处措辞矛盾,请求澄清"。官方 RTF 口径(SPEAK→WAV compute pooled)较我方 e2e 乐观,NZ 差距 ~40% 在任何口径下存在。
+
+## 十一、RTF 优化 A/B 矩阵（2026-08-15 晚，性能配置穷尽验证）
+
+**背景**：NZ 口径定论后（NZ=on 1.01 / NZ=off 1.08），尝试配置层优化寻找额外收益。
+
+**方法**：perf-duplex 36 帧用例，NPU+CPU 独占，24 vocoder 线程 + NUMA 64-95，每变体 1 次，NZ=on。
+
+| 变体 | avg decode/chunk | vs base | 判定 |
+|---|---|---|---|
+| base（默认） | 456.6ms | — | 基准 |
+| OMNI_T2M_DEVICE=cpu（flow 切 CPU） | 460.1ms | +0.8% | ❌ 更差（TTS 输出延迟 10s+，CPU flow 慢） |
+| GGML_CANN_ACL_GRAPH=on | 456.1ms | -0.1% | ❌ 持平 |
+| GGML_CANN_OPERATOR_FUSION=1 | 454.1ms | -0.5% | ❌ 噪声级 |
+| GGML_CANN_PREFILL_USE_GRAPH=1 | 449.3ms | -1.6% | ❌ 噪声级 |
+
+**结论**：配置层 RTF 优化穷尽（≤1.6% 噪声级）。BF16 转换无收益预期（910B AICore FP16/BF16 算力相同）且引入精度风险，关闭。**性能叙事定型：NZ=on 1.01（beat 7%）/ NZ=off 1.08（擦线），依赖赛方 Q5（rts NZ 选择权）**。
+产物：tools/omni/output/rtf_ab_{base,t2m_cpu,graph,fusion,pgraph}.{json,log}

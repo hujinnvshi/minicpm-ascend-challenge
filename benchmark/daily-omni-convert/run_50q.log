@@ -1,0 +1,375 @@
+
+==============================================================================
+  MiniCPM-o 评测套件 —— 全链路
+==============================================================================
+  仓库        : /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni
+  构建目录    : /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/build-huawei
+  任务        : daily-omni
+  产物目录    : /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260811_235325
+  编译日志    : /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260811_235325/build.log
+==============================================================================
+
+[1;36m[run_all][0m ===== daily-omni =====
+========================================================================
+  MiniCPM-o 评测套件
+========================================================================
+  任务          : daily-omni
+  精度权重      : /workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-F16.gguf
+  RTS 权重      : /workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-F16.gguf
+  eval CLI 目录 : /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/build-huawei/bin
+  server 仓库   : /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni
+  卡 (ASCEND_RT_VISIBLE_DEVICES) : 0  共 1 张
+  RTS 卡        : 0
+  样本数        : videomme=50  daily-omni=50  tts=50
+  产物目录      : /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260811_235325
+========================================================================
+
+========================================================================
+[daily-omni] /workspace/user_data/venv-omni/bin/python eval_cpp_pipeline.py --num-gpus 1 --limit 50 --output /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260811_235325/daily_omni_output.json
+[daily-omni] cwd=/workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/daily-omni
+[daily-omni] log=/workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260811_235325/daily-omni.log
+========================================================================
+2026-08-11 23:53:29 [INFO] __main__: ============================================================
+2026-08-11 23:53:29 [INFO] __main__: Daily-Omni CPP Evaluation Pipeline (CLI)
+2026-08-11 23:53:29 [INFO] __main__:   GPUs: 1
+2026-08-11 23:53:29 [INFO] __main__:   Annotation: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/daily_omni.jsonl
+2026-08-11 23:53:29 [INFO] __main__:   Data dir: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data
+2026-08-11 23:53:29 [INFO] __main__:   Output: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260811_235325/daily_omni_output.json
+2026-08-11 23:53:29 [INFO] __main__: ============================================================
+2026-08-11 23:53:29 [INFO] __main__: Loading dataset from /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/daily_omni.jsonl
+2026-08-11 23:53:29 [INFO] __main__: Limited to first 50 samples
+2026-08-11 23:53:29 [INFO] __main__: Loaded 50 samples
+2026-08-11 23:53:29 [INFO] __main__: Split with video_id pinning: total_groups=26, duplicate_video_groups=15
+2026-08-11 23:53:29 [INFO] __main__:   Chunk 0: 50 samples
+2026-08-11 23:53:29 [INFO] __main__: Starting llama-omni-eval-daily-cli processes...
+2026-08-11 23:53:29 [INFO] eval_cpp_cli_client: [GPU 0] launching daily CLI: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/build-huawei/bin/llama-omni-eval-daily-cli -m /workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-F16.gguf -c 40960 -ngl 999 --max-slice-nums 0 --n-predict 128 --temp 0.0 --top-p 0.8 --top-k 100 --repeat-penalty 1.02 --seed 42  (log: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/daily-omni/log/cli_gpu0.log)
+2026-08-11 23:53:29 [INFO] eval_cpp_cli_client: Waiting for 1 CLI processes to load model...
+2026-08-11 23:53:39 [INFO] eval_cpp_cli_client: [GPU 0] CLI ready，耗时 9.2s
+2026-08-11 23:53:39 [INFO] eval_cpp_cli_client: All 1 CLI processes ready
+2026-08-11 23:53:39 [INFO] __main__: Starting evaluation...
+2026-08-11 23:53:39 [INFO] __main__: [GPU 0] (1/50) Processing sample Ec_lQgZ9wlg
+2026-08-11 23:53:40 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/Ec_lQgZ9wlg_video.mp4, backend=ffmpeg, frames=30, total=750, fps=25.000, timestamps=[0.0..29.0]
+2026-08-11 23:53:42 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample Ec_lQgZ9wlg
+2026-08-11 23:54:15 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample Ec_lQgZ9wlg
+2026-08-11 23:54:27 [INFO] __main__: [GPU 0] (1/50) Ec_lQgZ9wlg done in 48.0s, GT=B Pred=B Resp='B'
+2026-08-11 23:54:27 [INFO] __main__: [GPU 0] (2/50) Processing sample Ec_lQgZ9wlg
+2026-08-11 23:54:29 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/Ec_lQgZ9wlg_video.mp4, backend=ffmpeg, frames=30, total=750, fps=25.000, timestamps=[0.0..29.0]
+2026-08-11 23:54:30 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample Ec_lQgZ9wlg
+2026-08-11 23:54:32 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample Ec_lQgZ9wlg
+2026-08-11 23:54:43 [INFO] __main__: [GPU 0] (2/50) Ec_lQgZ9wlg done in 16.4s, GT=C Pred=C Resp='C'
+2026-08-11 23:54:43 [INFO] __main__: [GPU 0] (3/50) Processing sample Ec_lQgZ9wlg
+2026-08-11 23:54:45 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/Ec_lQgZ9wlg_video.mp4, backend=ffmpeg, frames=30, total=750, fps=25.000, timestamps=[0.0..29.0]
+2026-08-11 23:54:46 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample Ec_lQgZ9wlg
+2026-08-11 23:54:48 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample Ec_lQgZ9wlg
+2026-08-11 23:54:59 [INFO] __main__: [GPU 0] (3/50) Ec_lQgZ9wlg done in 16.4s, GT=A Pred=A Resp='A'
+2026-08-11 23:54:59 [INFO] __main__: [GPU 0] (4/50) Processing sample XUWxQYmiBQY
+2026-08-11 23:55:01 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/XUWxQYmiBQY_video.mp4, backend=ffmpeg, frames=30, total=900, fps=29.970, timestamps=[0.0..29.0]
+2026-08-11 23:55:03 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample XUWxQYmiBQY
+2026-08-11 23:55:05 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample XUWxQYmiBQY
+2026-08-11 23:55:16 [INFO] __main__: [GPU 0] (4/50) XUWxQYmiBQY done in 17.0s, GT=A Pred=A Resp='A'
+2026-08-11 23:55:16 [INFO] __main__: [GPU 0] (5/50) Processing sample XUWxQYmiBQY
+2026-08-11 23:55:19 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/XUWxQYmiBQY_video.mp4, backend=ffmpeg, frames=30, total=900, fps=29.970, timestamps=[0.0..29.0]
+2026-08-11 23:55:20 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample XUWxQYmiBQY
+2026-08-11 23:55:23 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample XUWxQYmiBQY
+2026-08-11 23:55:34 [INFO] __main__: [GPU 0] (5/50) XUWxQYmiBQY done in 17.4s, GT=C Pred=C Resp='C'
+2026-08-11 23:55:34 [INFO] __main__: [GPU 0] (6/50) Processing sample rieb8cBb2z8
+2026-08-11 23:55:36 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/rieb8cBb2z8_video.mp4, backend=ffmpeg, frames=30, total=900, fps=30.000, timestamps=[0.0..29.0]
+2026-08-11 23:55:38 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample rieb8cBb2z8
+2026-08-11 23:55:40 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample rieb8cBb2z8
+2026-08-11 23:55:50 [INFO] __main__: [GPU 0] (6/50) rieb8cBb2z8 done in 16.7s, GT=D Pred=D Resp='D'
+2026-08-11 23:55:50 [INFO] __main__: [GPU 0] (7/50) Processing sample rieb8cBb2z8
+2026-08-11 23:55:52 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/rieb8cBb2z8_video.mp4, backend=ffmpeg, frames=30, total=900, fps=30.000, timestamps=[0.0..29.0]
+2026-08-11 23:55:54 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample rieb8cBb2z8
+2026-08-11 23:55:56 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample rieb8cBb2z8
+2026-08-11 23:56:07 [INFO] __main__: [GPU 0] (7/50) rieb8cBb2z8 done in 16.3s, GT=B Pred=B Resp='B'
+2026-08-11 23:56:07 [INFO] __main__: [GPU 0] (8/50) Processing sample Me4W36_lUcI
+2026-08-11 23:56:09 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/Me4W36_lUcI_video.mp4, backend=ffmpeg, frames=30, total=900, fps=29.970, timestamps=[0.0..29.0]
+2026-08-11 23:56:10 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample Me4W36_lUcI
+2026-08-11 23:56:12 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample Me4W36_lUcI
+2026-08-11 23:56:23 [INFO] __main__: [GPU 0] (8/50) Me4W36_lUcI done in 15.9s, GT=D Pred=D Resp='D'
+2026-08-11 23:56:23 [INFO] __main__: [GPU 0] (9/50) Processing sample Me4W36_lUcI
+2026-08-11 23:56:24 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/Me4W36_lUcI_video.mp4, backend=ffmpeg, frames=30, total=900, fps=29.970, timestamps=[0.0..29.0]
+2026-08-11 23:56:26 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample Me4W36_lUcI
+2026-08-11 23:56:28 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample Me4W36_lUcI
+2026-08-11 23:56:38 [INFO] __main__: [GPU 0] (9/50) Me4W36_lUcI done in 15.9s, GT=C Pred=C Resp='C'
+2026-08-11 23:56:38 [INFO] __main__: [GPU 0] (10/50) Processing sample Me4W36_lUcI
+2026-08-11 23:56:40 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/Me4W36_lUcI_video.mp4, backend=ffmpeg, frames=30, total=900, fps=29.970, timestamps=[0.0..29.0]
+2026-08-11 23:56:41 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample Me4W36_lUcI
+2026-08-11 23:56:43 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample Me4W36_lUcI
+2026-08-11 23:56:53 [INFO] __main__: [GPU 0] (10/50) Me4W36_lUcI done in 14.4s, GT=A Pred=B Resp='B'
+2026-08-11 23:56:53 [INFO] __main__: [GPU 0] (11/50) Processing sample G_VTkkb34gw
+2026-08-11 23:56:55 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/G_VTkkb34gw_video.mp4, backend=ffmpeg, frames=30, total=750, fps=25.000, timestamps=[0.0..29.0]
+2026-08-11 23:56:56 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample G_VTkkb34gw
+2026-08-11 23:56:57 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample G_VTkkb34gw
+2026-08-11 23:57:08 [INFO] __main__: [GPU 0] (11/50) G_VTkkb34gw done in 14.9s, GT=D Pred=D Resp='D'
+2026-08-11 23:57:08 [INFO] __main__: [GPU 0] (12/50) Processing sample G_VTkkb34gw
+2026-08-11 23:57:10 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/G_VTkkb34gw_video.mp4, backend=ffmpeg, frames=30, total=750, fps=25.000, timestamps=[0.0..29.0]
+2026-08-11 23:57:11 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample G_VTkkb34gw
+2026-08-11 23:57:12 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample G_VTkkb34gw
+2026-08-11 23:57:23 [INFO] __main__: [GPU 0] (12/50) G_VTkkb34gw done in 15.1s, GT=B Pred=B Resp='B'
+2026-08-11 23:57:23 [INFO] __main__: [GPU 0] (13/50) Processing sample G_VTkkb34gw
+2026-08-11 23:57:24 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/G_VTkkb34gw_video.mp4, backend=ffmpeg, frames=30, total=750, fps=25.000, timestamps=[0.0..29.0]
+2026-08-11 23:57:26 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample G_VTkkb34gw
+2026-08-11 23:57:27 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample G_VTkkb34gw
+2026-08-11 23:57:38 [INFO] __main__: [GPU 0] (13/50) G_VTkkb34gw done in 14.9s, GT=D Pred=D Resp='D'
+2026-08-11 23:57:38 [INFO] __main__: [GPU 0] (14/50) Processing sample Z0JDTBGh4D8
+2026-08-11 23:57:40 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/Z0JDTBGh4D8_video.mp4, backend=ffmpeg, frames=30, total=720, fps=23.976, timestamps=[0.0..29.0]
+2026-08-11 23:57:41 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample Z0JDTBGh4D8
+2026-08-11 23:57:42 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample Z0JDTBGh4D8
+2026-08-11 23:57:53 [INFO] __main__: [GPU 0] (14/50) Z0JDTBGh4D8 done in 15.2s, GT=B Pred=B Resp='B'
+2026-08-11 23:57:53 [INFO] __main__: [GPU 0] (15/50) Processing sample Z0JDTBGh4D8
+2026-08-11 23:57:55 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/Z0JDTBGh4D8_video.mp4, backend=ffmpeg, frames=30, total=720, fps=23.976, timestamps=[0.0..29.0]
+2026-08-11 23:57:56 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample Z0JDTBGh4D8
+2026-08-11 23:57:57 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample Z0JDTBGh4D8
+2026-08-11 23:58:08 [INFO] __main__: [GPU 0] (15/50) Z0JDTBGh4D8 done in 14.6s, GT=D Pred=D Resp='D'
+2026-08-11 23:58:08 [INFO] __main__: [GPU 0] (16/50) Processing sample Z0JDTBGh4D8
+2026-08-11 23:58:09 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/Z0JDTBGh4D8_video.mp4, backend=ffmpeg, frames=30, total=720, fps=23.976, timestamps=[0.0..29.0]
+2026-08-11 23:58:10 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample Z0JDTBGh4D8
+2026-08-11 23:58:11 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample Z0JDTBGh4D8
+2026-08-11 23:58:21 [INFO] __main__: [GPU 0] (16/50) Z0JDTBGh4D8 done in 13.5s, GT=D Pred=B Resp='B'
+2026-08-11 23:58:21 [INFO] __main__: [GPU 0] (17/50) Processing sample eLPe7xp0jRw
+2026-08-11 23:58:23 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/eLPe7xp0jRw_video.mp4, backend=ffmpeg, frames=30, total=900, fps=30.000, timestamps=[0.0..29.0]
+2026-08-11 23:58:23 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample eLPe7xp0jRw
+2026-08-11 23:58:24 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample eLPe7xp0jRw
+2026-08-11 23:58:35 [INFO] __main__: [GPU 0] (17/50) eLPe7xp0jRw done in 13.6s, GT=D Pred=D Resp='D'
+2026-08-11 23:58:35 [INFO] __main__: [GPU 0] (18/50) Processing sample eLPe7xp0jRw
+2026-08-11 23:58:36 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/eLPe7xp0jRw_video.mp4, backend=ffmpeg, frames=30, total=900, fps=30.000, timestamps=[0.0..29.0]
+2026-08-11 23:58:38 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample eLPe7xp0jRw
+2026-08-11 23:58:39 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample eLPe7xp0jRw
+2026-08-11 23:58:50 [INFO] __main__: [GPU 0] (18/50) eLPe7xp0jRw done in 15.5s, GT=A Pred=A Resp='A. A. Presentation of the bag on a gray cloth'
+2026-08-11 23:58:50 [INFO] __main__: [GPU 0] (19/50) Processing sample d6b4OmUFt7I
+2026-08-11 23:58:52 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/d6b4OmUFt7I_video.mp4, backend=ffmpeg, frames=30, total=720, fps=23.976, timestamps=[0.0..29.0]
+2026-08-11 23:58:53 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample d6b4OmUFt7I
+2026-08-11 23:58:54 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample d6b4OmUFt7I
+2026-08-11 23:59:05 [INFO] __main__: [GPU 0] (19/50) d6b4OmUFt7I done in 14.6s, GT=B Pred=B Resp='B'
+2026-08-11 23:59:05 [INFO] __main__: [GPU 0] (20/50) Processing sample d6b4OmUFt7I
+2026-08-11 23:59:06 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/d6b4OmUFt7I_video.mp4, backend=ffmpeg, frames=30, total=720, fps=23.976, timestamps=[0.0..29.0]
+2026-08-11 23:59:07 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample d6b4OmUFt7I
+2026-08-11 23:59:08 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample d6b4OmUFt7I
+2026-08-11 23:59:19 [INFO] __main__: [GPU 0] (20/50) d6b4OmUFt7I done in 14.0s, GT=D Pred=D Resp='D'
+2026-08-11 23:59:19 [INFO] __main__: [GPU 0] (21/50) Processing sample d6b4OmUFt7I
+2026-08-11 23:59:20 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/d6b4OmUFt7I_video.mp4, backend=ffmpeg, frames=30, total=720, fps=23.976, timestamps=[0.0..29.0]
+2026-08-11 23:59:21 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample d6b4OmUFt7I
+2026-08-11 23:59:22 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample d6b4OmUFt7I
+2026-08-11 23:59:33 [INFO] __main__: [GPU 0] (21/50) d6b4OmUFt7I done in 13.8s, GT=A Pred=A Resp='A'
+2026-08-11 23:59:33 [INFO] __main__: [GPU 0] (22/50) Processing sample d6b4OmUFt7I
+2026-08-11 23:59:34 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/d6b4OmUFt7I_video.mp4, backend=ffmpeg, frames=30, total=720, fps=23.976, timestamps=[0.0..29.0]
+2026-08-11 23:59:35 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample d6b4OmUFt7I
+2026-08-11 23:59:36 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample d6b4OmUFt7I
+2026-08-11 23:59:47 [INFO] __main__: [GPU 0] (22/50) d6b4OmUFt7I done in 14.0s, GT=B Pred=B Resp='B'
+2026-08-11 23:59:47 [INFO] __main__: [GPU 0] (23/50) Processing sample bswbQtOPk6E
+2026-08-11 23:59:48 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/bswbQtOPk6E_video.mp4, backend=ffmpeg, frames=30, total=900, fps=29.970, timestamps=[0.0..29.0]
+2026-08-11 23:59:49 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample bswbQtOPk6E
+2026-08-11 23:59:50 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample bswbQtOPk6E
+2026-08-12 00:00:00 [INFO] __main__: [GPU 0] (23/50) bswbQtOPk6E done in 13.4s, GT=D Pred=D Resp='D'
+2026-08-12 00:00:00 [INFO] __main__: [GPU 0] (24/50) Processing sample bswbQtOPk6E
+2026-08-12 00:00:01 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/bswbQtOPk6E_video.mp4, backend=ffmpeg, frames=30, total=900, fps=29.970, timestamps=[0.0..29.0]
+2026-08-12 00:00:02 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample bswbQtOPk6E
+2026-08-12 00:00:03 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample bswbQtOPk6E
+2026-08-12 00:00:13 [INFO] __main__: [GPU 0] (24/50) bswbQtOPk6E done in 13.3s, GT=D Pred=D Resp='D'
+2026-08-12 00:00:13 [INFO] __main__: [GPU 0] (25/50) Processing sample 1TtcXC_u4r4
+2026-08-12 00:00:15 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/1TtcXC_u4r4_video.mp4, backend=ffmpeg, frames=30, total=900, fps=29.970, timestamps=[0.0..29.0]
+2026-08-12 00:00:15 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample 1TtcXC_u4r4
+2026-08-12 00:00:16 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample 1TtcXC_u4r4
+2026-08-12 00:00:26 [INFO] __main__: [GPU 0] (25/50) 1TtcXC_u4r4 done in 13.0s, GT=C Pred=B Resp='B'
+2026-08-12 00:00:26 [INFO] __main__: [GPU 0] (26/50) Processing sample 1TtcXC_u4r4
+2026-08-12 00:00:28 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/1TtcXC_u4r4_video.mp4, backend=ffmpeg, frames=30, total=900, fps=29.970, timestamps=[0.0..29.0]
+2026-08-12 00:00:28 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample 1TtcXC_u4r4
+2026-08-12 00:00:29 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample 1TtcXC_u4r4
+2026-08-12 00:00:40 [INFO] __main__: [GPU 0] (26/50) 1TtcXC_u4r4 done in 13.2s, GT=D Pred=D Resp='D'
+2026-08-12 00:00:40 [INFO] __main__: [GPU 0] (27/50) Processing sample sNf0WG57RtA
+2026-08-12 00:00:41 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/sNf0WG57RtA_video.mp4, backend=ffmpeg, frames=30, total=900, fps=30.000, timestamps=[0.0..29.0]
+2026-08-12 00:00:42 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample sNf0WG57RtA
+2026-08-12 00:00:43 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample sNf0WG57RtA
+2026-08-12 00:00:54 [INFO] __main__: [GPU 0] (27/50) sNf0WG57RtA done in 13.9s, GT=A Pred=A Resp='A'
+2026-08-12 00:00:54 [INFO] __main__: [GPU 0] (28/50) Processing sample sNf0WG57RtA
+2026-08-12 00:00:55 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/sNf0WG57RtA_video.mp4, backend=ffmpeg, frames=30, total=900, fps=30.000, timestamps=[0.0..29.0]
+2026-08-12 00:00:55 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample sNf0WG57RtA
+2026-08-12 00:00:57 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample sNf0WG57RtA
+2026-08-12 00:01:07 [INFO] __main__: [GPU 0] (28/50) sNf0WG57RtA done in 13.5s, GT=A Pred=A Resp='A'
+2026-08-12 00:01:07 [INFO] __main__: [GPU 0] (29/50) Processing sample sNf0WG57RtA
+2026-08-12 00:01:08 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/sNf0WG57RtA_video.mp4, backend=ffmpeg, frames=30, total=900, fps=30.000, timestamps=[0.0..29.0]
+2026-08-12 00:01:09 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample sNf0WG57RtA
+2026-08-12 00:01:10 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample sNf0WG57RtA
+2026-08-12 00:01:20 [INFO] __main__: [GPU 0] (29/50) sNf0WG57RtA done in 13.4s, GT=A Pred=A Resp='A'
+2026-08-12 00:01:20 [INFO] __main__: [GPU 0] (30/50) Processing sample sNf0WG57RtA
+2026-08-12 00:01:22 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/sNf0WG57RtA_video.mp4, backend=ffmpeg, frames=30, total=900, fps=30.000, timestamps=[0.0..29.0]
+2026-08-12 00:01:22 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample sNf0WG57RtA
+2026-08-12 00:01:23 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample sNf0WG57RtA
+2026-08-12 00:01:33 [INFO] __main__: [GPU 0] (30/50) sNf0WG57RtA done in 12.9s, GT=B Pred=B Resp='B'
+2026-08-12 00:01:33 [INFO] __main__: [GPU 0] (31/50) Processing sample sNf0WG57RtA
+2026-08-12 00:01:34 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/sNf0WG57RtA_video.mp4, backend=ffmpeg, frames=30, total=900, fps=30.000, timestamps=[0.0..29.0]
+2026-08-12 00:01:35 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample sNf0WG57RtA
+2026-08-12 00:01:36 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample sNf0WG57RtA
+2026-08-12 00:01:46 [INFO] __main__: [GPU 0] (31/50) sNf0WG57RtA done in 13.1s, GT=D Pred=D Resp='D'
+2026-08-12 00:01:46 [INFO] __main__: [GPU 0] (32/50) Processing sample gPpJoyPjiPw
+2026-08-12 00:01:48 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/gPpJoyPjiPw_video.mp4, backend=ffmpeg, frames=30, total=720, fps=24.000, timestamps=[0.0..29.0]
+2026-08-12 00:01:49 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample gPpJoyPjiPw
+2026-08-12 00:01:51 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample gPpJoyPjiPw
+2026-08-12 00:02:01 [INFO] __main__: [GPU 0] (32/50) gPpJoyPjiPw done in 14.4s, GT=A Pred=A Resp='A'
+2026-08-12 00:02:01 [INFO] __main__: [GPU 0] (33/50) Processing sample iYDcBb9C-Mc
+2026-08-12 00:02:02 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/iYDcBb9C-Mc_video.mp4, backend=ffmpeg, frames=30, total=900, fps=30.000, timestamps=[0.0..29.0]
+2026-08-12 00:02:03 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample iYDcBb9C-Mc
+2026-08-12 00:02:03 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample iYDcBb9C-Mc
+2026-08-12 00:02:14 [INFO] __main__: [GPU 0] (33/50) iYDcBb9C-Mc done in 12.8s, GT=C Pred=C Resp='C'
+2026-08-12 00:02:14 [INFO] __main__: [GPU 0] (34/50) Processing sample 7yY1OWjT4zA
+2026-08-12 00:02:15 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/7yY1OWjT4zA_video.mp4, backend=ffmpeg, frames=30, total=900, fps=30.000, timestamps=[0.0..29.0]
+2026-08-12 00:02:15 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample 7yY1OWjT4zA
+2026-08-12 00:02:16 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample 7yY1OWjT4zA
+2026-08-12 00:02:27 [INFO] __main__: [GPU 0] (34/50) 7yY1OWjT4zA done in 12.9s, GT=D Pred=D Resp='D'
+2026-08-12 00:02:27 [INFO] __main__: [GPU 0] (35/50) Processing sample 7yY1OWjT4zA
+2026-08-12 00:02:28 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/7yY1OWjT4zA_video.mp4, backend=ffmpeg, frames=30, total=900, fps=30.000, timestamps=[0.0..29.0]
+2026-08-12 00:02:28 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample 7yY1OWjT4zA
+2026-08-12 00:02:29 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample 7yY1OWjT4zA
+2026-08-12 00:02:40 [INFO] __main__: [GPU 0] (35/50) 7yY1OWjT4zA done in 13.0s, GT=B Pred=B Resp='B'
+2026-08-12 00:02:40 [INFO] __main__: [GPU 0] (36/50) Processing sample zmL97ovp0kU
+2026-08-12 00:02:41 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/zmL97ovp0kU_video.mp4, backend=ffmpeg, frames=30, total=900, fps=30.000, timestamps=[0.0..29.0]
+2026-08-12 00:02:41 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample zmL97ovp0kU
+2026-08-12 00:02:42 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample zmL97ovp0kU
+2026-08-12 00:02:53 [INFO] __main__: [GPU 0] (36/50) zmL97ovp0kU done in 13.1s, GT=B Pred=B Resp='B'
+2026-08-12 00:02:53 [INFO] __main__: [GPU 0] (37/50) Processing sample zGVKSnlJFhY
+2026-08-12 00:02:54 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/zGVKSnlJFhY_video.mp4, backend=ffmpeg, frames=30, total=900, fps=29.970, timestamps=[0.0..29.0]
+2026-08-12 00:02:55 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample zGVKSnlJFhY
+2026-08-12 00:02:55 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample zGVKSnlJFhY
+2026-08-12 00:03:06 [INFO] __main__: [GPU 0] (37/50) zGVKSnlJFhY done in 12.8s, GT=D Pred=A Resp='A'
+2026-08-12 00:03:06 [INFO] __main__: [GPU 0] (38/50) Processing sample MXYFQArjCxg
+2026-08-12 00:03:07 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/MXYFQArjCxg_video.mp4, backend=ffmpeg, frames=30, total=900, fps=30.000, timestamps=[0.0..29.0]
+2026-08-12 00:03:07 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample MXYFQArjCxg
+2026-08-12 00:03:08 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample MXYFQArjCxg
+2026-08-12 00:03:19 [INFO] __main__: [GPU 0] (38/50) MXYFQArjCxg done in 13.1s, GT=B Pred=B Resp='B'
+2026-08-12 00:03:19 [INFO] __main__: [GPU 0] (39/50) Processing sample MXYFQArjCxg
+2026-08-12 00:03:20 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/MXYFQArjCxg_video.mp4, backend=ffmpeg, frames=30, total=900, fps=30.000, timestamps=[0.0..29.0]
+2026-08-12 00:03:21 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample MXYFQArjCxg
+2026-08-12 00:03:23 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample MXYFQArjCxg
+2026-08-12 00:03:33 [INFO] __main__: [GPU 0] (39/50) MXYFQArjCxg done in 14.1s, GT=B Pred=B Resp='B'
+2026-08-12 00:03:33 [INFO] __main__: [GPU 0] (40/50) Processing sample m4tk3TxWc1I
+2026-08-12 00:03:34 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/m4tk3TxWc1I_video.mp4, backend=ffmpeg, frames=30, total=750, fps=25.000, timestamps=[0.0..29.0]
+2026-08-12 00:03:34 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample m4tk3TxWc1I
+2026-08-12 00:03:35 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample m4tk3TxWc1I
+2026-08-12 00:03:46 [INFO] __main__: [GPU 0] (40/50) m4tk3TxWc1I done in 12.8s, GT=D Pred=C Resp='C'
+2026-08-12 00:03:46 [INFO] __main__: [GPU 0] (41/50) Processing sample m4tk3TxWc1I
+2026-08-12 00:03:47 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/m4tk3TxWc1I_video.mp4, backend=ffmpeg, frames=30, total=750, fps=25.000, timestamps=[0.0..29.0]
+2026-08-12 00:03:47 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample m4tk3TxWc1I
+2026-08-12 00:03:48 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample m4tk3TxWc1I
+2026-08-12 00:03:58 [INFO] __main__: [GPU 0] (41/50) m4tk3TxWc1I done in 12.7s, GT=B Pred=B Resp='B'
+2026-08-12 00:03:58 [INFO] __main__: [GPU 0] (42/50) Processing sample 81CM8lLrgoM
+2026-08-12 00:03:59 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/81CM8lLrgoM_video.mp4, backend=ffmpeg, frames=30, total=720, fps=24.000, timestamps=[0.0..29.0]
+2026-08-12 00:04:00 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample 81CM8lLrgoM
+2026-08-12 00:04:01 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample 81CM8lLrgoM
+2026-08-12 00:04:11 [INFO] __main__: [GPU 0] (42/50) 81CM8lLrgoM done in 13.1s, GT=B Pred=D Resp='D'
+2026-08-12 00:04:11 [INFO] __main__: [GPU 0] (43/50) Processing sample 81CM8lLrgoM
+2026-08-12 00:04:12 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/81CM8lLrgoM_video.mp4, backend=ffmpeg, frames=30, total=720, fps=24.000, timestamps=[0.0..29.0]
+2026-08-12 00:04:13 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample 81CM8lLrgoM
+2026-08-12 00:04:14 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample 81CM8lLrgoM
+2026-08-12 00:04:24 [INFO] __main__: [GPU 0] (43/50) 81CM8lLrgoM done in 12.7s, GT=B Pred=B Resp='B'
+2026-08-12 00:04:24 [INFO] __main__: [GPU 0] (44/50) Processing sample LttCU4RK-Zc
+2026-08-12 00:04:25 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/LttCU4RK-Zc_video.mp4, backend=ffmpeg, frames=30, total=900, fps=30.000, timestamps=[0.0..29.0]
+2026-08-12 00:04:26 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample LttCU4RK-Zc
+2026-08-12 00:04:26 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample LttCU4RK-Zc
+2026-08-12 00:04:36 [INFO] __main__: [GPU 0] (44/50) LttCU4RK-Zc done in 12.3s, GT=B Pred=B Resp='B'
+2026-08-12 00:04:36 [INFO] __main__: [GPU 0] (45/50) Processing sample H3-6byL6FTs
+2026-08-12 00:04:37 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/H3-6byL6FTs_video.mp4, backend=ffmpeg, frames=30, total=900, fps=30.000, timestamps=[0.0..29.0]
+2026-08-12 00:04:38 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample H3-6byL6FTs
+2026-08-12 00:04:39 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample H3-6byL6FTs
+2026-08-12 00:04:49 [INFO] __main__: [GPU 0] (45/50) H3-6byL6FTs done in 12.7s, GT=A Pred=A Resp='A'
+2026-08-12 00:04:49 [INFO] __main__: [GPU 0] (46/50) Processing sample aseK5-RpkSQ
+2026-08-12 00:04:50 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/aseK5-RpkSQ_video.mp4, backend=ffmpeg, frames=30, total=720, fps=24.000, timestamps=[0.0..29.0]
+2026-08-12 00:04:51 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample aseK5-RpkSQ
+2026-08-12 00:04:52 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample aseK5-RpkSQ
+2026-08-12 00:05:02 [INFO] __main__: [GPU 0] (46/50) aseK5-RpkSQ done in 12.8s, GT=B Pred=B Resp='B'
+2026-08-12 00:05:02 [INFO] __main__: [GPU 0] (47/50) Processing sample vmK5xIPPSU8
+2026-08-12 00:05:03 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/vmK5xIPPSU8_video.mp4, backend=ffmpeg, frames=30, total=900, fps=29.970, timestamps=[0.0..29.0]
+2026-08-12 00:05:03 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample vmK5xIPPSU8
+2026-08-12 00:05:04 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample vmK5xIPPSU8
+2026-08-12 00:05:15 [INFO] __main__: [GPU 0] (47/50) vmK5xIPPSU8 done in 12.8s, GT=A Pred=A Resp='A'
+2026-08-12 00:05:15 [INFO] __main__: [GPU 0] (48/50) Processing sample 9PsvKIvzgUs
+2026-08-12 00:05:16 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/9PsvKIvzgUs_video.mp4, backend=ffmpeg, frames=30, total=900, fps=30.000, timestamps=[0.0..29.0]
+2026-08-12 00:05:16 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample 9PsvKIvzgUs
+2026-08-12 00:05:17 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample 9PsvKIvzgUs
+2026-08-12 00:05:28 [INFO] __main__: [GPU 0] (48/50) 9PsvKIvzgUs done in 12.9s, GT=B Pred=B Resp='B'
+2026-08-12 00:05:28 [INFO] __main__: [GPU 0] (49/50) Processing sample WkBkvlUoZpU
+2026-08-12 00:05:29 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/WkBkvlUoZpU_video.mp4, backend=ffmpeg, frames=30, total=900, fps=29.970, timestamps=[0.0..29.0]
+2026-08-12 00:05:29 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample WkBkvlUoZpU
+2026-08-12 00:05:30 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample WkBkvlUoZpU
+2026-08-12 00:05:40 [INFO] __main__: [GPU 0] (49/50) WkBkvlUoZpU done in 12.7s, GT=D Pred=D Resp='D'
+2026-08-12 00:05:40 [INFO] __main__: [GPU 0] (50/50) Processing sample Alx0y8O6FKU
+2026-08-12 00:05:41 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/daily-omni-data/Alx0y8O6FKU_video.mp4, backend=ffmpeg, frames=30, total=900, fps=30.000, timestamps=[0.0..29.0]
+2026-08-12 00:05:42 [INFO] eval_cpp_video_prep: Prepared 30 frames for sample Alx0y8O6FKU
+2026-08-12 00:05:43 [INFO] eval_cpp_audio_prep: Prepared 30 audio segments for sample Alx0y8O6FKU
+2026-08-12 00:05:53 [INFO] __main__: [GPU 0] (50/50) Alx0y8O6FKU done in 12.4s, GT=B Pred=B Resp='B'
+2026-08-12 00:05:53 [INFO] __main__: GPU 0 completed: 50 samples
+2026-08-12 00:05:53 [INFO] __main__: Evaluation done: 50 samples in 734.2s
+2026-08-12 00:05:53 [INFO] __main__: Results saved to /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260811_235325/daily_omni_output.json
+2026-08-12 00:05:53 [INFO] __main__: Accuracy: 44/50 = 88.0%
+2026-08-12 00:05:53 [INFO] __main__: Stopping CLI processes...
+2026-08-12 00:05:56 [INFO] eval_cpp_cli_client: All CLI processes stopped
+2026-08-12 00:05:56 [INFO] eval_cpp_video_prep: Cleaned up temp media dir: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/daily-omni/tmp_media
+2026-08-12 00:05:56 [INFO] __main__: All predictions valid, no rerun needed.
+2026-08-12 00:05:56 [INFO] __main__: Running Daily-Omni scoring...
+2026-08-12 00:05:56 [INFO] __main__: Pipeline finished.
+============================================================
+Daily-Omni Evaluation Results
+============================================================
+
+--- By qa_type ---
+  unknown: 88.0% (44/50)
+
+--- By content_parent_category ---
+  unknown: 88.0% (44/50)
+
+--- By video_category ---
+  unknown: 88.0% (44/50)
+
+--- By video_duration ---
+  unknown: 88.0% (44/50)
+
+--- Overall ---
+  Total: 88.0% (44/50)
+  Total samples: 50
+
+[daily-omni] ok  用时 751.3s
+
+==============================================================================
+  评测汇总
+==============================================================================
+
+  [OK  ] Daily-Omni 音视频问答精度   用时 751.3s
+        n_samples               前 50 题
+        准确率                  44/50 = 88.0%
+        官方Overall             88.0% (44/50)
+        output_json             /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260811_235325/daily_omni_output.json
+        log                     /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260811_235325/daily-omni.log
+
+------------------------------------------------------------------------------
+  关键指标
+------------------------------------------------------------------------------
+  Daily-Omni 音视频问答精度         准确率=44/50 = 88.0%  官方Overall=88.0% (44/50)
+
+  产物目录: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260811_235325
+==============================================================================
+
+
+[1;36m[run_all][0m 全部任务结束，汇总数值
+
+==============================================================================
+  评测汇总
+==============================================================================
+
+  [OK  ] Daily-Omni 音视频问答精度   用时 751.3s
+        n_samples               前 50 题
+        准确率                  44/50 = 88.0%
+        官方Overall             88.0% (44/50)
+        output_json             /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260811_235325/daily_omni_output.json
+        log                     /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260811_235325/daily-omni.log
+
+------------------------------------------------------------------------------
+  关键指标
+------------------------------------------------------------------------------
+  Daily-Omni 音视频问答精度         准确率=44/50 = 88.0%  官方Overall=88.0% (44/50)
+
+  产物目录: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260811_235325
+==============================================================================
+
+  成功: daily-omni
+  编译日志: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260811_235325/build.log
+

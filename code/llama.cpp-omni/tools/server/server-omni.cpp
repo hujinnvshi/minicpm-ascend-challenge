@@ -10,6 +10,8 @@
 #include "session.h"
 #include "ws_handler.h"
 
+#include <atomic>
+#include <memory>
 #include <mutex>
 #include <thread>
 #include <queue>
@@ -113,30 +115,38 @@ int main(int argc, char ** argv) {
         LOG_INF("Using explicit omni model paths from args\n");
     }
 
-    // HTTP server setup
+    // HTTP server setup. OpenSSL support being compiled in does not mean TLS
+    // should be enabled; an SSLServer constructed with empty certificate paths
+    // is invalid and every listen attempt fails.
+    std::unique_ptr<httplib::Server> svr;
 #ifdef CPPHTTPLIB_OPENSSL_SUPPORT
-    httplib::SSLServer svr(params.ssl_file_cert.c_str(), params.ssl_file_key.c_str());
-#else
-    httplib::Server svr;
+    if (!params.ssl_file_cert.empty() && !params.ssl_file_key.empty()) {
+        LOG_INF("Omni HTTP server using TLS\n");
+        svr = std::make_unique<httplib::SSLServer>(
+            params.ssl_file_cert.c_str(), params.ssl_file_key.c_str());
+    }
 #endif
+    if (!svr) {
+        svr = std::make_unique<httplib::Server>();
+    }
 
     omni_server_state state;
 
     // GET /health
-    svr.Get("/health", [&](const httplib::Request &, httplib::Response & res) {
+    svr->Get("/health", [&](const httplib::Request &, httplib::Response & res) {
         json health = {{"status", "ok"}, {"engine", "comni"}};
         res.set_header("X-Engine", "comni");
         res_ok(res, health);
     });
 
-    svr.Get("/v1/health", [&](const httplib::Request &, httplib::Response & res) {
+    svr->Get("/v1/health", [&](const httplib::Request &, httplib::Response & res) {
         json health = {{"status", "ok"}, {"engine", "comni"}};
         res.set_header("X-Engine", "comni");
         res_ok(res, health);
     });
 
     // POST /v1/stream/omni_init
-    svr.Post("/v1/stream/omni_init", [&](const httplib::Request & req, httplib::Response & res) {
+    svr->Post("/v1/stream/omni_init", [&](const httplib::Request & req, httplib::Response & res) {
         json data = json::parse(req.body);
 
         if (!data.contains("msg_type") && !data.contains("media_type")) {
@@ -186,6 +196,16 @@ int main(int argc, char ** argv) {
             }
         }
 
+        // Sampling knobs must land in params BEFORE omni_init: it builds the LLM and
+        // TTS samplers from params->sampling, so anything applied afterwards silently
+        // misses them and only affects the per-chunk samplers created later.
+        if (data.contains("temperature") && data.at("temperature").is_number()) {
+            params.sampling.temp = data.at("temperature").get<float>();
+        }
+        if (data.contains("seed") && data.at("seed").is_number_integer()) {
+            params.sampling.seed = data.at("seed").get<uint32_t>();
+        }
+
         omni_context * octx = omni_init(&params, media_type, use_tts, params.tts_bin_dir, tts_gpu_layers,
                                          token2wav_device, duplex_mode,
                                          /*existing_model=*/nullptr, /*existing_ctx=*/nullptr, output_dir);
@@ -198,16 +218,39 @@ int main(int argc, char ** argv) {
         if (data.contains("voice_clone_prompt")) octx->omni_voice_clone_prompt = data["voice_clone_prompt"];
         if (data.contains("assistant_prompt")) octx->omni_assistant_prompt = data["assistant_prompt"];
 
+        // duplex sampling knobs (align with ws_handler::apply_session_config)
+        if (data.contains("listen_prob_scale") && data.at("listen_prob_scale").is_number()) {
+            octx->listen_prob_scale = data.at("listen_prob_scale").get<float>();
+        }
+        if (data.contains("force_listen_count") && data.at("force_listen_count").is_number_integer()) {
+            octx->force_listen_count = data.at("force_listen_count").get<int>();
+            octx->force_listen_used = 0;
+        }
+        if (data.contains("max_new_speak_tokens_per_chunk") && data.at("max_new_speak_tokens_per_chunk").is_number_integer()) {
+            octx->max_new_speak_tokens_per_chunk = data.at("max_new_speak_tokens_per_chunk").get<int>();
+        }
+        if (data.contains("tts_temperature") && data.at("tts_temperature").is_number()) {
+            octx->tts_temperature = data.at("tts_temperature").get<float>();
+        }
+        LOG_INF("omni_init: listen_prob_scale=%.3f force_listen_count=%d temp=%.3f seed=%u\n",
+                octx->listen_prob_scale, octx->force_listen_count, params.sampling.temp,
+                (unsigned) params.sampling.seed);
+
         {
             std::lock_guard<std::mutex> lock(state.octx_mutex);
             state.octx = octx;
         }
 
-        res_ok(res, {{"success", true}});
+        res_ok(res, {
+            {"success", true},
+            {"listen_prob_scale", octx->listen_prob_scale},
+            {"force_listen_count", octx->force_listen_count},
+            {"seed", params.sampling.seed},
+        });
     });
 
     // POST /v1/stream/prefill
-    svr.Post("/v1/stream/prefill", [&](const httplib::Request & req, httplib::Response & res) {
+    svr->Post("/v1/stream/prefill", [&](const httplib::Request & req, httplib::Response & res) {
         json data = json::parse(req.body);
 
         if (!data.contains("audio_path_prefix") || !data.at("audio_path_prefix").is_string()) {
@@ -248,7 +291,7 @@ int main(int argc, char ** argv) {
     });
 
     // POST /v1/stream/decode (SSE)
-    svr.Post("/v1/stream/decode", [&](const httplib::Request & req, httplib::Response & res) {
+    svr->Post("/v1/stream/decode", [&](const httplib::Request & req, httplib::Response & res) {
         json data = json::parse(req.body);
 
         {
@@ -287,8 +330,18 @@ int main(int argc, char ** argv) {
         }
 
         // SSE streaming
+        // cpp-httplib calls ContentProviderWithoutLength in a loop until sink.done()
+        // or the provider returns false. Returning true after a non-empty write WITHOUT
+        // sink.done() re-enters this lambda and starts another stream_decode (burns
+        // force_listen 1/2/3 in ~1ms, then runaway SPEAK).
+        auto decode_once = std::make_shared<std::atomic<bool>>(false);
         res.set_chunked_content_provider("text/event-stream",
-            [&](size_t, httplib::DataSink & sink) -> bool {
+            [&, debug_dir, round_idx, decode_once](size_t, httplib::DataSink & sink) -> bool {
+                if (decode_once->exchange(true)) {
+                    sink.done();
+                    return false;
+                }
+
                 // reset state
                 {
                     std::lock_guard<std::mutex> lock(state.octx->text_mtx);
@@ -318,6 +371,12 @@ int main(int argc, char ** argv) {
                         json ev;
                         if (frag == "__IS_LISTEN__") {
                             ev = {{"content", ""}, {"stop", false}, {"is_listen", true}, {"end_of_turn", true}};
+                        } else if (frag == "__TURN_IDLE__") {
+                            // 轮次已 turn_eos 结束、本帧零 TTS token 产出：语义上等价于
+                            // LISTEN。为了不破坏老客户端，is_listen/end_of_turn 保持与
+                            // __END_OF_TURN__ 一致，只额外带一个 turn_idle 标志。
+                            ev = {{"content", ""}, {"stop", true}, {"is_listen", false},
+                                  {"end_of_turn", true}, {"turn_idle", true}};
                         } else if (frag == "__END_OF_TURN__") {
                             ev = {{"content", ""}, {"stop", true}, {"is_listen", false}, {"end_of_turn", true}};
                         } else {
@@ -326,6 +385,7 @@ int main(int argc, char ** argv) {
 
                         if (!server_sent_event(sink, ev)) {
                             if (worker.joinable()) worker.join();
+                            sink.done();
                             return false;
                         }
                         lk.lock();
@@ -336,18 +396,46 @@ int main(int argc, char ** argv) {
 
                 if (worker.joinable()) worker.join();
 
-                // send done
+                // Emit stage metrics for the chunk just decoded (VPM/APM/prefill/decode).
+                {
+                    json metrics = {{"event", "metrics"}};
+                    {
+                        std::lock_guard<std::mutex> lock(state.octx->stage_timings_mtx);
+                        if (state.octx->last_chunk_timings.valid) {
+                            metrics["cnt"] = state.octx->last_chunk_timings.index;
+                            metrics["vpm_ms"] = state.octx->last_chunk_timings.vpm_ms;
+                            metrics["apm_ms"] = state.octx->last_chunk_timings.apm_ms;
+                            metrics["llm_prefill_ms"] = state.octx->last_chunk_timings.llm_prefill_ms;
+                            metrics["cost_llm_ms"] = state.octx->last_chunk_timings.llm_decode_ms;
+                            if (state.octx->last_chunk_timings.tts_ms > 0.0) {
+                                metrics["cost_tts_ms"] = state.octx->last_chunk_timings.tts_ms;
+                            }
+                            if (state.octx->last_chunk_timings.token2wav_ms > 0.0) {
+                                metrics["cost_token2wav_ms"] = state.octx->last_chunk_timings.token2wav_ms;
+                            }
+                        }
+                    }
+                    if (!server_sent_event(sink, metrics)) {
+                        sink.done();
+                        return false;
+                    }
+                }
+
                 static const std::string ev_done = "data: [DONE]\n\n";
                 sink.write(ev_done.data(), ev_done.size());
-                return true;
+                sink.done();
+                return false;
             });
     });
 
     // POST /v1/stream/update_session_config
-    svr.Post("/v1/stream/update_session_config", [&](const httplib::Request & req, httplib::Response & res) {
+    // Lightweight: update sampling knobs only. Do NOT clear KV / re-prefill system.
+    svr->Post("/v1/stream/update_session_config", [&](const httplib::Request & req, httplib::Response & res) {
         json data = json::parse(req.body);
         int media_type = data.value("media_type", -1);
 
+        float listen_prob_scale = -1.0f;
+        int force_listen_count = -1;
         {
             std::lock_guard<std::mutex> lock(state.octx_mutex);
             if (state.octx == nullptr) {
@@ -357,21 +445,46 @@ int main(int argc, char ** argv) {
             if (media_type > 0) {
                 state.octx->media_type = media_type;
             }
+            if (data.contains("listen_prob_scale") && data.at("listen_prob_scale").is_number()) {
+                state.octx->listen_prob_scale = data.at("listen_prob_scale").get<float>();
+            }
+            if (data.contains("force_listen_count") && data.at("force_listen_count").is_number_integer()) {
+                state.octx->force_listen_count = data.at("force_listen_count").get<int>();
+                state.octx->force_listen_used = 0;
+            }
+            if (data.contains("max_new_speak_tokens_per_chunk") && data.at("max_new_speak_tokens_per_chunk").is_number_integer()) {
+                state.octx->max_new_speak_tokens_per_chunk = data.at("max_new_speak_tokens_per_chunk").get<int>();
+            }
+            if (data.contains("tts_temperature") && data.at("tts_temperature").is_number()) {
+                state.octx->tts_temperature = data.at("tts_temperature").get<float>();
+            }
+            if (data.contains("temperature") && data.at("temperature").is_number()) {
+                params.sampling.temp = data.at("temperature").get<float>();
+            }
+            listen_prob_scale = state.octx->listen_prob_scale;
+            force_listen_count = state.octx->force_listen_count;
         }
 
-        res_ok(res, {{"success", true}});
+        LOG_INF("update_session_config: listen_prob_scale=%.3f force_listen_count=%d (no KV reset)\n",
+                listen_prob_scale, force_listen_count);
+
+        res_ok(res, {
+            {"success", true},
+            {"listen_prob_scale", listen_prob_scale},
+            {"force_listen_count", force_listen_count},
+        });
     });
 
     //
     // Backend Protocol (WebSocket + HTTP unary)
     //
-    svr.WebSocket("/backend", [&](const httplib::Request &, httplib::ws::WebSocket & ws) {
+    svr->WebSocket("/backend", [&](const httplib::Request &, httplib::ws::WebSocket & ws) {
         handle_ws_backend(ws, state.session_mgr, params,
                           /*model*/nullptr, /*ctx*/nullptr,
                           state.octx, state.octx_mutex);
     });
 
-    svr.Post("/sessions/:session_id/close", [&](const httplib::Request & req, httplib::Response & res) {
+    svr->Post("/sessions/:session_id/close", [&](const httplib::Request & req, httplib::Response & res) {
         std::string session_id = req.path_params.at("session_id");
         LOG_INF("Close session requested: %s\n", session_id.c_str());
 
@@ -411,7 +524,15 @@ int main(int argc, char ** argv) {
     });
 
     // start server
-    svr.listen("0.0.0.0", params.port);
+    LOG_INF("Omni HTTP server listening on %s:%d\n", params.hostname.c_str(), params.port);
+    if (!svr->listen(params.hostname, params.port)) {
+        LOG_ERR(
+            "Omni HTTP server failed to bind or listen on %s:%d\n",
+            params.hostname.c_str(),
+            params.port);
+        llama_backend_free();
+        return 1;
+    }
 
     // cleanup
     {

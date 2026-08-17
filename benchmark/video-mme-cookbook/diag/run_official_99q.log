@@ -1,0 +1,342 @@
+
+==============================================================================
+  MiniCPM-o 评测套件 —— 全链路
+==============================================================================
+  仓库        : /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni
+  构建目录    : /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/build-huawei
+  任务        : videomme
+  产物目录    : /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260811_211509
+  编译日志    : /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260811_211509/build.log
+==============================================================================
+
+[1;36m[run_all][0m ===== videomme =====
+========================================================================
+  MiniCPM-o 评测套件
+========================================================================
+  任务          : videomme
+  精度权重      : /workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-F16.gguf
+  RTS 权重      : /workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-F16.gguf
+  eval CLI 目录 : /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/build-huawei/bin
+  server 仓库   : /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni
+  卡 (ASCEND_RT_VISIBLE_DEVICES) : 0  共 1 张
+  RTS 卡        : 0
+  样本数        : videomme=99  daily-omni=99  tts=99
+  产物目录      : /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260811_211509
+========================================================================
+
+========================================================================
+[videomme] /workspace/user_data/venv-omni/bin/python eval_cpp_pipeline.py --num-gpus 1 --limit 99 --output /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260811_211509/videomme_output.json --skip-scoring
+[videomme] cwd=/workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/videomme
+[videomme] log=/workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260811_211509/videomme.log
+========================================================================
+2026-08-11 21:15:21 [INFO] __main__: ============================================================
+2026-08-11 21:15:21 [INFO] __main__: Video-MME CPP Evaluation Pipeline
+2026-08-11 21:15:21 [INFO] __main__:   GPUs: 1
+2026-08-11 21:15:21 [INFO] __main__:   Parquet: /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/video-mme-cookbook/diag/videomme_subset_99q.parquet
+2026-08-11 21:15:21 [INFO] __main__:   Video dir: /workspace/user_data/verify-ascend-2026-08-10/videomme-data
+2026-08-11 21:15:21 [INFO] __main__:   Output: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260811_211509/videomme_output.json
+2026-08-11 21:15:21 [INFO] __main__: ============================================================
+2026-08-11 21:15:21 [INFO] __main__: Loading dataset from /workspace/user_data/claude_code/minicpm-ascend-challenge/benchmark/video-mme-cookbook/diag/videomme_subset_99q.parquet
+2026-08-11 21:15:21 [INFO] __main__: Limited to first 99 rows
+2026-08-11 21:15:21 [INFO] __main__: Loaded 99 questions
+2026-08-11 21:15:21 [INFO] __main__: Grouped into 33 videos
+2026-08-11 21:15:21 [INFO] __main__:   Chunk 0: 33 videos
+2026-08-11 21:15:21 [INFO] __main__: Starting llama-omni-eval-cli processes...
+2026-08-11 21:15:21 [INFO] eval_cpp_cli_client: [GPU 0] launching CLI: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/build-huawei/bin/llama-omni-eval-cli -m /workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-F16.gguf -c 40960 -ngl 999 --max-slice-nums 0 --n-predict 100 --temp 0.0 --top-p 0.8 --top-k 100 --repeat-penalty 1.02 --seed 42  (log: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/videomme/log/cli_gpu0.log)
+2026-08-11 21:15:21 [INFO] eval_cpp_cli_client: Waiting for 1 CLI processes to load model...
+2026-08-11 21:15:31 [INFO] eval_cpp_cli_client: [GPU 0] CLI ready，耗时 9.9s
+2026-08-11 21:15:31 [INFO] eval_cpp_cli_client: All 1 CLI processes ready
+2026-08-11 21:15:31 [INFO] __main__: Starting evaluation...
+2026-08-11 21:15:31 [INFO] __main__: [GPU 0] (1/33) Processing video 001
+2026-08-11 21:16:24 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/fFjv93ACGo8.mp4, backend=ffmpeg, sample_fps=0.861, frames=64, total=2227, raw_fps=29.970
+2026-08-11 21:16:27 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 001
+2026-08-11 21:16:41 [INFO] __main__:   Q=001-1 GT=C Pred=A Response='A'
+2026-08-11 21:16:54 [INFO] __main__:   Q=001-2 GT=A Pred=A Response='A'
+2026-08-11 21:17:08 [INFO] __main__:   Q=001-3 GT=D Pred=D Response='D'
+2026-08-11 21:17:08 [INFO] __main__: [GPU 0] (1/33) Video 001 done, 3 questions, 97.1s
+2026-08-11 21:17:08 [INFO] __main__: [GPU 0] (2/33) Processing video 002
+2026-08-11 21:18:00 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/N1cdUjctpG8.mp4, backend=ffmpeg, sample_fps=0.741, frames=64, total=2590, raw_fps=30.000
+2026-08-11 21:18:02 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 002
+2026-08-11 21:18:15 [INFO] __main__:   Q=002-1 GT=C Pred=C Response='C'
+2026-08-11 21:18:29 [INFO] __main__:   Q=002-2 GT=D Pred=B Response='B'
+2026-08-11 21:18:43 [INFO] __main__:   Q=002-3 GT=B Pred=B Response='B'
+2026-08-11 21:18:43 [INFO] __main__: [GPU 0] (2/33) Video 002 done, 3 questions, 94.8s
+2026-08-11 21:18:43 [INFO] __main__: [GPU 0] (3/33) Processing video 003
+2026-08-11 21:19:26 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HIjX8OPuf-w.mp4, backend=ffmpeg, sample_fps=0.566, frames=64, total=2712, raw_fps=23.976
+2026-08-11 21:19:28 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 003
+2026-08-11 21:19:41 [INFO] __main__:   Q=003-1 GT=B Pred=A Response='A'
+2026-08-11 21:19:55 [INFO] __main__:   Q=003-2 GT=C Pred=A Response='A'
+2026-08-11 21:20:08 [INFO] __main__:   Q=003-3 GT=D Pred=D Response='D'
+2026-08-11 21:20:09 [INFO] __main__: [GPU 0] (3/33) Video 003 done, 3 questions, 86.4s
+2026-08-11 21:20:09 [INFO] __main__: [GPU 0] (4/33) Processing video 004
+2026-08-11 21:20:54 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HwnB8aCn8yE.mp4, backend=ffmpeg, sample_fps=0.659, frames=64, total=2428, raw_fps=25.000
+2026-08-11 21:20:55 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 004
+2026-08-11 21:21:09 [INFO] __main__:   Q=004-1 GT=B Pred=B Response='B'
+2026-08-11 21:21:22 [INFO] __main__:   Q=004-2 GT=B Pred=C Response='C'
+2026-08-11 21:21:36 [INFO] __main__:   Q=004-3 GT=D Pred=B Response='B'
+2026-08-11 21:21:36 [INFO] __main__: [GPU 0] (4/33) Video 004 done, 3 questions, 87.0s
+2026-08-11 21:21:36 [INFO] __main__: [GPU 0] (5/33) Processing video 005
+2026-08-11 21:22:16 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/24i4ncHuf6A.mp4, backend=ffmpeg, sample_fps=0.574, frames=64, total=2786, raw_fps=25.000
+2026-08-11 21:22:17 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 005
+2026-08-11 21:22:31 [INFO] __main__:   Q=005-1 GT=A Pred=B Response='B'
+2026-08-11 21:22:44 [INFO] __main__:   Q=005-2 GT=B Pred=B Response='B'
+2026-08-11 21:22:58 [INFO] __main__:   Q=005-3 GT=C Pred=C Response='C'
+2026-08-11 21:22:58 [INFO] __main__: [GPU 0] (5/33) Video 005 done, 3 questions, 81.7s
+2026-08-11 21:22:58 [INFO] __main__: [GPU 0] (6/33) Processing video 006
+2026-08-11 21:23:36 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/40BlVzjxu-I.mp4, backend=ffmpeg, sample_fps=0.598, frames=64, total=3207, raw_fps=29.970
+2026-08-11 21:23:38 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 006
+2026-08-11 21:23:51 [INFO] __main__:   Q=006-1 GT=D Pred=D Response='D'
+2026-08-11 21:24:05 [INFO] __main__:   Q=006-2 GT=A Pred=A Response='A'
+2026-08-11 21:24:18 [INFO] __main__:   Q=006-3 GT=A Pred=A Response='A'
+2026-08-11 21:24:18 [INFO] __main__: [GPU 0] (6/33) Video 006 done, 3 questions, 80.3s
+2026-08-11 21:24:18 [INFO] __main__: [GPU 0] (7/33) Processing video 007
+2026-08-11 21:24:51 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/0ay2Qy3wBe8.mp4, backend=ffmpeg, sample_fps=0.842, frames=64, total=2277, raw_fps=29.970
+2026-08-11 21:24:53 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 007
+2026-08-11 21:25:06 [INFO] __main__:   Q=007-1 GT=D Pred=D Response='D'
+2026-08-11 21:25:19 [INFO] __main__:   Q=007-2 GT=D Pred=B Response='B'
+2026-08-11 21:25:33 [INFO] __main__:   Q=007-3 GT=A Pred=A Response='A'
+2026-08-11 21:25:33 [INFO] __main__: [GPU 0] (7/33) Video 007 done, 3 questions, 75.0s
+2026-08-11 21:25:33 [INFO] __main__: [GPU 0] (8/33) Processing video 008
+2026-08-11 21:26:16 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/_tvmjsKXTu8.mp4, backend=ffmpeg, sample_fps=0.558, frames=64, total=2749, raw_fps=23.976
+2026-08-11 21:26:17 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 008
+2026-08-11 21:26:31 [INFO] __main__:   Q=008-1 GT=D Pred=C Response='C'
+2026-08-11 21:26:45 [INFO] __main__:   Q=008-2 GT=B Pred=B Response='B'
+2026-08-11 21:26:58 [INFO] __main__:   Q=008-3 GT=A Pred=A Response='A'
+2026-08-11 21:26:59 [INFO] __main__: [GPU 0] (8/33) Video 008 done, 3 questions, 85.0s
+2026-08-11 21:26:59 [INFO] __main__: [GPU 0] (9/33) Processing video 009
+2026-08-11 21:27:39 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/sUDY-SMREtA.mp4, backend=ffmpeg, sample_fps=0.835, frames=64, total=1838, raw_fps=23.976
+2026-08-11 21:27:41 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 009
+2026-08-11 21:27:54 [INFO] __main__:   Q=009-1 GT=A Pred=A Response='A'
+2026-08-11 21:28:08 [INFO] __main__:   Q=009-2 GT=B Pred=B Response='B'
+2026-08-11 21:28:21 [INFO] __main__:   Q=009-3 GT=C Pred=B Response='B'
+2026-08-11 21:28:22 [INFO] __main__: [GPU 0] (9/33) Video 009 done, 3 questions, 83.1s
+2026-08-11 21:28:22 [INFO] __main__: [GPU 0] (10/33) Processing video 010
+2026-08-11 21:28:58 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/PSt_op3fQck.mp4, backend=ffmpeg, sample_fps=0.557, frames=64, total=2875, raw_fps=25.000
+2026-08-11 21:28:59 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 010
+2026-08-11 21:29:12 [INFO] __main__:   Q=010-1 GT=C Pred=B Response='B'
+2026-08-11 21:29:25 [INFO] __main__:   Q=010-2 GT=A Pred=B Response='B'
+2026-08-11 21:29:39 [INFO] __main__:   Q=010-3 GT=B Pred=A Response='A'
+2026-08-11 21:29:39 [INFO] __main__: [GPU 0] (10/33) Video 010 done, 3 questions, 77.6s
+2026-08-11 21:29:39 [INFO] __main__: [GPU 0] (11/33) Processing video 011
+2026-08-11 21:30:18 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/OE5S-NbNsro.mp4, backend=ffmpeg, sample_fps=0.542, frames=64, total=2833, raw_fps=23.976
+2026-08-11 21:30:20 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 011
+2026-08-11 21:30:33 [INFO] __main__:   Q=011-1 GT=C Pred=C Response='C'
+2026-08-11 21:30:47 [INFO] __main__:   Q=011-2 GT=B Pred=B Response='B'
+2026-08-11 21:31:00 [INFO] __main__:   Q=011-3 GT=A Pred=A Response='A'
+2026-08-11 21:31:01 [INFO] __main__: [GPU 0] (11/33) Video 011 done, 3 questions, 81.3s
+2026-08-11 21:31:01 [INFO] __main__: [GPU 0] (12/33) Processing video 301
+2026-08-11 21:31:44 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/dphq5X-rMew.mp4, backend=ffmpeg, sample_fps=0.154, frames=64, total=9938, raw_fps=23.976
+2026-08-11 21:31:45 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 301
+2026-08-11 21:31:59 [INFO] __main__:   Q=301-1 GT=C Pred=B Response='B'
+2026-08-11 21:32:12 [INFO] __main__:   Q=301-2 GT=A Pred=A Response='A'
+2026-08-11 21:32:26 [INFO] __main__:   Q=301-3 GT=D Pred=D Response='D'
+2026-08-11 21:32:26 [INFO] __main__: [GPU 0] (12/33) Video 301 done, 3 questions, 85.7s
+2026-08-11 21:32:26 [INFO] __main__: [GPU 0] (13/33) Processing video 302
+2026-08-11 21:33:07 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/K64wRD8eaus.mp4, backend=ffmpeg, sample_fps=0.127, frames=64, total=12127, raw_fps=23.976
+2026-08-11 21:33:08 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 302
+2026-08-11 21:33:22 [INFO] __main__:   Q=302-1 GT=C Pred=D Response='D'
+2026-08-11 21:33:35 [INFO] __main__:   Q=302-2 GT=C Pred=D Response='D'
+2026-08-11 21:33:49 [INFO] __main__:   Q=302-3 GT=C Pred=D Response='D'
+2026-08-11 21:33:49 [INFO] __main__: [GPU 0] (13/33) Video 302 done, 3 questions, 82.9s
+2026-08-11 21:33:49 [INFO] __main__: [GPU 0] (14/33) Processing video 303
+2026-08-11 21:34:31 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/kSBB5PsRV-k.mp4, backend=ffmpeg, sample_fps=0.224, frames=64, total=6842, raw_fps=23.976
+2026-08-11 21:34:33 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 303
+2026-08-11 21:34:46 [INFO] __main__:   Q=303-1 GT=C Pred=B Response='B'
+2026-08-11 21:35:00 [INFO] __main__:   Q=303-2 GT=B Pred=A Response='A'
+2026-08-11 21:35:13 [INFO] __main__:   Q=303-3 GT=D Pred=C Response='C'
+2026-08-11 21:35:14 [INFO] __main__: [GPU 0] (14/33) Video 303 done, 3 questions, 84.4s
+2026-08-11 21:35:14 [INFO] __main__: [GPU 0] (15/33) Processing video 304
+2026-08-11 21:35:55 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/QTA8j5wSTx4.mp4, backend=ffmpeg, sample_fps=0.128, frames=64, total=12020, raw_fps=23.976
+2026-08-11 21:35:56 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 304
+2026-08-11 21:36:09 [INFO] __main__:   Q=304-1 GT=B Pred=C Response='C'
+2026-08-11 21:36:23 [INFO] __main__:   Q=304-2 GT=B Pred=C Response='C'
+2026-08-11 21:36:36 [INFO] __main__:   Q=304-3 GT=A Pred=B Response='B'
+2026-08-11 21:36:37 [INFO] __main__: [GPU 0] (15/33) Video 304 done, 3 questions, 83.2s
+2026-08-11 21:36:37 [INFO] __main__: [GPU 0] (16/33) Processing video 305
+2026-08-11 21:37:12 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/tuZcS2Flabw.mp4, backend=ffmpeg, sample_fps=0.192, frames=64, total=7991, raw_fps=23.976
+2026-08-11 21:37:13 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 305
+2026-08-11 21:37:26 [INFO] __main__:   Q=305-1 GT=B Pred=C Response='C'
+2026-08-11 21:37:40 [INFO] __main__:   Q=305-2 GT=C Pred=C Response='C'
+2026-08-11 21:37:53 [INFO] __main__:   Q=305-3 GT=C Pred=C Response='C'
+2026-08-11 21:37:54 [INFO] __main__: [GPU 0] (16/33) Video 305 done, 3 questions, 77.4s
+2026-08-11 21:37:54 [INFO] __main__: [GPU 0] (17/33) Processing video 306
+2026-08-11 21:38:33 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/s_TGkDcjBqI.mp4, backend=ffmpeg, sample_fps=0.207, frames=64, total=7415, raw_fps=23.976
+2026-08-11 21:38:34 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 306
+2026-08-11 21:38:48 [INFO] __main__:   Q=306-1 GT=D Pred=B Response='B'
+2026-08-11 21:39:01 [INFO] __main__:   Q=306-2 GT=B Pred=A Response='A'
+2026-08-11 21:39:15 [INFO] __main__:   Q=306-3 GT=B Pred=B Response='B'
+2026-08-11 21:39:15 [INFO] __main__: [GPU 0] (17/33) Video 306 done, 3 questions, 81.4s
+2026-08-11 21:39:15 [INFO] __main__: [GPU 0] (18/33) Processing video 307
+2026-08-11 21:39:56 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/8l1NyR6UvxU.mp4, backend=ffmpeg, sample_fps=0.203, frames=64, total=7552, raw_fps=23.976
+2026-08-11 21:39:58 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 307
+2026-08-11 21:40:11 [INFO] __main__:   Q=307-1 GT=B Pred=D Response='D'
+2026-08-11 21:40:25 [INFO] __main__:   Q=307-2 GT=A Pred=A Response='A'
+2026-08-11 21:40:38 [INFO] __main__:   Q=307-3 GT=D Pred=B Response='B'
+2026-08-11 21:40:39 [INFO] __main__: [GPU 0] (18/33) Video 307 done, 3 questions, 83.5s
+2026-08-11 21:40:39 [INFO] __main__: [GPU 0] (19/33) Processing video 308
+2026-08-11 21:41:18 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/wgPymD-NBQU.mp4, backend=ffmpeg, sample_fps=0.179, frames=64, total=8575, raw_fps=23.976
+2026-08-11 21:41:19 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 308
+2026-08-11 21:41:32 [INFO] __main__:   Q=308-1 GT=C Pred=B Response='B'
+2026-08-11 21:41:46 [INFO] __main__:   Q=308-2 GT=C Pred=C Response='C'
+2026-08-11 21:41:59 [INFO] __main__:   Q=308-3 GT=D Pred=A Response='A'
+2026-08-11 21:42:00 [INFO] __main__: [GPU 0] (19/33) Video 308 done, 3 questions, 80.8s
+2026-08-11 21:42:00 [INFO] __main__: [GPU 0] (20/33) Processing video 309
+2026-08-11 21:42:32 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/tjrvKA4w9-Y.mp4, backend=ffmpeg, sample_fps=0.174, frames=64, total=8808, raw_fps=23.976
+2026-08-11 21:42:33 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 309
+2026-08-11 21:42:47 [INFO] __main__:   Q=309-1 GT=A Pred=A Response='A'
+2026-08-11 21:43:00 [INFO] __main__:   Q=309-2 GT=C Pred=C Response='C'
+2026-08-11 21:43:14 [INFO] __main__:   Q=309-3 GT=D Pred=D Response='D'
+2026-08-11 21:43:14 [INFO] __main__: [GPU 0] (20/33) Video 309 done, 3 questions, 74.6s
+2026-08-11 21:43:14 [INFO] __main__: [GPU 0] (21/33) Processing video 310
+2026-08-11 21:43:50 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/A9fQPzZ1-hg.mp4, backend=ffmpeg, sample_fps=0.166, frames=64, total=9251, raw_fps=23.976
+2026-08-11 21:43:51 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 310
+2026-08-11 21:44:05 [INFO] __main__:   Q=310-1 GT=B Pred=A Response='A'
+2026-08-11 21:44:18 [INFO] __main__:   Q=310-2 GT=B Pred=B Response='B'
+2026-08-11 21:44:32 [INFO] __main__:   Q=310-3 GT=C Pred=C Response='C'
+2026-08-11 21:44:32 [INFO] __main__: [GPU 0] (21/33) Video 310 done, 3 questions, 78.1s
+2026-08-11 21:44:32 [INFO] __main__: [GPU 0] (22/33) Processing video 311
+2026-08-11 21:45:19 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/4jmMWohs1XM.mp4, backend=ffmpeg, sample_fps=0.187, frames=64, total=8203, raw_fps=23.976
+2026-08-11 21:45:20 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 311
+2026-08-11 21:45:34 [INFO] __main__:   Q=311-1 GT=B Pred=B Response='B'
+2026-08-11 21:45:47 [INFO] __main__:   Q=311-2 GT=D Pred=D Response='D'
+2026-08-11 21:46:01 [INFO] __main__:   Q=311-3 GT=A Pred=A Response='A'
+2026-08-11 21:46:01 [INFO] __main__: [GPU 0] (22/33) Video 311 done, 3 questions, 89.0s
+2026-08-11 21:46:01 [INFO] __main__: [GPU 0] (23/33) Processing video 601
+2026-08-11 21:46:42 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/TGom0uiW130.mp4, backend=ffmpeg, sample_fps=0.020, frames=64, total=79226, raw_fps=25.000
+2026-08-11 21:46:43 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 601
+2026-08-11 21:46:56 [INFO] __main__:   Q=601-1 GT=A Pred=B Response='B'
+2026-08-11 21:47:10 [INFO] __main__:   Q=601-2 GT=D Pred=C Response='C'
+2026-08-11 21:47:23 [INFO] __main__:   Q=601-3 GT=A Pred=A Response='A'
+2026-08-11 21:47:24 [INFO] __main__: [GPU 0] (23/33) Video 601 done, 3 questions, 82.5s
+2026-08-11 21:47:24 [INFO] __main__: [GPU 0] (24/33) Processing video 602
+2026-08-11 21:48:05 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/w0Wmc8C0Eq0.mp4, backend=ffmpeg, sample_fps=0.023, frames=64, total=70496, raw_fps=25.000
+2026-08-11 21:48:07 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 602
+2026-08-11 21:48:21 [INFO] __main__:   Q=602-1 GT=D Pred=D Response='D'
+2026-08-11 21:48:34 [INFO] __main__:   Q=602-2 GT=A Pred=B Response='B'
+2026-08-11 21:48:48 [INFO] __main__:   Q=602-3 GT=A Pred=D Response='D'
+2026-08-11 21:48:48 [INFO] __main__: [GPU 0] (24/33) Video 602 done, 3 questions, 84.4s
+2026-08-11 21:48:48 [INFO] __main__: [GPU 0] (25/33) Processing video 603
+2026-08-11 21:49:31 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/7D-gxaie6UI.mp4, backend=ffmpeg, sample_fps=0.021, frames=64, total=71835, raw_fps=23.976
+2026-08-11 21:49:32 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 603
+2026-08-11 21:49:46 [INFO] __main__:   Q=603-1 GT=A Pred=A Response='A'
+2026-08-11 21:49:59 [INFO] __main__:   Q=603-2 GT=B Pred=B Response='B'
+2026-08-11 21:50:13 [INFO] __main__:   Q=603-3 GT=B Pred=D Response='D'
+2026-08-11 21:50:13 [INFO] __main__: [GPU 0] (25/33) Video 603 done, 3 questions, 85.1s
+2026-08-11 21:50:13 [INFO] __main__: [GPU 0] (26/33) Processing video 604
+2026-08-11 21:50:51 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/0RxMZBLeqRI.mp4, backend=ffmpeg, sample_fps=0.035, frames=64, total=54878, raw_fps=29.970
+2026-08-11 21:50:52 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 604
+2026-08-11 21:51:06 [INFO] __main__:   Q=604-1 GT=C Pred=C Response='C'
+2026-08-11 21:51:19 [INFO] __main__:   Q=604-2 GT=C Pred=B Response='B'
+2026-08-11 21:51:33 [INFO] __main__:   Q=604-3 GT=B Pred=C Response='C'
+2026-08-11 21:51:33 [INFO] __main__: [GPU 0] (26/33) Video 604 done, 3 questions, 80.0s
+2026-08-11 21:51:33 [INFO] __main__: [GPU 0] (27/33) Processing video 605
+2026-08-11 21:52:12 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/xKiRmesHWIA.mp4, backend=ffmpeg, sample_fps=0.034, frames=64, total=47400, raw_fps=25.000
+2026-08-11 21:52:14 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 605
+2026-08-11 21:52:27 [INFO] __main__:   Q=605-1 GT=D Pred=B Response='B'
+2026-08-11 21:52:41 [INFO] __main__:   Q=605-2 GT=A Pred=B Response='B'
+2026-08-11 21:52:54 [INFO] __main__:   Q=605-3 GT=D Pred=D Response='D'
+2026-08-11 21:52:55 [INFO] __main__: [GPU 0] (27/33) Video 605 done, 3 questions, 81.3s
+2026-08-11 21:52:55 [INFO] __main__: [GPU 0] (28/33) Processing video 606
+2026-08-11 21:53:36 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/uC8TK7GH85o.mp4, backend=ffmpeg, sample_fps=0.023, frames=64, total=68430, raw_fps=25.000
+2026-08-11 21:53:37 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 606
+2026-08-11 21:53:51 [INFO] __main__:   Q=606-1 GT=B Pred=D Response='D'
+2026-08-11 21:54:04 [INFO] __main__:   Q=606-2 GT=A Pred= Response='BC'
+2026-08-11 21:54:18 [INFO] __main__:   Q=606-3 GT=B Pred=B Response='B'
+2026-08-11 21:54:18 [INFO] __main__: [GPU 0] (28/33) Video 606 done, 3 questions, 83.2s
+2026-08-11 21:54:18 [INFO] __main__: [GPU 0] (29/33) Processing video 607
+2026-08-11 21:54:59 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/zxKPjD8urG4.mp4, backend=ffmpeg, sample_fps=0.023, frames=64, total=71050, raw_fps=25.000
+2026-08-11 21:55:01 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 607
+2026-08-11 21:55:14 [INFO] __main__:   Q=607-1 GT=A Pred=A Response='A'
+2026-08-11 21:55:28 [INFO] __main__:   Q=607-2 GT=A Pred=A Response='A'
+2026-08-11 21:55:41 [INFO] __main__:   Q=607-3 GT=B Pred=B Response='B'
+2026-08-11 21:55:42 [INFO] __main__: [GPU 0] (29/33) Video 607 done, 3 questions, 83.9s
+2026-08-11 21:55:42 [INFO] __main__: [GPU 0] (30/33) Processing video 608
+2026-08-11 21:56:21 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/BoBapnk6TB8.mp4, backend=ffmpeg, sample_fps=0.023, frames=64, total=71050, raw_fps=25.000
+2026-08-11 21:56:22 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 608
+2026-08-11 21:56:36 [INFO] __main__:   Q=608-1 GT=C Pred=C Response='C'
+2026-08-11 21:56:49 [INFO] __main__:   Q=608-2 GT=C Pred=D Response='D'
+2026-08-11 21:57:03 [INFO] __main__:   Q=608-3 GT=C Pred=A Response='A'
+2026-08-11 21:57:03 [INFO] __main__: [GPU 0] (30/33) Video 608 done, 3 questions, 81.4s
+2026-08-11 21:57:03 [INFO] __main__: [GPU 0] (31/33) Processing video 609
+2026-08-11 21:57:46 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/HProiNnmGwI.mp4, backend=ffmpeg, sample_fps=0.023, frames=64, total=70750, raw_fps=25.000
+2026-08-11 21:57:47 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 609
+2026-08-11 21:58:01 [INFO] __main__:   Q=609-1 GT=C Pred=C Response='C'
+2026-08-11 21:58:14 [INFO] __main__:   Q=609-2 GT=D Pred=D Response='D'
+2026-08-11 21:58:28 [INFO] __main__:   Q=609-3 GT=D Pred=C Response='C'
+2026-08-11 21:58:28 [INFO] __main__: [GPU 0] (31/33) Video 609 done, 3 questions, 85.0s
+2026-08-11 21:58:28 [INFO] __main__: [GPU 0] (32/33) Processing video 610
+2026-08-11 21:59:06 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/O7zcPvQDIMU.mp4, backend=ffmpeg, sample_fps=0.023, frames=64, total=69892, raw_fps=25.000
+2026-08-11 21:59:08 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 610
+2026-08-11 21:59:21 [INFO] __main__:   Q=610-1 GT=A Pred=A Response='A'
+2026-08-11 21:59:35 [INFO] __main__:   Q=610-2 GT=C Pred=A Response='A'
+2026-08-11 21:59:48 [INFO] __main__:   Q=610-3 GT=B Pred=B Response='B'
+2026-08-11 21:59:49 [INFO] __main__: [GPU 0] (32/33) Video 610 done, 3 questions, 80.6s
+2026-08-11 21:59:49 [INFO] __main__: [GPU 0] (33/33) Processing video 611
+2026-08-11 22:00:29 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/H8fGd3fCJbg.mp4, backend=ffmpeg, sample_fps=0.035, frames=64, total=54094, raw_fps=29.970
+2026-08-11 22:00:30 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 611
+2026-08-11 22:00:44 [INFO] __main__:   Q=611-1 GT=D Pred=C Response='C'
+2026-08-11 22:00:57 [INFO] __main__:   Q=611-2 GT=D Pred=B Response='B'
+2026-08-11 22:01:11 [INFO] __main__:   Q=611-3 GT=D Pred=D Response='D'
+2026-08-11 22:01:11 [INFO] __main__: [GPU 0] (33/33) Video 611 done, 3 questions, 82.6s
+2026-08-11 22:01:11 [INFO] __main__: GPU 0 completed: 99 questions
+2026-08-11 22:01:11 [INFO] __main__: Evaluation done: 99 questions in 2740.1s
+2026-08-11 22:01:11 [INFO] __main__: Results saved to /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260811_211509/videomme_output.json
+2026-08-11 22:01:11 [INFO] __main__: Accuracy: 51/99 = 51.5%
+2026-08-11 22:01:11 [INFO] __main__: Stopping CLI processes...
+2026-08-11 22:01:15 [INFO] eval_cpp_cli_client: All CLI processes stopped
+2026-08-11 22:01:15 [INFO] eval_cpp_video_prep: Cleaned up temp frames dir: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/videomme/tmp_frames
+2026-08-11 22:01:15 [INFO] rerun_failed:   Invalid: qid=606-2  response=''
+2026-08-11 22:01:15 [INFO] __main__: Rerunning 1 failed questions...
+2026-08-11 22:01:15 [INFO] eval_cpp_cli_client: [GPU 0] launching CLI: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/build-huawei/bin/llama-omni-eval-cli -m /workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-F16.gguf -c 40960 -ngl 999 --max-slice-nums 0 --n-predict 100 --temp 0.0 --top-p 0.8 --top-k 100 --repeat-penalty 1.02 --seed 42  (log: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/videomme/log/cli_gpu0.log)
+2026-08-11 22:01:24 [INFO] eval_cpp_cli_client: [GPU 0] CLI ready，耗时 8.8s
+2026-08-11 22:01:24 [INFO] rerun_failed: --- 606-2 (video 606) ---
+2026-08-11 22:01:59 [INFO] eval_cpp_video_prep: Video: /workspace/user_data/verify-ascend-2026-08-10/videomme-data/uC8TK7GH85o.mp4, backend=ffmpeg, sample_fps=0.023, frames=64, total=68430, raw_fps=25.000
+2026-08-11 22:02:01 [INFO] eval_cpp_video_prep: Prepared 64 frames for video 606
+2026-08-11 22:02:15 [INFO] rerun_failed:   GT=A  Raw='BC'  Pred=''
+2026-08-11 22:02:20 [INFO] rerun_failed:   Patched 606-2: '' -> ''
+2026-08-11 22:02:20 [INFO] rerun_failed: Patched 1 questions in /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260811_211509/videomme_output.json
+2026-08-11 22:02:20 [INFO] __main__: Pipeline finished.
+[videomme] ok  用时 2829.9s
+
+==============================================================================
+  评测汇总
+==============================================================================
+
+  [OK  ] Video-MME  视频问答精度   用时 2829.9s
+        n_samples               前 99 题
+        准确率                  51/99 = 51.5%
+        output_json             /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260811_211509/videomme_output.json
+        log                     /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260811_211509/videomme.log
+
+------------------------------------------------------------------------------
+  关键指标
+------------------------------------------------------------------------------
+  Video-MME  视频问答精度           准确率=51/99 = 51.5%
+
+  产物目录: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260811_211509
+==============================================================================
+
+
+[1;36m[run_all][0m 全部任务结束，汇总数值
+
+==============================================================================
+  评测汇总
+==============================================================================
+
+  [OK  ] Video-MME  视频问答精度   用时 2829.9s
+        n_samples               前 99 题
+        准确率                  51/99 = 51.5%
+        output_json             /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260811_211509/videomme_output.json
+        log                     /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260811_211509/videomme.log
+
+------------------------------------------------------------------------------
+  关键指标
+------------------------------------------------------------------------------
+  Video-MME  视频问答精度           准确率=51/99 = 51.5%
+
+  产物目录: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260811_211509
+==============================================================================
+
+  成功: videomme
+  编译日志: /workspace/user_data/claude_code/minicpm-ascend-challenge/code/llama.cpp-omni/evaluation/output/20260811_211509/build.log
+

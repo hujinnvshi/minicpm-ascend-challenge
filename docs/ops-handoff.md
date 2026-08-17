@@ -114,3 +114,14 @@ cmake --build code/llama.cpp-omni/build-cann -j$(nproc)
 - `docs/cann-patches.md` 6 补丁细节
 - `docs/status-assessment.md` 状态评估（08-05 P1.7 纠正版置顶）
 - `docs/submission-checklist.md` 官方清单 + 算力申请
+
+## 十、新设备补充（2026-08-10，910B / CANN beta.1）
+
+新分配设备的核心验证结论，与上文（旧环境 beta.3）配套。完整记录见 `docs/session-2026-08-10-newenv.md`；产物在 `/workspace/user_data/verify-ascend-2026-08-10/`。
+
+**关键 gotcha（容器重建后必读）**：
+1. **双die device 锁定**：双 die = dev0+dev1，dev1 不可用。perf/duplex **必须** `ASCEND_RT_VISIBLE_DEVICES=0 CUDA_VISIBLE_DEVICES=0`，否则跑到 dev1 在 `aclnn_repeat_interleave` 崩溃（exit139）。npu-smi 查询用 `-i 5`，binary 用 dev0。
+2. **aarch64 Python 降级**：pandas3/pyarrow25/numpy2.5 段错误 → 用 numpy1.26.4/pandas2.2.3/pyarrow16.1.0。venv 在 `/workspace/user_data/venv-omni`（旧 venv-g23 不存在），freeze 见 `verify-ascend-2026-08-10/stage1/requirements-frozen.txt`。
+3. **build 命令**：`bash scripts/build-cann.sh "$REPO/code/llama.cpp-omni"`（传 REPO 参）+ `cmake --build ... --target llama-omni-eval-cli`（脚本只构 cli+perf-duplex）。
+
+**结果**：RTF 中位 0.52（< 1.087）✅；Video-MME smoke 0/2（情形B，beta.1 也退化）。git tag `verify-ascend-910B-cann-beta1-20260810`。

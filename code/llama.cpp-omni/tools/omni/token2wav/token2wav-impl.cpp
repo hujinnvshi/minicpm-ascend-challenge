@@ -28,6 +28,9 @@ typedef void (*ggml_backend_cuda_set_disable_graph_t)(ggml_backend_t backend, bo
 #ifdef GGML_USE_CUDA
 #include "ggml-cuda.h"
 #endif
+#ifdef GGML_USE_CANN
+#include "ggml-cann.h"
+#endif
 #include <cstring>
 #include <memory>
 #include <cstddef>
@@ -2205,6 +2208,11 @@ ggml_backend_t fm_loader_init_backend_gpu_idx(int gpu_idx, std::string & backend
 #ifdef GGML_USE_CUDA
     backend = ggml_backend_cuda_init(gpu_idx);
 #endif
+#ifdef GGML_USE_CANN
+    if (!backend) {
+        backend = ggml_backend_cann_init(gpu_idx);
+    }
+#endif
     if (!backend) {
         // fallback to generic GPU init
         backend = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_GPU, nullptr);
@@ -3184,6 +3192,11 @@ ggml_backend_t ue_loader_init_backend_gpu_idx(int gpu_idx, std::string & backend
     ggml_backend_t backend = nullptr;
 #ifdef GGML_USE_CUDA
     backend = ggml_backend_cuda_init(gpu_idx);
+#endif
+#ifdef GGML_USE_CANN
+    if (!backend) {
+        backend = ggml_backend_cann_init(gpu_idx);
+    }
 #endif
     if (!backend) {
         backend = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_GPU, nullptr);
@@ -6596,6 +6609,11 @@ bool voc_hg2_model::voc_hg2_model_init_from_gguf(const std::string & gguf_path_i
 #ifdef GGML_USE_CUDA
         backend = ggml_backend_cuda_init(gpu_idx);
 #endif
+#ifdef GGML_USE_CANN
+        if (!backend) {
+            backend = ggml_backend_cann_init(gpu_idx);
+        }
+#endif
         if (!backend) {
             backend = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_GPU, nullptr);
         }
@@ -7235,6 +7253,11 @@ bool flowGGUFModelLoader::init_backend(const std::string & device) {
         }
 #ifdef GGML_USE_CUDA
         backend_ = ggml_backend_cuda_init(gpu_idx);
+#endif
+#ifdef GGML_USE_CANN
+        if (!backend_) {
+            backend_ = ggml_backend_cann_init(gpu_idx);
+        }
 #endif
         if (!backend_) {
             backend_ = flow_loader_init_backend_gpu_first(backend_name_);
@@ -9655,14 +9678,20 @@ bool Token2Wav::load_models(const std::string & encoder_gguf,
                             const std::string & coreml_model_path) {
     reset_stream();
 
-    // [P3] token2wav CPU threads (Flow+vocoder) 可由 OMNI_T2W_THREADS 覆盖(默认 8)。
-    // 诊断(P3):vocoder(hifigan,CPU 非自回归)占 T2W 80%(591ms/chunk),8 threads 在 256 核机上未充分利用,
-    // 加线程可并行提速。红线:仅 CPU 线程数,不改推理数学(token 序列/Flow/voc 算子不变)。
-    int kDefaultThreads = 16;  // [P3] 默认16(910B/910C 256核实测最优:vocoder 591→395ms, TTS RTF 0.83→0.62 降25%); env OMNI_T2W_THREADS 可覆盖
-    if (const char * _e = std::getenv("OMNI_T2W_THREADS")) {
-        int _v = std::atoi(_e);
-        if (_v > 0) kDefaultThreads = _v;
+    // CPU thread count for token2mel / vocoder. Overridable via env
+    // OMNI_T2W_THREADS: on many-core servers the vocoder-on-CPU path
+    // benefits from far more than 8 threads. Only affects CPU backends.
+    int kDefaultThreads = 8;
+    {
+        const char * th = getenv("OMNI_T2W_THREADS");
+        if (th && th[0]) {
+            int v = atoi(th);
+            if (v > 0) {
+                kDefaultThreads = v;
+            }
+        }
     }
+    std::fprintf(stderr, "Token2Wav.load_models: using %d CPU threads (token2mel+vocoder)\n", kDefaultThreads);
     if (!t2m_.load_model(encoder_gguf, flow_matching_gguf, flow_extra_gguf, device_token2mel, kDefaultThreads,
                          coreml_model_path)) {
         LOG_ERROR( "Token2Wav.load_models: Token2Mel.load_model failed\n");

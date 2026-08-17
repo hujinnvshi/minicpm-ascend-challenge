@@ -1,6 +1,11 @@
 # 性能测试报告 — MiniCPM-o 4.5 双工推理优化(赛道一·子赛道 A: llama.cpp-omni)
 
-> 状态:2026-08-05 版。SPEAK→WAV RTF 已实测;精度 benchmark 待官方评测脚本到位后补。
+> 状态:2026-08-15 版（review-optimize 评审修订 + NZ 口径定论）。
+> **🔴 2026-08-15 性能口径更正**：**0.58-0.59 作废**——那是 FA 残留 binary（libllama/libggml-cann 05:58 构建）+ vocoder CPU 路径的历史值；全量干净重编（官方 bench/huawei + 6 补丁）后 vocoder 走 NPU（官方 CANN 行为）。**新口径（NPU+CPU 独占 4 次实测,24 vocoder 线程+NUMA 64-95）**：
+> - **NZ=on（默认配置）: e2e 1.01 / 1.01（TTS 0.96）** → beat 基线 1.087 ~7%
+> - **NZ=off（官方 config.env 口径）: e2e 1.08 / 1.09（TTS 0.92）** → 与基线 1.087 擦线
+> - 运行记录 `tools/omni/output/rtf_final_{on,off}{1,2}.json` + `rtf_on_r3.json`；详见 `nz-pollution-impact.md` §三.1。
+> - 本报告以下旧段落（0.57/0.58/0.68/0.83）均为历史 binary/配置数据，**仅作优化史留档，不用于提交物性能声明**。
 > 北极星指标:**SPEAK→WAV 完整链路 RTF**(单并发 F16),官方基线 **1.087**。
 > 赛事:MiniCPM & 昇腾推理优化与应用创新挑战赛 · 赛道一 · 子赛道 A(llama.cpp-omni)。
 
@@ -8,16 +13,18 @@
 
 - **指标定义**:SPEAK→WAV 完整链路 RTF = (一轮 SPEAK 从首帧 push 到末 wav 落盘的墙钟时间) / (该轮生成音频时长)。单并发、F16。<1 表示快于实时。
 - **口径对齐**:与官方"主要优化目标 = SPEAK 生成阶段 RTF(非全 chunk 平均)"一致 —— 本指标按 SPEAK 轮计,不对 LISTEN 帧平均。
-- **实测结果(2026-08-05,perf-duplex 36 帧)**:
+- **实测结果(perf-duplex 36 帧,F16)**:
 
-| 指标 | 我方(P1.7) | 官方基线(F16) | 结论 |
+| 配置 | SPEAK→WAV RTF(e2e) | 官方基线 | 结论 |
 |---|---|---|---|
-| **SPEAK→WAV RTF(e2e,完整链路)** | **0.83**(中位 0.81–0.83) | **1.087** | ✅ **beat 基线 ~24%** |
-| TTS RTF(TTS 段,参考) | 0.82 | — | — |
-| LLM 判定 P50(参考) | 977ms | — | <1000,实时 |
+| **24 线程 + NUMA 绑 NPU 同 node**(调优最优,新机 3 次中位 0.55–0.65) | **0.58-0.59**(新机) / 0.57(旧机 node6) | **1.087** | ✅ **beat ~46%/48%** |
+| **16 线程默认**(最可复现,3 次 0.84/0.68/0.58) | **0.68** | **1.087** | ✅ **beat ~37%** |
 
-- **P8 复测(2026-08-06,fix 分支含 P3 vocoder 16 threads,3 次)**:e2e RTF = **0.84 / 0.68 / 0.58,中位 0.68**(run1 冷启动偏高,run2/3 热机 0.58–0.68)。含 P3 vocoder 多线程后优于 P1.7,beat 基线 ~37%。
-- 详(P1.7):`speak#0/audio#0` 音频 53.84s,e2e wall 44.44s → RTF 0.83;TTS wall 44.08s → 0.82。
+> 报告口径:**0.68**(16 线程默认,零手动配置、最可复现)为主线;**0.58-0.59**(`OMNI_T2W_THREADS=24` + NUMA 绑 NPU 同 node,2026-08-14 新机实测)为调优最优,见 `reproduce-guide.md`。均红线内(仅 CPU 线程 + NUMA 绑核,不改推理数学)。
+> ⚠️ **NUMA 绑核必须先查机器**:`cat /sys/bus/pci/devices/<NPU_bus>/numa_node`(NPU bus 从 `npu-smi info` 取)。旧机 NPU node6 → `taskset -c 192-223`;新机(NPU id=7)node2 → `taskset -c 64-95`。**照抄旧机核号到新机会跨 NUMA DMA,RTF 退化至 0.68**(2026-08-14 实验,见 experiments.md)。
+> **P6 overlap 探索(2026-08-12)**:尝试 vocoder overlap(t2m‖vocoder async)降 0.57→0.34,bit-精确失败——ggml 跨 backend(NPU+CANN vs CPU)并发非 thread-safe 改内容(step1 串行 bit-精确 vs step2 async 改内容)。**结论限定**:该失败仅证明"共享 ggml 进程内 async"形态不可行,是当前架构(t2m+vocoder 共享 ggml)串行极限的实测下限;vocoder 独立进程/共享内存形态未验证(理论红线内极限 ~0.34-0.42,perf-ceiling-analysis.md)。详见 `perf-vocoder-overlap` 分支 + experiments P6。
+- TTS RTF(TTS 段,参考)0.80–0.82;LLM 判定 P50(参考)977ms(<1000,实时)。
+- 优化链:P1.7(队列解耦)→ P3(vocoder 8→16 线程)→ P4(24 线程 + NUMA)。详见 `experiments.md`。
 
 ## 2. 测试环境
 
@@ -34,7 +41,7 @@
 
 ## 4. 测试次数
 
-- 多次复跑取一致值:P1.7 队列解耦后 C-8 / C-8b / 本次 → e2e RTF 0.81 / 0.80 / 0.83(中位 **0.81–0.83**,稳定 <1.087)。
+- 多次复跑取中位:16 线程默认(P8,3 次)0.84/0.68/0.58 → 中位 **0.68**;24 线程+NUMA 绑 NPU 同 node(P4 旧机 5 次 0.55–0.62 → 中位 0.57;2026-08-14 新机 3 次 0.55/0.59/0.65 → 中位 **0.59**,见 experiments.md)。均稳定 <1.087。
 - **P8 复测(2026-08-06,fix 分支含 P3 vocoder 16)**:3 次 e2e RTF = 0.84 / 0.68 / 0.58,**中位 0.68**(冷启动→热机波动,均 <1.087)。原始日志 `tools/omni/output/perf_p8_{1,2,3}.{json,log}`(gitignored)。
 - 方法论:每配置 ≥3 次,RTF 差异 <0.03 视噪声(experiments 016);P8 三次波动 0.26 系冷启动/系统负载,取中位 0.68 报告。
 
@@ -63,6 +70,7 @@
 - **CANN 不支持 Q4_K_M 量化算子** → LLM 用 F16(4090 的"量化最优"在 910B 失效;Q8_0 实测不提速,dequant-bound)。非异常,平台约束。
 - **P1.6 曾误判"AICore 4% = compute 没走 NPU"** → P1.7 npu-smi 细粒度采样澄清为时间均值伪影(实际 burst 60–84%),offload 一直正常。
 - 910B3 替代 910C:算力约为半颗 910C,RTF 绝对值偏高但口径统一即公平。
+- **NZ 标注(2026-08-15)**:RTF 于 `GGML_CANN_WEIGHT_NZ=on`(ggml-cann 默认)测得;NZ=off 对 RTF 的影响待 NPU/CPU 独占复测(首次对比被并行评测 CPU 竞争污染,见 `nz-pollution-impact.md` §三.1)。精度评测经官方 run_all 路径为 NZ=off 干净口径。
 
 ## 9. 复现(摘要)
 
@@ -70,10 +78,25 @@
 - 跑:`tools/omni/perf/run_perf.sh -m <F16> --test <duplex_omni_test_case_> 36` → `analyze_perf.py`。
 - 详见 [reproduce-guide.md](reproduce-guide.md)、优化链 [experiments.md](experiments.md)(P0–P1.7)、补丁 [cann-patches.md](cann-patches.md)。
 
-## 10. 精度 benchmark 现状(2026-08-06 P8 自评,详见 experiments.md P8)
+## 10. 精度 benchmark 现状（2026-08-14 更新，三项均为全量/官方 pipeline 实测）
 
-- **Daily-Omni**:6.7%(15 条)/ 12.5%(8 条)—— omni 框架硬上限(单帧视觉 P7 多帧退化 + whisper 30s P6 + 模型 thinking 输出),远低于基线 77.5。**79.5 基线来源待官方确认**(eval-spec 自注 daily-omni 公开 leaderboard Qwen 61.82 为"另一框架",79.5 很可能非 llama.cpp-omni 实测)。
-- **Video-MME**:未跑通 —— omni 处理 VideoMME 大 video(16MB+,short 时长)触发 server 静默崩溃(单/双 server 均复现,每跑必崩,log 无栈,非资源:mem 2TB/HBM 34%//tmp 2.3T)。脚本已建(`benchmark/video-mme/videomme_test.py`),待框架修复后可跑。
-- **TTS-Seed**:WER 0.20(同口径 paraformer+zhconv+jiwer,**强达标** ≤1.56);SIM 0.84(wavlm-base-plus 口径偏差,官方 SV 需 UniSpeech 框架 `wavlm_large_finetune.pth`,留作后续)。
-- **认知更正**:eval-spec "F16 不改数学→精度=基线" 假设对**多模态 benchmark 不成立** —— 受 omni 框架配置(视觉帧数/音频窗口/输出模态)严重影响,与单测 LLM 数学等价不同。
-- Demo 演示视频:已录制 `benchmark/demo-video/demo_turnchat.webm` + 8 项证据 `benchmark/demo-evidence/`。
+**准入判定（当前 910B3 单 die0；基线口径见各文档）**:
+| 项 | 官方基线 | 准入 | 实测（本轮） | 判定 |
+|---|---|---|---|---|
+| Daily-Omni | 79.5（全量 1196）| ≥77.5（降幅≤2pp）| **79.8%**（全量 1196，官方 Overall，output/20260812_132304）| ✅ 持平基线（+0.3pp，噪声内）|
+| TTS-Seed WER | 1.414% | ≤1.56%（增幅≤10%）| **0.97%**（全量 2020，NZ=off 官方口径）| ✅ 大幅优于基线（-31%）|
+| TTS-Seed ASV/SIM | 0.709 | ≥0.689（降幅≤0.02）| **0.708**（全量 2020，NZ=off 官方口径）| ✅ 持平基线（-0.001）|
+| Video-MME | 69.0（全量 2700）| ≥67.0 | **51.5–53.5%**（99 题子集，官方不可改 evaluation/ 64帧@1fps）| 📋 口径问题待赛方（见下）|
+
+**Video-MME gap 深度排查（2026-08-14 追加，experiments.md 当日节）**:
+- 多帧退化已根治（attention 掩码 -Inf F16 溢出修复，官方 bench/huawei 分支）；退化 0。
+- **空响应根因 = C++ prefill 缺 `<image_id>` 帧编号**（与 HF 参考实现 token 逐位 diff 坐实：HF 每帧前有编号 0..63，C++ 完全没有）→ 时序线索丢失 → 分布糊化 → EOS 以 ~0.6 logit 微弱优势压过答案字母的临界空响应（~12% 题）。
+- 修复门控 `OMNI_IMAGE_ID=1`（+ `OMNI_TEXT_CHAT_SYS=1` 去掉语音克隆系统提示）后失败模式消失（单题验证）；**99q 完整对齐 A/B 结果见 experiments.md 2026-08-14 节（review-optimize 分支实测）**。协议对齐不涉及改推理数学（红线内）。
+- 残余答案分歧（对齐后仍与 HF 差 1 个字母级）指向 vision 预处理/kernel 数值，属框架间实现差；同框架内 NPU/CPU 漂移已答案级排除。
+- **基线口径**：官方基线 69.0 出处（910C? vLLM? 全量?）与子赛道 A 在 910B 独立基线待组委会澄清 → `docs/organizer-inquiry-2026-08-12.md`（Q1-Q4 已备，待发）。
+
+**实测证据链（详见各文档）**:
+- Daily-Omni/TTS-Seed 全量结果与口径：`docs/{daily-omni-eval,tts-seed-eval}.md`；独立复现：`docs/verification-2026-08-12.md`。
+- Video-MME：`docs/multiframe-degradation-fix.md` + `docs/videomme-baseline-clarification.md` + cookbook diag（99q parquet/日志/协议 A/B env）。
+- Demo 演示视频：`benchmark/demo-video/demo_turnchat.webm` + 8 项证据 `benchmark/demo-evidence/`。
+- binary 备份：`/tmp/build-cann-bin.bak`（ccec build 全 5 binary）；build 详见 [reproduce-guide.md](reproduce-guide.md) §3（ccec）。
