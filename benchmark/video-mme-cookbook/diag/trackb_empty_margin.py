@@ -12,7 +12,7 @@ os.environ.setdefault("ASCEND_RT_VISIBLE_DEVICES", "0")
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
 
 MODEL = "/workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5"
-VDATA = "/workspace/user_data/temp_project/minicpm-ascend-challenge/benchmark/video-mme-cookbook/diag/videomme_domain180_data"
+VDATA = "/workspace/minicpm-ascend-challenge/benchmark/video-mme-cookbook/diag/videomme_domain180_data"
 CASES = [("drbi6HK1gSc", "093-1", "D"), ("uoJDGnaVuTg", "097-3", "A"), ("pcO-alfiyEo", "114-1", "D")]
 PROMPT_T = ("Carefully read the following question and select the letter corresponding to the correct answer."
             "Highlight the applicable choices without giving explanations.\n{q}\nOptions:\n{opts}")

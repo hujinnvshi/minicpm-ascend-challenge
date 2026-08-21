@@ -10,7 +10,7 @@
 | 角色 | 官方 HiDevLab 910B3 云环境（厂家授权替代 910C），**所有正式数据在此产生** |
 | 硬件 | 910B3 单卡 64GB HBM（npu-smi 显示 NPU 1 chip 0）+ 鲲鹏 920 256 核 |
 | 系统 | openEuler 24.03 aarch64；CANN 9.1.0-beta.3 |
-| 项目根 | `/workspace/user_data/temp_project/minicpm-ascend-challenge`（git main = origin/main） |
+| 项目根 | `/workspace/minicpm-ascend-challenge`（git main = origin/main） |
 | 官方预置（只读） | 权重 `/workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/`；数据集 `/workspace/shared_assets/datasets/` |
 | Python 环境 | `/workspace/venv-g23/bin/python`（torch 2.13 / transformers 5.14 / jiwer 4.0 / librosa / modelscope 已装；**whisper/funasr/zhconv 未装**） |
 | 构建产物 | `code/llama.cpp-omni/build-cann/bin/{llama-omni-cli,llama-omni-perf-duplex,llama-omni-server}` |
@@ -44,7 +44,7 @@
 ## 四、常用操作速查
 
 ```bash
-cd /workspace/user_data/temp_project/minicpm-ascend-challenge
+cd /workspace/minicpm-ascend-challenge
 MODEL=/workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-F16.gguf
 BIN=code/llama.cpp-omni/build-cann/bin
 

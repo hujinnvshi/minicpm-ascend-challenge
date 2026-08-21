@@ -3,7 +3,7 @@
 与 HF(trackb_empty_margin.py 文本版)同 prompt 对比 → LLM kernel 数值是否干净。
 """
 import sys, os, json, subprocess, time
-REPO = "/workspace/user_data/temp_project/minicpm-ascend-challenge"
+REPO = "/workspace/minicpm-ascend-challenge"
 os.environ.setdefault("LLAMA_CLI_BIN", f"{REPO}/code/llama.cpp-omni/build-cann/bin/llama-omni-eval-cli")
 
 PROMPT = ("Carefully read the following question and select the letter corresponding to the correct answer."

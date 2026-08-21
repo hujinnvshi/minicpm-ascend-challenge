@@ -9,7 +9,7 @@
 """
 import sys, os, json, subprocess, time
 
-REPO = "/workspace/user_data/temp_project/minicpm-ascend-challenge"
+REPO = "/workspace/minicpm-ascend-challenge"
 os.environ.setdefault("PARQUET_PATH", f"{REPO}/benchmark/video-mme-cookbook/diag/videomme_subset_99q.parquet")
 os.environ.setdefault("VIDEO_DATA_DIR", f"{REPO}/code/llama.cpp-omni/evaluation/appendix/videomme99/data")
 os.environ.setdefault("LLAMA_CLI_BIN", f"{REPO}/code/llama.cpp-omni/build/bin/llama-omni-eval-cli")
