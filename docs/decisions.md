@@ -2,6 +2,21 @@
 
 记录参赛过程中的关键决策与依据。时间倒序。
 
+## 2026-08-21 决策：官方分支更新 b06198f —— 归帧溯源 + 新 RTF 口径 + 新提交规范，必适配
+
+**背景**：赛事群 2026-08-21 通知（排行榜上线 + 测评分支更新 + 鼓励提前提交）。官方 bench/huawei 更新至 b06198f（2026-08-19 "refine rtf test" #100），新增 SUBMISSION_GUIDE.md（submission.zip 四件套 + §1.2 架构级复核通道）+ run_validity.py（batch_validity 契约）+ omni.cpp 归帧溯源（src_cnt/turn_id/producer_seq）+ 新 RTF 口径（core 帧 pooled）+ 任务顺序 rts 优先 + Video-MME 分层采样。
+
+**关键结论**：
+1. 不移植 b06198f 归帧 → batch_validity 必挂（SRC_CNT_MISSING/SPEAK_NO_WAV 等）→ 无 RTF 成绩。**必做**。
+2. 我方 omni.cpp 与官方 c9785cc 仅差 102 行（diag/实验开关，默认=官方行为）；3-way merge 零冲突，合并后 diff vs b06198f 恰为 102 行。
+3. evaluation/ 我方无本地改动（= c9785cc 官方树），直接 rsync b06198f 即可。
+4. 新 RTF 口径：Σ core 帧 compute / Σ audio（pooled）；core 帧硬性 n_samples=24000/sample_rate=24000/非尾帧 TTS 恰 26 token；实时资格 t2w_dequeue oldest_wait_ms<1s 且无跨 src 积压 —— P1.7 深队列与此冲突，架构级改动须重验 realtime_eligible。
+5. 提交规范重写：submission.zip = README.md + demo.mp4 + llama.cpp-omni.zip（git archive，bench/huawei 基线，status clean）+ integration-support.zip；打包脚本需重构（当前 code/llama.cpp-omni 无独立 .git，用 staging git 仓库方案）。
+6. 策略：safe 版（b06198f 归帧 + 我方 delta）先适配自测 → 提前提交探路（官方鼓励）；P1.7 恢复走 §1.2 复核通道作第二版候选。
+7. 环境：2026-08-21 工作区 glusterfs 只读（写入 EROFS）→ 记录暂存 /root/repo-sync-pending，本脚本恢复后落地。
+
+**详见**：[announcement-2026-08-21-official-update.md](announcement-2026-08-21-official-update.md)
+
 ## 2026-08-06 决策（P5）：vocoder overlap 流水线实验 — 未达 0.34，回退
 
 **背景**：极限分析理论下限 0.34（C 重叠）。尝试冲 0.34（不破坏 P3/P4）。
