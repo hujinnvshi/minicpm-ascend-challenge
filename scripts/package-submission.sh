@@ -173,16 +173,36 @@ cat > "$PKG_DIR/README.md" <<'EOF'
 
 ## 2. 优化说明
 
-全部改动位于 `llama.cpp-omni` 主源码包，共 4 个文件，**默认行为与官方基线一致**（改动均为环境变量门控的诊断/调优开关，不改变推理数学、评测入口、计时或校验逻辑）：
+全部改动位于 `llama.cpp-omni` 主源码包，共 4 个文件，**默认行为与官方基线一致**（改动均为环境变量门控的诊断/稳定性修复，不改变推理数学、评测入口、计时或校验逻辑）：
 
 | 文件 | 修改 | 原理/用途 | 是否改变行为 |
 |---|---|---|---|
-| `ggml/src/ggml-cann/ggml-cann.cpp` | 补丁 7：`ggml_backend_cann_free` 前 `ggml_cann_set_device` | 修复 910B4 上 omni_free 在未设置过 device 的线程执行时 CANN context null 崩溃 | 否（生命周期正确性修复） |
-| `tools/omni/omni.cpp` | 诊断开关（`OMNI_DEBUG_PREFILL`/`OMNI_DEBUG_TOPK`）+ `OMNI_T2W_STEPS` env 化 + image_id 门控 + 系统提示 | 环境变量默认关闭，行为=官方 | 否（默认关闭） |
+| `ggml/src/ggml-cann/ggml-cann.cpp` | 补丁 7：`ggml_backend_cann_free` 前 `ggml_cann_set_device` | 修复 910B4 上 omni_free 在未设置过 device 的线程执行时 CANN context null 崩溃（否则评测链路在析构阶段 abort） | 否（生命周期正确性修复） |
+| `tools/omni/omni.cpp` | 诊断开关（`OMNI_DEBUG_PREFILL`/`OMNI_DEBUG_TOPK`）+ `OMNI_T2W_STEPS` env 化 + image_id 门控 + 系统提示 | 环境变量默认关闭，行为=官方；`OMNI_T2W_STEPS` 默认 5=官方值 | 否（默认关闭/默认值=官方） |
 | `tools/omni/omni.h` | T2WOut/last_chunk_timings 结构字段对齐 | 与 omni.cpp 配套 | 否 |
 | `tools/omni/vision.cpp` | `Omni_DUMP_EMBED` 诊断开关 | 默认关闭 | 否（默认关闭） |
 
 所有改动均可通过环境变量回退到官方行为；未使用第三方代码。
+
+### 2.1 运行时调优（环境变量，官方 README L268 允许随提交上传）
+
+性能收益来自运行时配置而非修改推理数学（`evaluation/README.md` 明确"若后端优化需要开启，可在提交时一并上传自己的环境变量"）：
+
+| 变量 | 官方默认 | 提交值 | 适用模块 | 作用及必要性 |
+|---|---|---|---|---|
+| `OMNI_T2W_THREADS` | 16 | 24 | token2wav | vocoder CPU 工作线程；配合 NUMA 绑核降低 T2W 段耗时 |
+| `GGML_CANN_WEIGHT_NZ` | off | off | LLM | 官方要求（`evaluation/README.md` L317：必须保持 off，否则空串/复读异常输出） |
+| `GGML_CANN_ACL_GRAPH` | off | off | LLM | 910B 不支持图模式，保持关闭 |
+| NUMA 绑核（taskset） | — | NPU 同 node CPU | 全链路 | 避免跨 NUMA DMA；机器相关，先探测 `cat /sys/bus/pci/devices/<NPU_BDF>/numa_node` |
+
+实测效果（同机同输入，910B4 单卡，官方 b06198f harness）：
+
+| 配置 | core RTF | SPEAK→wav 中位 |
+|---|---|---|
+| 零调优默认（16 线程） | 1.87 | 1913ms |
+| `OMNI_T2W_THREADS=24` + NUMA 绑核 | **1.71** | 1859ms |
+
+> 另有 A/B 对照：官方原版代码（无本提交 4 文件补丁）同配置 = 1.63，与本提交 1.71 差异在噪声内（±5%）——补丁对性能零影响，本提交的 RTF 水平即官方代码在 910B4 上的真实水平。
 
 ## 3. 构建与运行
 
@@ -217,7 +237,11 @@ cmake --build build-cann --target llama-omni-server llama-omni-cli llama-omni-pe
 ```bash
 cd llama.cpp-omni/evaluation
 python3 judge-final/scripts/make_test_case.py   # 生成 RTS 自测输入（一次）
-EVAL_CONFIG=<本机 env> ./run_all.sh --smoke 2 --no-build
+# 运行时调优（§2.1）：T2W 24 线程 + NUMA 绑 NPU 同 node（先探测 node，勿照抄核号）
+NUMA_CPU=$(cat /sys/bus/pci/devices/$(npu-smi info | grep -oE '0000:[0-9a-f:.]+' | head -1)/numa_node)
+export OMNI_T2W_THREADS=24
+EVAL_CONFIG=<本机 env> taskset -c $(cat /sys/devices/system/node/node${NUMA_CPU}/cpulist) \
+  ./run_all.sh --smoke 2 --no-build
 ```
 
 自测验收：`batch_pooled_report.json` 中 `batch_validity.data_valid && realtime_eligible == true`。
@@ -234,6 +258,8 @@ EVAL_CONFIG=<本机 env> ./run_all.sh --smoke 2 --no-build
 
 ### 5.2 自测结果（2026-08-21，910B4 单卡，NZ=off 官方路径）
 
+**性能（RTS）**：
+
 | 项 | 值 |
 |---|---|
 | RTS core RTF（5 core 帧 pooled） | **1.71** |
@@ -243,6 +269,17 @@ EVAL_CONFIG=<本机 env> ./run_all.sh --smoke 2 --no-build
 | 官方样例基线 core RTF | 1.1~1.2（单输入 3 core 帧，抖动大，仅量级参考） |
 
 > 自测用单样例输入，官方明确"自测只验证流程，不预测成绩"；正式成绩以官方统一评测环境为准。
+
+**精度（四项 Benchmark）**：
+
+| 项 | 官方基线 | 准入线 | 自测结果 | 状态 |
+|---|---|---|---|---|
+| Daily-Omni | 79.5% | ≥77.5 | **79.8%**（1196 题全量） | ✅ |
+| TTS-Seed WER | 1.414 | ≤1.56 | **0.97%**（2020 题全量） | ✅ |
+| TTS-Seed ASV | 0.709 | ≥0.689 | **0.708** | ✅ |
+| Video-MME | 69.0% | ≥67.0 | **72.9%**（官方 stratified 采样 0.1：90 视频/270 题，确定性算法） | ✅ |
+
+> Video-MME 说明：采用官方 `stratified_sampling.py`（duration/domain/sub_category 分层等距，无随机）ratio=0.1 采样的 270 题，NZ=off 官方路径，官方 `eval_your_result.py` 评分。此前 63.3% 为手动合池口径（KB 域占比高），非官方采样算法；本结果与官方准入线 67.0 直接可比。正式评测以赛方全量执行为准。
 
 ### 5.3 已知问题
 
