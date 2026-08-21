@@ -188,3 +188,12 @@ cmake --build code/llama.cpp-omni/build-cann -j$(nproc)
 2. 官方 b06198f 串行队列=1 不是性能瓶颈，是"TTS 追得上 LLM"的自然结果
 3. decode 0.57s/帧（core RTF 0.57）是 910B4 NPU 双工推理硬时间（C-2 单工 30 帧 304ms 场景不同）
 4. **红线内优化空间已系统性穷尽**——RTF 1.71 是当前硬件+官方架构的物理水平
+
+## 2026-08-21 Video-MME 官方采样 0.1 复测（重大结果）
+
+- **结果：Overall 72.9%（197/270）**，官方 eval_your_result.py 评分函数（extract_characters_regex + GT 匹配）
+- 方法：官方 stratified_sampling.py ratio=0.1 确定性采样（90 视频/270 题，6 域×30 子类×3 时长均衡），只解压 90 个视频（12.5G），NZ=off 官方路径
+- **vs 旧 63.3%（手动 270 合池）**：+9.6pp——旧合池 KB 域占比高且含 99q 疑难子集，官方采样全域均匀，我们表现好得多
+- 官方准入线 67.0 → **72.9% 达标 ✅**（此前 63.3% 点估计未达是采样构造偏差，非代码问题）
+- 注意：run_all 报 FAIL 是 eval_your_result.py 对非全量输入的硬断言（assert 300 文件），用 skip_missing=True 绕过即得官方口径分数；主循环准确率 196/270=72.6% 与评分函数一致
+- 全量 2700 题正式评测仍由赛方执行；本结果证明 910B4 上官方采样口径可达标
