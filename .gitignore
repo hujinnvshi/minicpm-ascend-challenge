@@ -91,3 +91,7 @@ benchmark/video-mme/data/
 benchmark/daily-omni-data/
 benchmark/video-mme-cookbook/diag/videomme_domain180_data/
 benchmark/video-mme-cookbook/diag/videomme99_data/
+
+# ===== Video-MME 官方采样复测数据（12G 视频，不入库；env 与采样脚本已入库） =====
+benchmark/video-mme-cookbook/diag/videomme_sampled0*.parquet
+benchmark/video-mme-cookbook/diag/videomme_sampled0*_data/
