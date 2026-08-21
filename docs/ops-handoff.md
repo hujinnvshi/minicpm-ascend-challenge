@@ -125,3 +125,12 @@ cmake --build code/llama.cpp-omni/build-cann -j$(nproc)
 3. **build 命令**：`bash scripts/build-cann.sh "$REPO/code/llama.cpp-omni"`（传 REPO 参）+ `cmake --build ... --target llama-omni-eval-cli`（脚本只构 cli+perf-duplex）。
 
 **结果**：RTF 中位 0.52（< 1.087）✅；Video-MME smoke 0/2（情形B，beta.1 也退化）。git tag `verify-ascend-910B-cann-beta1-20260810`。
+
+## 2026-08-21 工作区路径迁移（赛事方要求直接使用 /workspace）
+
+- **旧路径**：`/workspace/user_data/temp_project/minicpm-ascend-challenge`（vol_bigfile 卷 98% 满 + EROFS 只读，git 无法提交/推送）
+- **新路径**：`/workspace/minicpm-ascend-challenge`（overlay 可写盘，赛事方"直接使用 /workspace 路径"要求）
+- **模型/数据集**：仍走 `/workspace/shared_assets`（只读共享区，不复制，徐帅 8-19 通知第 1 条）
+- **git**：完整 .git 已迁移（HEAD=1adbd1c，origin=git@github.com:hujinnvshi/minicpm-ascend-challenge.git），旧位置 git 因卷只读停用
+- **旧位置处置**：暂留不删，待卷恢复写权限后按 announcement-2026-08-21 §9.2 清单清理（删重复视频 2.7G + build 产物 + 非赛事目录）
+- **注意**：并行 Claude Code 会话若仍引用旧路径，以本路径为准；build-cann 未复制，重建见 `scripts/build-cann.sh`
