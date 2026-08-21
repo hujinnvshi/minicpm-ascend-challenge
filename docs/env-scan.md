@@ -127,7 +127,7 @@ MMMU / MMLU / LLaVA-Instruct-150K / alpaca —— **不能替代**官方 Daily-O
 ## 附：关键路径速查
 
 ```
-项目根:        /workspace/user_data/temp_project/minicpm-ascend-challenge
+项目根:        /workspace/minicpm-ascend-challenge
 权重(只读):    /workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/
 持久化(读写):  /workspace/user_data/   (glusterfs 35T，编译产物/报告落此)
 CANN:          /usr/local/Ascend/cann-9.1.0-beta.3

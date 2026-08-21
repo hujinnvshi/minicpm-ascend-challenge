@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-MiniCPM-o 4.5 全模态推理优化参赛仓库（赛道一·**子赛道 A: llama.cpp-omni**，核心指标 **SPEAK→WAV RTF**）。运行/评测在**昇腾 910B3 单卡 + CANN 9.1.0-beta.3**（厂家授权替代 910C；aarch64）。本机 = 910B 云机（`/workspace/user_data/temp_project/minicpm-ascend-challenge`），**无公网入站，出站仅 github/pypi/modelscope 通（YouTube/HF 被封）**。当前进度与下一步见 `docs/session-2026-08-05.md`。
+MiniCPM-o 4.5 全模态推理优化参赛仓库（赛道一·**子赛道 A: llama.cpp-omni**，核心指标 **SPEAK→WAV RTF**）。运行/评测在**昇腾 910B3 单卡 + CANN 9.1.0-beta.3**（厂家授权替代 910C；aarch64）。本机 = 910B 云机（`/workspace/minicpm-ascend-challenge`），**无公网入站，出站仅 github/pypi/modelscope 通（YouTube/HF 被封）**。当前进度与下一步见 `docs/session-2026-08-05.md`。
 
 ## 关键约束（红线，必读）
 
