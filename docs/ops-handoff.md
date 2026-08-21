@@ -245,3 +245,12 @@ cmake --build code/llama.cpp-omni/build-cann -j$(nproc)
 - **结果**：result 0000 提交成功，进入任务调度
 - **说明**：FA 是纯 env 上传（官方 README L268 允许），代码零改动；精度零翻转（08-15 A/B 记录）
 - 今日提交额度：v3（探路）+ v4（FA）已用 2/3
+
+## 2026-08-21 深挖补充（FA 后，3 轮实验 + NPU 观测）
+
+- **F16+FA 稳定性**：1.3643 / 1.3767 / 1.3835（3 次独立跑，均值 ~1.375，双 true 稳定）
+- **H18 绑核**：taskset 0-255 全核 → BATCH_WORKER_FAILED（httpx 超时，NUMA 漂移）→ **NUMA 绑核 128-159 是必需**，非可选
+- **H19 VPM 后端**：vision_init(use_gpu=true) 全 CANN，无 CPU fallback；slice=1（max_slice_nums_override=1）
+- **H20 NPU 观测**（3 轮独立确认）：推理中 HBM 53-72% 但 **Aicore=0%、Aivector=0%** —— npu-smi 统计对 CANN FA 执行模式不可靠（或计算为微秒级爆发），**不能据此判断 CPU/传输瓶颈**，观测路线关闭
+- **H25 perf-duplex**：发现 patch7 未覆盖的同类崩溃（ggml_backend_cann_free device=-1，perf-duplex 的 llama_init 失败路径）——诊断工具崩溃，非提交物，记录待后续修（patch8 候选）
+- **结论**：F16+FA=1.375 是当前 910B4 稳定最优；Q4_0/Q8_0/NO_PINNED/MIN_BATCH/队列/绑核全验证关闭
