@@ -134,3 +134,23 @@ cmake --build code/llama.cpp-omni/build-cann -j$(nproc)
 - **git**：完整 .git 已迁移（HEAD=1adbd1c，origin=git@github.com:hujinnvshi/minicpm-ascend-challenge.git），旧位置 git 因卷只读停用
 - **旧位置处置**：暂留不删，待卷恢复写权限后按 announcement-2026-08-21 §9.2 清单清理（删重复视频 2.7G + build 产物 + 非赛事目录）
 - **注意**：并行 Claude Code 会话若仍引用旧路径，以本路径为准；build-cann 未复制，重建见 `scripts/build-cann.sh`
+
+## 2026-08-21 设备变更：910B3 → 910B4（重要）
+
+- **新设备**：910B4 单卡，HBM **32768MB（32GB）**，NPU id=3（/dev/davinci3），NUMA node4 → CPU 128-159，系统内存 1699GB
+- **旧记录**（作废）：910B3 64GB HBM、NPU id=7/node2、NPU id=1/node6 等均为旧机，不再适用
+- **适配**：ASCEND_RT_VISIBLE_DEVICES=0 仍正确（逻辑 0 → davinci3）；NUMA 绑核用 `scripts/numa-bind.sh`（自动探测 → node4 → taskset -c 128-159）
+- **F16 全模态权重 ~19GB**（LLM 15.3G + vision 2.0G + audio 0.63G + tts 1.1G + token2wav 0.88G）→ 32GB HBM 可全量上卡（-ngl 99 可行）
+
+## 2026-08-21 新口径 RTF 基线（官方 b06198f core 帧 pooled）
+
+| 配置 | core RTF | SPEAK→wav 中位 | 分解（encode/prefill/decode/tts/t2w） |
+|---|---|---|---|
+| 零优化默认（16 线程） | 1.87 | 1913ms | 0.39/0.02/0.71/0.46/0.29 |
+| T2W 24 线程 + NUMA node4 | 1.82 | 1861ms | 0.39/0.02/0.69/0.44/0.29 |
+
+- **batch_validity 双 true**（data_valid + realtime_eligible）——归帧溯源链路正确
+- core 帧仅 2/3（样本量问题：omni_duplex1 35s 4 turn 9 SPEAK 帧 → 掐头去尾 2 core；duplex2 纯 LISTEN 无 SPEAK）
+- 官方样例基线 core RTF ≈ 1.1~1.2 → 当前慢 ~56%；**历史 RTF 0.58-0.68 是 perf-duplex 旧口径，与新口径不可比**
+- **P1.7 队列解耦已被官方 b06198f 取代**（TTSThreadInfo 容量固定 1，深队列会触发实时资格失败）——该优化路径永久关闭
+- 待做：core 帧 ≥3 的输入方案（多 SPEAK 视频/长输入）、llm_decode 0.69 是否可优化（NPU 推理硬时间，候选：图模式不可用/算子层 HOLD）
