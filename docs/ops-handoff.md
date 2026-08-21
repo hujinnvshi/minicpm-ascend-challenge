@@ -237,3 +237,11 @@ cmake --build code/llama.cpp-omni/build-cann -j$(nproc)
 - CANN 仅支持 Q4_0/Q8_0（K-quants 全不支持）；Q4_0 质量崩坏
 
 **提交策略更新**：v3 包未含 FA（当时未发现）。**FA 是环境变量（OMNI_FORCE_FA=1），官方 README L268 允许随提交上传** → 下次提交加该 env，预期官方 RTF 显著改善。已验证 F16+FA 的精度零翻转（2026-08-15 四路 A/B 记录），精度不受影响。
+
+## 2026-08-21 第二次提交（v4，含 Flash Attention 突破）
+
+- **包**：submission_v4_20260821.zip（65.4MB）
+- **新增**：OMNI_FORCE_FA=1（README env 表声明 + §3.4 命令 + §5.2 数字 1.38）
+- **结果**：result 0000 提交成功，进入任务调度
+- **说明**：FA 是纯 env 上传（官方 README L268 允许），代码零改动；精度零翻转（08-15 A/B 记录）
+- 今日提交额度：v3（探路）+ v4（FA）已用 2/3
