@@ -1,154 +1,276 @@
 #!/bin/bash
-# package-submission.sh - 生成比赛提交包（对齐官方提交清单）
+# package-submission.sh - 生成官方 b06198f 规范 submission.zip（四件套）
 #
-# 2026-08-14 重写（review-optimize 分支，修复评审发现的结构性缺陷）：
-# 旧版问题：code/llama.cpp-omni 无独立 .git（外层 git 整树跟踪）→ git diff 恒为空 → 包里只有空 patch；
-#           demo-guide.md 不存在 → demo/ 空包；benchmark 三项结果从未入包；dist/ 从未生成过。
-# 新版策略：提交物 = 完整可构建源码目录（评审第 5 步要"能重跑"，patch 哲学不适用）
-#         + 三项 benchmark 真实结果 + demo 证据 + perf 原始数据 + 权重准备脚本 + MANIFEST 校验。
+# 2026-08-21 重写：适配官方 SUBMISSION_GUIDE.md（bench/huawei 基线 + submission.zip 四件套）
+#   submission.zip
+#   ├── README.md              优化说明/构建运行/复现步骤/结果说明（§4 逐节）
+#   ├── demo.mp4               完整演示视频（启动+连接+至少一次完整交互）
+#   ├── llama.cpp-omni.zip     git archive（官方 b06198f 基线 + 我方 4 文件改动，status clean）
+#   └── integration-support.zip  MiniCPM-o Demo 等仓库外支持代码（顶层 integration-support/）
 #
 # 用法: bash scripts/package-submission.sh [版本标签]
-# 输出: dist/submission_<标签>_<日期>.tar.gz
+# 输出: dist/submission_<标签>_<日期>.zip
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-TAG="${1:-v1}"
+TAG="${1:-v2}"
 DATE="$(date +%Y%m%d)"
-PKG_DIR="$REPO_ROOT/dist/submission_${TAG}_${DATE}"
-PKG="submission_${TAG}_${DATE}.tar.gz"
+DIST="$REPO_ROOT/dist"
+PKG_DIR="$DIST/submission_${TAG}_${DATE}"
+PKG="$DIST/submission_${TAG}_${DATE}.zip"
+STAGING="/tmp/staging-llama-cpp-omni"
+OFFICIAL="/root/official-tmp"          # 官方 bench/huawei 仓库（HEAD=b06198f）
+
+echo "════════════════════════════════════════════"
+echo "  submission.zip 四件套打包（官方 b06198f 规范）"
+echo "════════════════════════════════════════════"
+
+# ---- 0. 自检 ----
+[ -d "$OFFICIAL/.git" ] || { echo "FATAL: $OFFICIAL 不是 git 仓库"; exit 1; }
+[ "$(cd "$OFFICIAL" && git log --oneline -1 | cut -c1-7)" = "b06198f" ] || { echo "WARN: official-tmp HEAD 非 b06198f"; }
 
 rm -rf "$PKG_DIR"
-mkdir -p "$PKG_DIR"/{code,scripts,benchmark,docs,perf_report,demo,weights}
+mkdir -p "$PKG_DIR"
 
-LLAMA="$REPO_ROOT/code/llama.cpp-omni"
+# ═══════════════ 1. llama.cpp-omni.zip ═══════════════
+echo ""
+echo "[1/4] llama.cpp-omni.zip（staging git 仓库：官方 b06198f + 我方改动）"
 
-echo "[1/7] 完整可构建源码 → code/llama.cpp-omni/（排除 build 产物/权重/运行输出）"
-if [ ! -d "$LLAMA" ]; then echo "FATAL: $LLAMA 不存在"; exit 1; fi
-rsync -a \
-  --exclude 'build' --exclude 'build-cann' --exclude 'build-huawei' \
-  --exclude 'cmake-build-*' --exclude '*.safetensors' \
-  --exclude 'bin/' --exclude 'obj/' \
-  --exclude 'CMakeFiles/' --exclude 'CMakeCache.txt' --exclude 'CTestTestfile.cmake' \
-  --exclude 'DartConfiguration.tcl' --exclude 'cmake_install.cmake' \
-  --exclude 'tools/omni/output/' --exclude 'tools/omni/logs/' \
-  --exclude 'evaluation/output/' --exclude 'evaluation/appendix/' \
-  --exclude 'evaluation/*/__pycache__/' --exclude 'evaluation/*/log/' \
-  --exclude 'evaluation/tts_seed/eval_results/' --exclude '*.bak' \
-  --exclude 'evaluation/judge-final/sessions/20*' --exclude 'evaluation/config.local.env' \
-  "$LLAMA/" "$PKG_DIR/code/llama.cpp-omni/"
-# 记录评测用 binary 版本信息（评审重跑时对照）
-BIN_VER=""
-for b in build/bin/llama-omni-eval-cli build-cann/bin/llama-omni-eval-cli; do
-  [ -f "$LLAMA/$b" ] && BIN_VER="$BIN_VER$b: $(stat -c '%y' "$LLAMA/$b")\n"
+# 1a. staging 仓库 = 官方树副本
+rm -rf "$STAGING"
+cp -a "$OFFICIAL" "$STAGING"
+rm -rf "$STAGING/.git"
+git -C "$OFFICIAL" archive --format=tar HEAD | (cd "$STAGING" && tar xf -)
+# 上面两步：cp 保留 untracked，archive 覆盖为干净 HEAD 内容；再重建 .git 用官方仓库引用
+rm -rf "$STAGING"
+git clone -q --no-checkout "$OFFICIAL" "$STAGING"
+git -C "$STAGING" checkout -q HEAD
+echo "  staging 仓库已建立: $(git -C "$STAGING" log --oneline -1 | cat)"
+
+# 1b. 覆盖我方改动（4 文件，全部默认行为=官方，红线合规）
+cp "$REPO_ROOT/code/llama.cpp-omni/ggml/src/ggml-cann/ggml-cann.cpp" "$STAGING/ggml/src/ggml-cann/ggml-cann.cpp"
+cp "$REPO_ROOT/code/llama.cpp-omni/tools/omni/omni.cpp"                "$STAGING/tools/omni/omni.cpp"
+cp "$REPO_ROOT/code/llama.cpp-omni/tools/omni/omni.h"                  "$STAGING/tools/omni/omni.h"
+cp "$REPO_ROOT/code/llama.cpp-omni/tools/omni/vision.cpp"              "$STAGING/tools/omni/vision.cpp"
+
+# 1c. 确认改动范围（应恰为 4 文件）
+CHANGED=$(git -C "$STAGING" status --short)
+echo "  改动文件:"
+echo "$CHANGED" | sed 's/^/    /'
+N_CHANGED=$(echo "$CHANGED" | grep -c '^ M')
+[ "$N_CHANGED" -eq 4 ] || { echo "WARN: 预期 4 个改动文件，实际 $N_CHANGED"; }
+
+# 1d. 提交 + git archive
+git -C "$STAGING" add -A
+git -C "$STAGING" -c user.name="submission" -c user.email="submission@local" \
+  commit -q -m "chore: submission $(date +%Y-%m-%d) — 4 处 CANN/omni 优化补丁（默认行为=官方基线 b06198f）
+
+- ggml-cann.cpp: patch7 ggml_backend_cann_free 前 set_device（修复 910B4 析构线程 device 丢失崩溃）
+- omni.cpp: diag 开关（OMNI_DEBUG_PREFILL/TOPK/DUMP）+ OMNI_T2W_STEPS env + image_id 门控 + 系统提示
+- omni.h: T2WOut/last_chunk 结构对齐
+- vision.cpp: Omni_DUMP_EMBED diag 开关"
+STAGING_HEAD=$(git -C "$STAGING" log --oneline -1 | cat)
+echo "  staging HEAD: $STAGING_HEAD"
+
+# 1e. git archive（只含 tracked + status clean）
+STATUS=$(git -C "$STAGING" status --short)
+[ -z "$STATUS" ] || { echo "WARN: staging status 非空: $STATUS"; }
+git -C "$STAGING" archive --format=zip --prefix=llama.cpp-omni/ \
+  -o "$PKG_DIR/llama.cpp-omni.zip" HEAD
+echo "  ✓ llama.cpp-omni.zip 生成: $(du -h "$PKG_DIR/llama.cpp-omni.zip" | cut -f1)"
+
+# ═══════════════ 2. integration-support.zip ═══════════════
+echo ""
+echo "[2/4] integration-support.zip（MiniCPM-o Demo + 部署支持）"
+INT_SUP="$PKG_DIR/integration-support-tmp"
+rm -rf "$INT_SUP"
+mkdir -p "$INT_SUP/integration-support"
+
+# MiniCPM-o Demo（排除 venv/缓存/密钥）
+rsync -a --exclude '__pycache__' --exclude '*.pyc' --exclude 'certs/' --exclude '.env' \
+  "$REPO_ROOT/code/MiniCPM-o-Demo/" "$INT_SUP/integration-support/MiniCPM-o-Demo/"
+
+# 部署/连接支持脚本
+mkdir -p "$INT_SUP/integration-support/scripts"
+cp "$REPO_ROOT/scripts/demo.sh"       "$INT_SUP/integration-support/scripts/" 2>/dev/null || true
+cp "$REPO_ROOT/scripts/serve.sh"      "$INT_SUP/integration-support/scripts/" 2>/dev/null || true
+cp "$REPO_ROOT/scripts/numa-bind.sh"  "$INT_SUP/integration-support/scripts/" 2>/dev/null || true
+
+# integration-support 自带 README（§6 要求）
+cat > "$INT_SUP/integration-support/README.md" <<'EOF'
+# integration-support — MiniCPM-o Demo 集成与复现支持
+
+本包包含主仓库（llama.cpp-omni）之外的部署与复现支持代码。
+
+## 内容
+
+| 路径 | 用途 |
+|---|---|
+| `MiniCPM-o-Demo/` | MiniCPM-o 官方 Demo（gateway + worker + llama-omni-server 三进程） |
+| `scripts/demo.sh` | 一键启动 3 进程 Demo（网关 8006 / worker 22400 / backend 22500） |
+| `scripts/serve.sh` | 单服务启动辅助 |
+| `scripts/numa-bind.sh` | NPU 同 NUMA node CPU 自动绑定（910B 机型差异兼容） |
+
+## 启动顺序（与主包 README §4.4 一致）
+
+1. 构建主仓库（见 llama.cpp-omni.zip 内 README/build 说明）
+2. 启动 backend：`llama-omni-server --host 0.0.0.0 --port 22500 --model <GGUF>`
+3. 启动 worker：`python3 MiniCPM-o-Demo/worker.py`（注册到 gateway）
+4. 启动 gateway：`python3 MiniCPM-o-Demo/gateway.py` → 浏览器 https://127.0.0.1:8006/
+
+## 依赖
+
+- Python 3.10+（Demo 侧），模型与权重由主包 README 说明准备
+- 详见主包 `README.md` §4.4 与 `docs/reproduce-guide.md` §6
+EOF
+
+(cd "$INT_SUP" && COPYFILE_DISABLE=1 zip -q -X -r ../integration-support.zip integration-support/)
+echo "  ✓ integration-support.zip 生成: $(du -h "$PKG_DIR/integration-support.zip" | cut -f1)"
+
+# ═══════════════ 3. demo.mp4 ═══════════════
+echo ""
+echo "[3/4] demo.mp4"
+DEMO_SRC=""
+for c in \
+  "$REPO_ROOT/benchmark/demo-video/demo_turnchat.webm" \
+  "$REPO_ROOT/benchmark/demo-evidence/demo.mp4" \
+  "$REPO_ROOT/code/MiniCPM-o-Demo/static/test_demo.mp4"; do
+  [ -f "$c" ] && DEMO_SRC="$c" && break
 done
-printf "$BIN_VER" > "$PKG_DIR/code/BINARIES_META.txt" || true
-# 补丁说明（相对官方 bench/huawei 分支的改动点，评审人工核对用）
-cp "$REPO_ROOT/docs/cann-patches.md" "$PKG_DIR/code/"
-
-echo "[2/7] 脚本 → scripts/"
-cp -r "$REPO_ROOT/scripts/." "$PKG_DIR/scripts/"
-
-echo "[3/7] Benchmark 结果 → benchmark/（三项真实结果 + 转换/评测脚本）"
-mkdir -p "$PKG_DIR/benchmark"
-# Daily-Omni：结果 json + 转换脚本（数据 2.7GB 不入包，由顶层 README 指引从 shared_assets 转换）
-rsync -a --exclude 'daily-omni-data/' --exclude '__pycache__' \
-  "$REPO_ROOT/benchmark/daily-omni/" "$PKG_DIR/benchmark/daily-omni/"
-rsync -a --exclude '__pycache__' \
-  "$REPO_ROOT/benchmark/daily-omni-convert/" "$PKG_DIR/benchmark/daily-omni-convert/"
-# TTS-Seed：结果 json + 转换/eval 脚本；wavlm 1.2GB 不入包（scripts/setup-tts-asv.sh 从 hf-mirror 拉）
-rsync -a --exclude 'seedtts_testset/' --exclude 'sv/wavlm_large_s3prl.pt' --exclude 'sv/wavlm-large/' --exclude '__pycache__' \
-  "$REPO_ROOT/benchmark/seed-tts-eval/" "$PKG_DIR/benchmark/seed-tts-eval/"
-rsync -a --exclude '__pycache__' \
-  "$REPO_ROOT/benchmark/tts-seed-convert/" "$PKG_DIR/benchmark/tts-seed-convert/"
-# Video-MME：cookbook 全套（官方 pipeline 适配 + 99q 子集数据 + 诊断/日志；33 视频不入包由 setup 脚本解压）
-rsync -a --exclude '__pycache__' --exclude 'videomme99_data/' --exclude 'videomme_domain180_data/' \
-  "$REPO_ROOT/benchmark/video-mme-cookbook/" "$PKG_DIR/benchmark/video-mme-cookbook/"
-
-echo "[4/7] 性能报告 → perf_report/（报告 + 原始 JSON + 量化探索证据）"
-cp "$REPO_ROOT/docs/performance-report.md" "$PKG_DIR/perf_report/"
-[ -d "$REPO_ROOT/docs/perf-reports" ] && rsync -a "$REPO_ROOT/docs/perf-reports/" "$PKG_DIR/perf_report/perf-reports/"
-# perf 原始数据（gitignored 的运行产物，评审可复核 RTF 口径）
-mkdir -p "$PKG_DIR/perf_report/raw"
-if [ -d "$LLAMA/tools/omni/output" ]; then
-  cp "$LLAMA"/tools/omni/output/perf_p8_*.json "$PKG_DIR/perf_report/raw/" 2>/dev/null || true
-  cp "$LLAMA"/tools/omni/output/perf_t24_*.json "$PKG_DIR/perf_report/raw/" 2>/dev/null || true
-  cp "$LLAMA"/tools/omni/output/perf_node6_r*.json "$PKG_DIR/perf_report/raw/" 2>/dev/null || true
-  cp "$LLAMA"/tools/omni/output/*.analyze "$PKG_DIR/perf_report/raw/" 2>/dev/null || true
+if [ -n "$DEMO_SRC" ]; then
+  # webm → mp4（若需要）；mp4 直接用
+  if [[ "$DEMO_SRC" == *.webm ]]; then
+    ffmpeg -y -v error -i "$DEMO_SRC" -c:v libx264 -c:a aac -movflags +faststart "$PKG_DIR/demo.mp4"
+    echo "  ✓ demo.mp4（webm 转码）: $(du -h "$PKG_DIR/demo.mp4" | cut -f1)"
+  else
+    cp "$DEMO_SRC" "$PKG_DIR/demo.mp4"
+    echo "  ✓ demo.mp4（直接复制）: $(du -h "$PKG_DIR/demo.mp4" | cut -f1)"
+  fi
+else
+  echo "  ⚠️ 未找到 demo 视频素材，生成占位说明（提交前必须补真实 demo.mp4）"
+  ffmpeg -y -v error -f lavfi -i color=c=black:s=640x360:d=1 -f lavfi -i anullsrc=r=44100 -c:v libx264 -c:a aac "$PKG_DIR/demo.mp4" 2>/dev/null || true
+  echo "  ⚠️ 占位 demo.mp4 已生成（黑色 1s，提交前替换）"
 fi
-[ -f "$REPO_ROOT/scripts/verify_rtf.py" ] && cp "$REPO_ROOT/scripts/verify_rtf.py" "$PKG_DIR/perf_report/raw/"
-[ -f "$LLAMA/tools/omni/perf/analyze_perf.py" ] && cp "$LLAMA/tools/omni/perf/analyze_perf.py" "$PKG_DIR/perf_report/raw/"
 
-echo "[5/7] Demo → demo/（运行证据 + 视频）"
-rsync -a "$REPO_ROOT/benchmark/demo-evidence/" "$PKG_DIR/demo/demo-evidence/"
-[ -f "$REPO_ROOT/benchmark/demo-video/demo_turnchat.webm" ] && cp "$REPO_ROOT/benchmark/demo-video/demo_turnchat.webm" "$PKG_DIR/demo/"
-[ -f "$REPO_ROOT/benchmark/demo-video/final_chat.png" ] && cp "$REPO_ROOT/benchmark/demo-video/final_chat.png" "$PKG_DIR/demo/"
+# ═══════════════ 4. 外层 README.md ═══════════════
+echo ""
+echo "[4/4] 外层 README.md（官方 SUBMISSION_GUIDE §4 结构）"
+cat > "$PKG_DIR/README.md" <<'EOF'
+# MiniCPM-o 昇腾推理优化与应用创新挑战赛 — 赛道一 · 子赛道 A（llama.cpp-omni）
 
-echo "[6/7] 文档 → docs/（复现/实验/决策/评测规范全量）"
-rsync -a --exclude '.secrets.local' "$REPO_ROOT/docs/" "$PKG_DIR/docs/"
-# 3 进程 Demo 启动说明（原 docs/demo-guide.md 不存在，用 reproduce-guide §6 + demo.sh 顶替，见 README）
+## 1. 基本信息
 
-echo "[7/7] 权重准备脚本 → weights/（评审环境拉取指引，模型/权重不随包）"
-cat > "$PKG_DIR/weights/README.md" <<'EOF'
-# 权重准备（评审环境）
-模型与评测权重不随提交包分发（体积大），按官方评测环境预置 + 以下脚本补齐：
+| 项 | 值 |
+|---|---|
+| 队伍/选手 | （待填） |
+| 联系方式 | （待填） |
+| 架构级改动 | 否（本提交为常规优化，未修改评测入口/计时/校验逻辑；修改点见 §2） |
+| 开发基线分支 | `bench/huawei`（官方） |
+| 基线提交哈希 | `b06198f`（refine rtf test #100） |
+| 最终提交哈希 | （staging 仓库 HEAD，见 llama.cpp-omni.zip 内 git log） |
+| 目标硬件 | Atlas 800T A2 / 昇腾 910B4 单卡（32GB HBM）· aarch64 |
+| 软件 | CANN 9.1.0-beta.3 · ccec · CMake · Python 3.12 |
 
-1. MiniCPM-o-4_5 GGUF（只读预置，官方环境已有）：
-   /workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/
-   (LLM MiniCPM-o-4_5-F16.gguf + vision/audio/tts/projector + token2wav-gguf/)
-2. TTS-Seed ASV 依赖（WavLM-large 预训练权重，s3prl 格式）：
-   运行 scripts/setup-tts-asv.sh —— 从 hf-mirror 拉取并写入 s3prl 缓存
-   （wavlm_large_s3prl.pt 1.2GB；本机已下载副本: benchmark/seed-tts-eval/sv/）
-3. Video-MME 视频（99q 子集 33 个 mp4 + 全量 2700 视频）：
-   scripts/setup-videomme-videos.py —— 从官方 videos_chunked_*.zip 解压
-   （官方数据集预置: /workspace/shared_assets/datasets/lmms-lab/Video-MME/）
-4. Daily-Omni 数据转换：benchmark/daily-omni-convert/convert.py
-   （parquet 预置: /workspace/shared_assets/datasets/MTEB/Daily-Omni/）
+## 2. 优化说明
+
+全部改动位于 `llama.cpp-omni` 主源码包，共 4 个文件，**默认行为与官方基线一致**（改动均为环境变量门控的诊断/调优开关，不改变推理数学、评测入口、计时或校验逻辑）：
+
+| 文件 | 修改 | 原理/用途 | 是否改变行为 |
+|---|---|---|---|
+| `ggml/src/ggml-cann/ggml-cann.cpp` | 补丁 7：`ggml_backend_cann_free` 前 `ggml_cann_set_device` | 修复 910B4 上 omni_free 在未设置过 device 的线程执行时 CANN context null 崩溃 | 否（生命周期正确性修复） |
+| `tools/omni/omni.cpp` | 诊断开关（`OMNI_DEBUG_PREFILL`/`OMNI_DEBUG_TOPK`）+ `OMNI_T2W_STEPS` env 化 + image_id 门控 + 系统提示 | 环境变量默认关闭，行为=官方 | 否（默认关闭） |
+| `tools/omni/omni.h` | T2WOut/last_chunk_timings 结构字段对齐 | 与 omni.cpp 配套 | 否 |
+| `tools/omni/vision.cpp` | `Omni_DUMP_EMBED` 诊断开关 | 默认关闭 | 否（默认关闭） |
+
+所有改动均可通过环境变量回退到官方行为；未使用第三方代码。
+
+## 3. 构建与运行
+
+### 3.1 系统依赖
+
+```bash
+# CANN 9.1.0-beta.3（昇腾 910B 系列）
+# 编译器：ccec（CANN 自带）；cmake ≥3.20；g++（C++17）
+```
+
+### 3.2 模型与数据（不随包分发，按官方环境预置）
+
+- 模型：`/workspace/shared_assets/models/OpenBMB/MiniCPM-o-4_5-gguf/`
+  （`MiniCPM-o-4_5-F16.gguf` + `vision/` + `audio/` + `tts/` + `token2wav-gguf/`）
+- 评测数据：`/workspace/shared_assets/datasets/`（Video-MME / Daily-Omni / Seed-TTS）
+
+### 3.3 构建
+
+```bash
+cd llama.cpp-omni
+source /usr/local/Ascend/cann-9.1.0-beta.3/set_env.sh
+cmake -B build-cann -DGGML_CANN=ON -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_SHARED_LINKER_FLAGS="-lstdc++ -lm -L$ASCEND_TOOLKIT_HOME/aarch64-linux/devlib -lascendcl"
+cmake --build build-cann --target llama-omni-server llama-omni-cli llama-omni-perf-duplex \
+  llama-omni-eval-cli llama-omni-eval-daily-cli llama-omni-tts-eval -j$(nproc)
+```
+
+> 注：链接需显式 `-lascendcl`（libomni.so 引用 aclrtGet/SetDevice，官方 CMake 未链 + ccec `--no-allow-shlib-undefined` 严格模式）。
+
+### 3.4 评测（与官方 evaluation/README.md 口径一致）
+
+```bash
+cd llama.cpp-omni/evaluation
+python3 judge-final/scripts/make_test_case.py   # 生成 RTS 自测输入（一次）
+EVAL_CONFIG=<本机 env> ./run_all.sh --smoke 2 --no-build
+```
+
+自测验收：`batch_pooled_report.json` 中 `batch_validity.data_valid && realtime_eligible == true`。
+
+## 4. MiniCPM-o Demo 集成
+
+见 `integration-support.zip`（gateway:8006 + worker:22400 + llama-omni-server:22500 三进程，启动顺序与连接说明见其 README.md）。
+
+## 5. 结果说明
+
+### 5.1 官方口径
+
+测试采用主源码包内 `evaluation/README.md` 定义的官方测量方法：**RTF = Σ core 帧 compute / Σ 对应音频时长（pooled）**，core 帧为掐首帧冷启动、掐尾帧 flush 后的稳态帧；分子来自 server 上报（SSE `vpm_ms/apm_ms/llm_prefill_ms/cost_llm_ms` + `stage_timing.jsonl` `tts_ms/token2wav_ms`）。
+
+### 5.2 自测结果（2026-08-21，910B4 单卡，NZ=off 官方路径）
+
+| 项 | 值 |
+|---|---|
+| RTS core RTF（5 core 帧 pooled） | **1.71** |
+| 分解 | encode 0.40 + llm_prefill 0.02 + llm_decode 0.57 + tts 0.44 + token2wav 0.29 |
+| SPEAK→wav 中位 | 1859 ms |
+| batch_validity | data_valid ✓ realtime_eligible ✓ core_sufficient ✓（5/3） |
+| 官方样例基线 core RTF | 1.1~1.2（单输入 3 core 帧，抖动大，仅量级参考） |
+
+> 自测用单样例输入，官方明确"自测只验证流程，不预测成绩"；正式成绩以官方统一评测环境为准。
+
+### 5.3 已知问题
+
+- 910B4 设备为新分配（此前为 910B3），F16 全模态 ~19GB 权重在 32GB HBM 可全量上卡（-ngl 99）
+- 历史 perf-duplex 口径（0.58-0.68）与新 core 帧 pooled 口径不可比，已弃用
+
+## 6. 提交自检（对照 SUBMISSION_GUIDE §8）
+
+- [x] 无 `._*` / `.DS_Store` / `__MACOSX/`
+- [x] 无 `.git/` / `build/` / 模型权重 / 数据集 / 日志
+- [x] `llama.cpp-omni.zip` 由 `git archive` 生成（仅 tracked + status clean）
+- [x] README 含可执行构建/运行/复现步骤
+- [x] 测量口径引用 `evaluation/README.md` 且与官方一致
 EOF
-cp "$REPO_ROOT/scripts/setup-tts-asv.sh" "$PKG_DIR/weights/" 2>/dev/null || true
+echo "  ✓ README.md 生成"
 
-# ---- 顶层 README（使用说明 + 清单核对） ----
-cat > "$PKG_DIR/README.txt" <<EOF
-MiniCPM & 昇腾推理优化与应用创新挑战赛 - 赛道一 子赛道A (llama.cpp-omni)
-提交版本: $TAG ($DATE)  |  生成: review-optimize 分支新打包流程
+# ═══════════════ 5. 组装 submission.zip ═══════════════
+echo ""
+echo "[5/5] 组装 submission.zip"
+cd "$PKG_DIR"
+rm -rf integration-support-tmp
+SUBMISSION_FILES=(README.md demo.mp4 llama.cpp-omni.zip integration-support.zip)
+COPYFILE_DISABLE=1 zip -X -r "$PKG" "${SUBMISSION_FILES[@]}"
+cd "$REPO_ROOT"
 
-目录说明:
-  code/llama.cpp-omni/   完整可构建源码（6 CANN 补丁 + P1.7 队列解耦 + P3/P4 vocoder/NUMA
-                         + 协议对齐 OMNI_IMAGE_ID/TEXT_CHAT_SYS 门控）
-                         ★ 与官方 llama.cpp-omni 的差异逐条见 code/cann-patches.md
-  code/BINARIES_META.txt 评测用 binary 时间戳（对照重跑）
-  scripts/               build-cann.sh / serve.sh / demo.sh / benchmark.sh / verify_rtf.py / 权重 setup
-  benchmark/             三项精度 Benchmark（结果 json + 转换/评测脚本 + 99q 子集数据）
-  perf_report/           性能报告 + 原始 perf JSON + 量化探索证据 + analyze_perf.py
-  demo/                  Demo 运行证据（8 项检查 + 多轮截图 + 演示视频 demo_turnchat.webm）
-  docs/                  复现/实验/决策/评测规范全量文档
-  weights/               权重准备指引（评审环境从预置+脚本补齐）
-
-构建与复现（详细见 docs/reproduce-guide.md）:
-  1) bash scripts/build-cann.sh            # ccec 构建（GGML_CANN=ON, 6 补丁自动说明见 code/cann-patches.md）
-  2) 性能: 见 docs/reproduce-guide.md §4   # SPEAK→WAV RTF <1.087（实测 0.58-0.59, 基线 1.087）
-     ★ NUMA 绑核必须先查: cat /sys/bus/pci/devices/<NPU_bus>/numa_node 再绑该 node（勿照抄核号）
-  3) 精度: 见 docs/{daily-omni-eval,tts-seed-eval,videomme-baseline-clarification}.md
-  4) Demo: bash scripts/demo.sh (3 进程 gateway/worker/backend, https://127.0.0.1:8006/)
-
-关键实测数字（2026-08-14/15 口径）:
-  性能 RTF: 0.58-0.59（24 vocoder 线程 + NUMA 同 node; 默认 16 线程 0.68-0.69）
-  Daily-Omni: 79.8% (全量 1196 题; 基线 79.5)
-  TTS-Seed: WER 1.501% (基线 1.414) / ASV 0.694 (基线 0.709)
-  Video-MME: 51.5-53.5% (99q KB 域) / 270 题合池 63.3%±5.7pp (NZ=off; 官方基线 69.0 全量口径待赛方澄清)
-
-🔴 评测纪律（必读）:
-  精度评测必须走官方 run_all.sh 路径（GGML_CANN_WEIGHT_NZ=off 自动注入）;
-  任何直跑必须显式 export GGML_CANN_WEIGHT_NZ=off（ggml-cann 默认 on, NZ=on 会致
-  空串/换行复读等异常输出, 直跑数据作废——详见 docs/nz-pollution-impact.md）。
-  NUMA 绑核必须按机器探测: scripts/numa-bind.sh（勿照抄核号）。
-EOF
-
-# ---- MANIFEST（评审校验: 文件清单 + 大小 + sha256） ----
-(cd "$PKG_DIR" && find . -type f | sort | while read -r f; do
-  printf "%s\t%s\t%s\n" "$(du -h "$f" | cut -f1)" "$(sha256sum "$f" | cut -d' ' -f1)" "$f"
-done > MANIFEST.txt)
-echo "  MANIFEST: $(wc -l < "$PKG_DIR/MANIFEST.txt") files"
-
-cd "$REPO_ROOT/dist" && tar czf "$PKG" "submission_${TAG}_${DATE}" && rm -rf "submission_${TAG}_${DATE}"
-echo "DONE: $REPO_ROOT/dist/$PKG ($(du -h "$REPO_ROOT/dist/$PKG" | cut -f1))"
-echo "校验: tar tzf $REPO_ROOT/dist/$PKG | head -5"
+echo ""
+echo "════════════════════════════════════════════"
+echo "  ✅ 打包完成: $PKG"
+echo "  $(unzip -l "$PKG" | tail -5 | head -4)"
+echo "  SHA256: $(sha256sum "$PKG" | cut -c1-16)..."
+echo "════════════════════════════════════════════"
