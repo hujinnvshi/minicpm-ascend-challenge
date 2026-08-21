@@ -2065,6 +2065,10 @@ static const char * ggml_backend_cann_name(ggml_backend_t backend) {
  */
 static void ggml_backend_cann_free(ggml_backend_t backend) {
     ggml_backend_cann_context * cann_ctx = (ggml_backend_cann_context *) backend->context;
+    // [cann-patch 7] free 可能发生在未设置过 device 的线程（如 HTTP handler 线程
+    // 调用 omni_free），此时 aclrtSynchronizeDevice 因 context null 崩溃
+    // （910B4 实测: current device=-1, ctx is NULL）。析构前显式切到本后端设备。
+    ggml_cann_set_device(cann_ctx->device);
     ACL_CHECK(aclrtSynchronizeDevice());
     ACL_CHECK(aclrtResetDevice(cann_ctx->device));
 
