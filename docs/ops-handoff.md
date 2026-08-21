@@ -197,3 +197,24 @@ cmake --build code/llama.cpp-omni/build-cann -j$(nproc)
 - 官方准入线 67.0 → **72.9% 达标 ✅**（此前 63.3% 点估计未达是采样构造偏差，非代码问题）
 - 注意：run_all 报 FAIL 是 eval_your_result.py 对非全量输入的硬断言（assert 300 文件），用 skip_missing=True 绕过即得官方口径分数；主循环准确率 196/270=72.6% 与评分函数一致
 - 全量 2700 题正式评测仍由赛方执行；本结果证明 910B4 上官方采样口径可达标
+
+## 2026-08-21 首次提交（探路版）——平台状态"等待调度"
+
+- **时间**：2026-08-21 11:36（UTC）
+- **提交包**：submission_v3_20260821.zip（65.4MB，官方四件套）
+- **账号**：18510911437（张宁，杭州闪捷信息科技）userID=f795942961c3
+- **参数**：raceID=0（赛道一）、sub_track=llama_cpp_omni、cail_tag=2026、env=production
+- **链路**：sendmessage（验证码）→ login（cookie）→ get_enter（已报名确认）→ upload_model_check（OBS 凭证）→ OBS PUT 65.4MB（HTTP 200）→ upload_model（result 0000 提交成功）
+- **平台状态**：用户确认"等待调度"（官方队列排队中，评测按顺序执行）
+- **API 逆向记录**（ascend.openbmb.cn）：
+  - baseURL=/api，withCredentials（cookie 会话）
+  - POST /sendmessage {userID,type:"phone",country_code:"+86"} → 发验证码
+  - POST /login {userID,code,login_type:"phone",country_code,cail_tag:"2026"} → 登录
+  - POST /checkLogin → 验证会话
+  - POST /get_enter {user_id,cail_tag,raceID} → is_enter（raceID=0 已报名）
+  - POST /upload_model_check {userID,cail_tag,raceID:"0",step:"0",env:"production"} → OBS 凭证+oss_key（.tar.gz 后缀但内容=submission.zip）
+  - OBS PUT：SigV4 签名（需 x-amz-content-sha256 + security_token）
+  - POST /upload_model {userID,cail_tag,raceID,step,env,description,oss_key,sub_track:"llama_cpp_omni",demo_url} → 确认提交
+  - POST /get_submit_status {cail_tag,race_ids:["0"]} → 提交开放状态
+- **cookie**：/tmp/ascend-cookies.txt（登录态保留，可查状态）
+- **待办**：README 队伍名/联系方式待填（若官方复核需要，更新后重提交）；评测结果 2-3 天刷新排行榜
