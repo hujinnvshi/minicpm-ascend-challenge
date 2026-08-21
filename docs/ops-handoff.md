@@ -218,3 +218,39 @@ cmake --build code/llama.cpp-omni/build-cann -j$(nproc)
   - POST /get_submit_status {cail_tag,race_ids:["0"]} → 提交开放状态
 - **cookie**：/tmp/ascend-cookies.txt（登录态保留，可查状态）
 - **待办**：README 队伍名/联系方式待填（若官方复核需要，更新后重提交）；评测结果 2-3 天刷新排行榜
+
+## 2026-08-21 性能突破：Flash Attention（OMNI_FORCE_FA=1）→ core RTF 1.71→1.38
+
+**重大发现**：ggml-cann.cpp 有完整 FLASH_ATTN_EXT 实现，但 llama-context 的 AUTO 逻辑对 CANN forcing off（保守默认）。OMNI_FORCE_FA=1 绕过 → **decode 0.571→0.234（-59%）**，core RTF 1.7143→**1.3785**（-19.6%），batch_validity 全 true。
+
+**系统验证（全部 batch_validity 双 true）**：
+| 配置 | core RTF | decode | 结论 |
+|---|---|---|---|
+| F16 基线（无 FA） | 1.7143 | 0.571 | 基准 |
+| **F16 + FA** | **1.3785** | **0.234** | ✅ 最优 |
+| F16 + FA + ctx40960 | 1.3862 | 0.244 | ctx 无影响 |
+| Q8_0 + FA | 1.6484 | 0.446 | Q8 反慢 20%（dequant） |
+| Q4_0 + FA | 崩（decode 2.2-3.4） | — | 质量不可用，data_valid=false |
+
+**瓶颈重构（F16+FA）**：encode(VPM) 0.438（32%，380ms/帧 NPU 硬时间，slice=1 无 batch 空间）+ tts 0.418（30%）+ t2w 0.271（20%）+ decode 0.234（17%）
+- VPM/APM 已并行（std::async）；VPM 恒定 360ms（非冷启动）
+- CANN 仅支持 Q4_0/Q8_0（K-quants 全不支持）；Q4_0 质量崩坏
+
+**提交策略更新**：v3 包未含 FA（当时未发现）。**FA 是环境变量（OMNI_FORCE_FA=1），官方 README L268 允许随提交上传** → 下次提交加该 env，预期官方 RTF 显著改善。已验证 F16+FA 的精度零翻转（2026-08-15 四路 A/B 记录），精度不受影响。
+
+## 2026-08-21 第二次提交（v4，含 Flash Attention 突破）
+
+- **包**：submission_v4_20260821.zip（65.4MB）
+- **新增**：OMNI_FORCE_FA=1（README env 表声明 + §3.4 命令 + §5.2 数字 1.38）
+- **结果**：result 0000 提交成功，进入任务调度
+- **说明**：FA 是纯 env 上传（官方 README L268 允许），代码零改动；精度零翻转（08-15 A/B 记录）
+- 今日提交额度：v3（探路）+ v4（FA）已用 2/3
+
+## 2026-08-21 深挖补充（FA 后，3 轮实验 + NPU 观测）
+
+- **F16+FA 稳定性**：1.3643 / 1.3767 / 1.3835（3 次独立跑，均值 ~1.375，双 true 稳定）
+- **H18 绑核**：taskset 0-255 全核 → BATCH_WORKER_FAILED（httpx 超时，NUMA 漂移）→ **NUMA 绑核 128-159 是必需**，非可选
+- **H19 VPM 后端**：vision_init(use_gpu=true) 全 CANN，无 CPU fallback；slice=1（max_slice_nums_override=1）
+- **H20 NPU 观测**（3 轮独立确认）：推理中 HBM 53-72% 但 **Aicore=0%、Aivector=0%** —— npu-smi 统计对 CANN FA 执行模式不可靠（或计算为微秒级爆发），**不能据此判断 CPU/传输瓶颈**，观测路线关闭
+- **H25 perf-duplex**：发现 patch7 未覆盖的同类崩溃（ggml_backend_cann_free device=-1，perf-duplex 的 llama_init 失败路径）——诊断工具崩溃，非提交物，记录待后续修（patch8 候选）
+- **结论**：F16+FA=1.375 是当前 910B4 稳定最优；Q4_0/Q8_0/NO_PINNED/MIN_BATCH/队列/绑核全验证关闭

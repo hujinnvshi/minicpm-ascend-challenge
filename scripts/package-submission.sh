@@ -190,6 +190,7 @@ cat > "$PKG_DIR/README.md" <<'EOF'
 
 | 变量 | 官方默认 | 提交值 | 适用模块 | 作用及必要性 |
 |---|---|---|---|---|
+| `OMNI_FORCE_FA` | 未设（CANN 默认 forcing off） | 1 | LLM/TTS | **强制 Flash Attention**（ggml-cann 有完整 FLASH_ATTN_EXT 实现，llama-context AUTO 对 CANN 保守关闭）；实测 llm_decode 0.571→0.234（-59%），core RTF 1.71→1.38（-19.6%）；精度零翻转（2026-08-15 A/B 记录） |
 | `OMNI_T2W_THREADS` | 16 | 24 | token2wav | vocoder CPU 工作线程；配合 NUMA 绑核降低 T2W 段耗时 |
 | `GGML_CANN_WEIGHT_NZ` | off | off | LLM | 官方要求（`evaluation/README.md` L317：必须保持 off，否则空串/复读异常输出） |
 | `GGML_CANN_ACL_GRAPH` | off | off | LLM | 910B 不支持图模式，保持关闭 |
@@ -197,10 +198,11 @@ cat > "$PKG_DIR/README.md" <<'EOF'
 
 实测效果（同机同输入，910B4 单卡，官方 b06198f harness）：
 
-| 配置 | core RTF | SPEAK→wav 中位 |
-|---|---|---|
-| 零调优默认（16 线程） | 1.87 | 1913ms |
-| `OMNI_T2W_THREADS=24` + NUMA 绑核 | **1.71** | 1859ms |
+| 配置 | core RTF | SPEAK→wav 中位 | llm_decode |
+|---|---|---|---|
+| 零调优默认（16 线程） | 1.87 | 1913ms | 0.57 |
+| `OMNI_T2W_THREADS=24` + NUMA 绑核 | 1.71 | 1859ms | 0.57 |
+| **+ `OMNI_FORCE_FA=1`（本提交）** | **1.38** | **1599ms** | **0.23** |
 
 > 另有 A/B 对照：官方原版代码（无本提交 4 文件补丁）同配置 = 1.63，与本提交 1.71 差异在噪声内（±5%）——补丁对性能零影响，本提交的 RTF 水平即官方代码在 910B4 上的真实水平。
 
@@ -237,9 +239,9 @@ cmake --build build-cann --target llama-omni-server llama-omni-cli llama-omni-pe
 ```bash
 cd llama.cpp-omni/evaluation
 python3 judge-final/scripts/make_test_case.py   # 生成 RTS 自测输入（一次）
-# 运行时调优（§2.1）：T2W 24 线程 + NUMA 绑 NPU 同 node（先探测 node，勿照抄核号）
+# 运行时调优（§2.1）：Flash Attention + T2W 24 线程 + NUMA 绑 NPU 同 node
 NUMA_CPU=$(cat /sys/bus/pci/devices/$(npu-smi info | grep -oE '0000:[0-9a-f:.]+' | head -1)/numa_node)
-export OMNI_T2W_THREADS=24
+export OMNI_FORCE_FA=1 OMNI_T2W_THREADS=24
 EVAL_CONFIG=<本机 env> taskset -c $(cat /sys/devices/system/node/node${NUMA_CPU}/cpulist) \
   ./run_all.sh --smoke 2 --no-build
 ```
@@ -262,9 +264,9 @@ EVAL_CONFIG=<本机 env> taskset -c $(cat /sys/devices/system/node/node${NUMA_CP
 
 | 项 | 值 |
 |---|---|
-| RTS core RTF（5 core 帧 pooled） | **1.71** |
-| 分解 | encode 0.40 + llm_prefill 0.02 + llm_decode 0.57 + tts 0.44 + token2wav 0.29 |
-| SPEAK→wav 中位 | 1859 ms |
+| RTS core RTF（5 core 帧 pooled，`OMNI_FORCE_FA=1` + T2W24 + NUMA） | **1.38** |
+| 分解 | encode 0.44 + llm_prefill 0.02 + llm_decode 0.23 + tts 0.42 + token2wav 0.27 |
+| SPEAK→wav 中位 | 1599 ms |
 | batch_validity | data_valid ✓ realtime_eligible ✓ core_sufficient ✓（5/3） |
 | 官方样例基线 core RTF | 1.1~1.2（单输入 3 core 帧，抖动大，仅量级参考） |
 
