@@ -1054,3 +1054,20 @@ diff 结果（093-1）——两条铁证级协议分歧：
 3. 4 线程并发提交的互斥在官方 Σ 口径下是**净收益**（每段更快），与直觉（并行=好）相反——因为官方只看段时间。
 
 **累计 v5 增量**（vs v4 提交的 1.40 本机口径）：VPM FA（-2.1%）+ NPU 串行锁（-3.3%）= **RTF ~1.33（-4.6%）**。
+
+---
+
+### 实验 2026-08-22（续2）：推理方法论 + 联网搜索评审（无新突破口，两项候选均关闭）
+
+- 时间：2026-08-22 02:10-02:30
+
+**推理方法论评审**：
+1. **Flow 步数减少（OMNI_T2W_STEPS=3）❌**：token2wav-impl.cpp:48 注释确认 n_timesteps 是图构建"编译期常量"，CANN 图缓存按 5 步构建。OMNI_T2W_STEPS=3 稳定触发 "Token2Wav: GPU init failed, trying CPU mode..." → initialization failed → wav 全空（VIDEO_DATA_INVALID, segments=0）。复现 2/2。**CANN 上 steps≠5 不可行**（prompt_cache 与 steps 无关，是图形状常量问题）。关闭。
+2. **KV cache 量化 ❌**（复核）：CANN 后端无 GGML_OP_DEQUANTIZE（aclnn_ops.cpp 仅有权重 Q8 transform），llama-kv-cache.cpp:1765 dequantize 走 CPU → KV Q8 时每步 F32 反量化再传 NPU，带宽不减反增。确认关闭。
+3. 投机采样/并行解码：需 draft 模型（无）+ CANN 不支持 speculative → 关闭。
+4. GGML_CANN_OPERATOR_FUSION（ADD+RMS_NORM 融合）：experiments.md:946 已测 -0.5% 噪声级关闭（旧口径，不再重测）。
+
+**联网搜索**（bing/github 可达，hiascend SPA 不可抓，HF/YouTube 被封）：
+- 发现 auroralabs-loci/llama.cpp 的 CANN 上游 PR 系列（#17512 ADD+RMS_NORM 融合、#17543 partial RoPE+Vision、#17752 ACL graph cache、#17333 evaluate_and_capture_cann_graph 重构）——**本地代码均已包含或已验证**：算子融合已实现且有 env（测过无收益）、图模式 USE_ACL_GRAPH 因头文件缺失编译不可用（8/21 结论）、Vision mode 无（VPM 是 tools/omni 独立实现，不走 ggml-cann vision）。无新思路。
+
+**结论**：红线（不改推理数学）+ CANN 限制（无量化/无图模式/FA 已全开）下，推理方法论与外部文献均无可行新突破口。当前最优配置不变：OMNI_FORCE_FA + OMNI_VISION_FA + OMNI_NPU_SERIAL = RTF 1.3291（-4.6% vs v4）。
