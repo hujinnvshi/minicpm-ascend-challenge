@@ -95,3 +95,8 @@ benchmark/video-mme-cookbook/diag/videomme99_data/
 # ===== Video-MME 官方采样复测数据（12G 视频，不入库；env 与采样脚本已入库） =====
 benchmark/video-mme-cookbook/diag/videomme_sampled0*.parquet
 benchmark/video-mme-cookbook/diag/videomme_sampled0*_data/
+# 含真实 API Key 的本地对照脚本（勿提交）
+benchmark/daily-omni/remote_api_compare.py
+# llama.cpp tests 构建残留
+code/llama.cpp-omni/tests/CTestTestfile.cmake
+code/llama.cpp-omni/tests/cmake_install.cmake
