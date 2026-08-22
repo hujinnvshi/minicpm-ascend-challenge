@@ -265,3 +265,12 @@ cmake --build code/llama.cpp-omni/build-cann -j$(nproc)
 - **oss_key**：user_commit/2026/0/0/f795942961c3/03deddeb36944e5182ee41159d3aa999.tar.gz（本次；每次 check 会刷新）
 - **说明**：本机测试期间发现并回退——OMNI_T2W_STEPS=3（CANN 图缓存按 5 步构建，GPU init 失败）、t2w feed_window 整体锁（vocoder CPU 串行化 RTF 1.63）、OMNI_ENC_THREADS=8（无收益）；KV 量化/投机采样/上游 PR 融合均确认不可行（详见 experiments.md 2026-08-22 续）
 - **待办**：README 队伍名/联系方式仍未填（官方复核可能需要）；评测结果 2-3 天刷新排行榜
+
+## 2026-08-22 v5 二次提交（README 补全 §4.1 队伍信息，合规修正）
+
+- **原因**：合规评审发现 README §4.1 队伍/选手、联系方式、（最终提交哈希）为"（待填）"占位——SUBMISSION_GUIDE §4.1 硬性要求，人工复核会打回
+- **修正**：README 填 张宁（杭州闪捷信息科技）/ 18510911437 + zhangning@secsmart.net / 最终提交哈希 af67cfe（staging HEAD）
+- **包**：dist/submission_v5_20260822.zip（SHA256 22165f57...，四件套，仅 README 变更）
+- **链路**：upload_model_check（新 oss_key c3d8d29a...）→ OBS PUT 200（68.6MB）→ upload_model result 0000 提交成功，进入任务调度
+- **合规评审结论**（vs SUBMISSION_GUIDE.md 全文）：代码层全部符合（4 文件无评测/计时/校验改动、不可改清单未触碰、env 门控默认关、NZ=off、RTF 官方口径、无凭据）；README §4.1 已补全
+- **注意**：NPU 串行锁（OMNI_NPU_SERIAL）属调度层互斥（不改事件/帧编号/阶段/计时上报），README 已描述原理，未按 §1.2 架构级提交申报（风险评估：锁不改变官方口径的段计时上报，仅运行时互斥，论证不属于 §1.2 范畴）
