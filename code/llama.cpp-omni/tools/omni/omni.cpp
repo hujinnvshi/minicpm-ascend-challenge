@@ -18,6 +18,8 @@
 #ifdef GGML_USE_CANN
 #include "ggml-cann.h"
 #include <acl/acl.h>
+#include <sched.h>
+#include <pthread.h>
 #endif
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -4091,6 +4093,57 @@ struct omni_context * omni_init(struct common_params * params, int media_type, b
                                 const std::string & base_output_dir) {
     // process the prompt
     print_with_timestamp("=== omni_init start\n");
+    // [diag] OMNI_NPU_BIND=1: 把当前线程（及后续创建的子线程）绑定到 NPU 同 NUMA node 的 CPU。
+    // 原理：npu-smi info 取 NPU PCI BDF → /sys/bus/pci/devices/<BDF>/numa_node → 该 node cpulist
+    // → pthread_setaffinity_np。避免 H2D/D2H DMA 跨 NUMA + CPU 线程跨 node 漂移（P4/H18 结论）。
+    // 默认关=官方行为；910B4 上 NPU=node4(CPU 128-159)。duplex encoder/llm/tts/t2w 线程在此之后创建，继承亲和性。
+    if (std::getenv("OMNI_NPU_BIND")) {
+        FILE * f = popen("npu-smi info 2>/dev/null | grep -oE '[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\\.[0-9a-f]' | head -1", "r");
+        char bdf[64] = {0};
+        if (f) {
+            if (fgets(bdf, sizeof(bdf), f) == nullptr) bdf[0] = 0;
+            pclose(f);
+        }
+        if (bdf[0]) {
+            bdf[strcspn(bdf, "\n")] = 0;
+            char path[256];
+            snprintf(path, sizeof(path), "/sys/bus/pci/devices/%s/numa_node", bdf);
+            FILE * nf = fopen(path, "r");
+            if (nf) {
+                char buf[32] = {0};
+                if (!fgets(buf, sizeof(buf), nf)) buf[0] = 0;
+                fclose(nf);
+                int node = atoi(buf);
+                if (node >= 0) {
+                    snprintf(path, sizeof(path), "/sys/devices/system/node/node%d/cpulist", node);
+                    FILE * cf = fopen(path, "r");
+                    if (cf) {
+                        char cl[256] = {0};
+                        if (!fgets(cl, sizeof(cl), cf)) cl[0] = 0;
+                        fclose(cf);
+                        cpu_set_t set;
+                        CPU_ZERO(&set);
+                        bool ok = false;
+                        char * tok = strtok(cl, ",\n");
+                        while (tok) {
+                            int lo = -1, hi = -1;
+                            if (sscanf(tok, "%d-%d", &lo, &hi) == 2) {
+                                for (int c = lo; c <= hi; c++) { CPU_SET(c, &set); ok = true; }
+                            } else if (sscanf(tok, "%d", &lo) == 1) {
+                                CPU_SET(lo, &set); ok = true;
+                            }
+                            tok = strtok(nullptr, ",\n");
+                        }
+                        if (ok) {
+                            int rc = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &set);
+                            print_with_timestamp("OMNI_NPU_BIND: BDF=%s node=%d cpus=%s → %s\n",
+                                                 bdf, node, cl, rc == 0 ? "OK" : "FAILED");
+                        }
+                    }
+                }
+            }
+        }
+    }
     // [diag] OMNI_FORCE_FA=1: 强制 flash_attn(绕过 llama-context.cpp AUTO+CANN 的 forcing off)。
     // 用途: FA×NZ=off 的净 A/B(此前四路排除是 NZ=on 污染数据)。默认零影响。
     if (std::getenv("OMNI_FORCE_FA")) {

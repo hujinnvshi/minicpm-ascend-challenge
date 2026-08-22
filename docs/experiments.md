@@ -1071,3 +1071,22 @@ diff 结果（093-1）——两条铁证级协议分歧：
 - 发现 auroralabs-loci/llama.cpp 的 CANN 上游 PR 系列（#17512 ADD+RMS_NORM 融合、#17543 partial RoPE+Vision、#17752 ACL graph cache、#17333 evaluate_and_capture_cann_graph 重构）——**本地代码均已包含或已验证**：算子融合已实现且有 env（测过无收益）、图模式 USE_ACL_GRAPH 因头文件缺失编译不可用（8/21 结论）、Vision mode 无（VPM 是 tools/omni 独立实现，不走 ggml-cann vision）。无新思路。
 
 **结论**：红线（不改推理数学）+ CANN 限制（无量化/无图模式/FA 已全开）下，推理方法论与外部文献均无可行新突破口。当前最优配置不变：OMNI_FORCE_FA + OMNI_VISION_FA + OMNI_NPU_SERIAL = RTF 1.3291（-4.6% vs v4）。
+
+---
+
+### 实验 2026-08-22（续3）：NPU/CPU 亲和性（OMNI_NPU_BIND）—— 910B4+FA+三锁下无收益，关闭
+
+- 时间：2026-08-22 03:06-03:10
+- 动机：P4（旧机 910B3）"24+NUMA 绑核 0.57 vs 不绑核 0.72（-21%）"；H18"NUMA 绑核 128-159 必需"。但均为 FA 前/旧口径，910B4+FA+三锁下未测过。
+
+**实现**：omni_init 开头自动绑核（env `OMNI_NPU_BIND` 门控，默认关=官方行为）：npu-smi 取 BDF → /sys/bus/pci/devices/<BDF>/numa_node → 该 node cpulist → pthread_setaffinity_np（子线程继承）。零代码侵入（+55 行 diag）。
+
+**结果**（官方 rts 口径，FA+VPM_FA+三锁 基础上）：
+| 配置 | core RTF | vpm | cost_llm | tts | t2w |
+|---|---|---|---|---|---|
+| 不绑核（020817/015908） | 1.3291/1.3328 | 383/381 | 234/233 | 366/373 | 288/279 |
+| OMNI_NPU_BIND=1（绑 128-159，确认生效 4/4） | **1.3342** | 380.8 | 232.8 | 360.8 | 273.6 |
+| Δ | 噪声内 | — | — | — | — |
+
+**结论**：910B4+FA+三锁下 CPU 亲和性非瓶颈——NPU 主导（encode+decode+tts 全 NPU），CPU 侧仅 t2w 0.257（vocoder），系统负载 ~10%（256 核空闲充足，不绑核线程无争抢），DMA 量小。P4 的 -21% 是旧机（vocoder 340ms 占比高 + decode 0.57 时代）结论，新配置不成立（与 8/21 A/B"绑核范围无影响"一致）。
+**决策**：关闭（不纳入提交 env 声明）。OMNI_NPU_BIND 代码保留（env 门控默认关，官方环境若 CPU 紧张可启用，无害）。
