@@ -1018,3 +1018,39 @@ diff 结果（093-1）——两条铁证级协议分歧：
 5. T2W 24 线程不绑核（910B4）：t2w 0.2758→0.2717（-1.5%），RTF 1.401→1.3809。旧机"24 不绑核 0.72/0.75 退化"在 910B4 不成立 → README 的 OMNI_T2W_THREADS=24 声明安全（官方评测不绑核也不退化）。
 
 **结论**：红线内单段耗时优化的唯一新杠杆 = VPM FA（encode -8%，RTF -2%）。官方 Σ 口径下"结构并行"类优化全部无收益；剩余理论空间 = 各段自身耗时（encode 0.41/decode 0.235/tts 0.415/t2w 0.27），均为硬件+算子层硬时间（图模式 910B 不支持、量化负收益、FA 已全开）。
+
+---
+
+### 实验 2026-08-22（续）：NPU 提交串行化（OMNI_NPU_SERIAL）—— 数据流竞争消除，RTF -3.3%
+
+- 时间：2026-08-22 01:40-02:10（数据结构/数据流转评审的第二轮）
+- 动机：core 帧 vpm 383 vs 稳态 341（+42ms）、cost_llm 233 vs 稳态 91——怀疑 NPU 竞争
+
+**数据流评审发现**：
+1. NPU 提交者有 4 个线程：encoder(VPM/APM) + llm(decode) + tts(TTS 生成) + t2w(token2mel)。各自独立 CANN stream，同时提交时竞争降速。
+2. **竞争证据**（r4 主视频 35 帧 e2e_timing）：core 帧 vpm 全部 405-454（head/tail 帧 338-348 正常）——core 帧处于流水线满载段；cost_llm 稳态 86-91、竞争帧 200-317。锁 VPM↔decode 无效（墙钟不变→两者本就不重叠，CANN stream 串行），**竞争主体是 TTS**（366ms 最大 NPU 段）。
+3. **官方 RTF = Σ各段耗时**（judge_support.py rtf_aggregate=compute_total/audio_total，encode=max(vpm,apm)）——消除竞争直接降分。
+
+**实现**：全局互斥锁 g_npu_serial_mtx + env `OMNI_NPU_SERIAL` 门控（默认关=官方行为，零破坏）。锁 3 处 NPU 提交段：
+- encoder：VPM/APM 提交（omni.cpp ~9845）
+- llm 线程：duplex_do_decode（~10660）
+- tts 线程：generate_audio_tokens_local 两处调用（~6917/~7014）
+- ❌ t2w 的 feed_window 整体锁**不可行**：vocoder(CPU 170ms) 被串行化 → 墙钟超帧间隔 → RTF 1.63（+20%）。token2mel 细锁需改 token2wav-impl.cpp（未做，留作候选）。
+
+**结果**（官方 rts 口径，FA+VPM_FA 基础上）：
+| 配置 | core RTF | encode | decode | tts | t2w |
+|---|---|---|---|---|---|
+| 无锁（v5 前） | 1.3814/1.3882 | 0.4149 | 0.235 | 0.415 | 0.271 |
+| OMNI_NPU_SERIAL=1 | **1.3291/1.3328/1.342** | 0.402-0.409 | 0.241 | 0.417 | 0.257 |
+| Δ | **-3.3%** | -13ms | — | — | -14ms |
+
+- 3 次独立 run 稳定（1.3291-1.342）；batch_validity 全 true；墙钟 675ms 均值（仅 1 帧 1020ms，不影响 realtime）
+- 精度：videomme 10/10 逐字节一致（锁不碰推理数学）
+- 墙钟成本：+18ms/帧（VPM/decode 与 TTS 的少量重叠被串行化），在 1s 帧间隔预算内
+
+**认知更新**：
+1. CANN 多 stream 是**串行执行**（锁 VPM↔decode 墙钟不变）——B-2"多流并发"即使做也不会有硬件并行，此路线彻底关闭。
+2. 竞争=流水线满载时的**排队**（TTS 占用 NPU 时 VPM/token2mel 排队），锁消除排队。
+3. 4 线程并发提交的互斥在官方 Σ 口径下是**净收益**（每段更快），与直觉（并行=好）相反——因为官方只看段时间。
+
+**累计 v5 增量**（vs v4 提交的 1.40 本机口径）：VPM FA（-2.1%）+ NPU 串行锁（-3.3%）= **RTF ~1.33（-4.6%）**。

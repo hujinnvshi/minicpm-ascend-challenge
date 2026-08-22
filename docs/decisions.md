@@ -275,3 +275,11 @@ llama.cpp-omni 与 vLLM-Omni 子赛道需选择不同镜像版本。
 **决策**：采纳 VPM FA（vision.cpp 单文件改动 + OMNI_VISION_FA=1 env 随提交上传）。v5 提交包 = v4 四件套 + vision.cpp（README 文件清单 4→5）+ env 表加 OMNI_VISION_FA=1。预期官方 RTF 1.40→~1.37（同口径 -2%）。
 
 **详见**：experiments.md 2026-08-22 节；原始产物 evaluation/output/20260822_011106（A1）、20260822_011706/012018（videomme A/B）。
+
+## 2026-08-22 决策（追加）：NPU 提交串行化（OMNI_NPU_SERIAL）—— 采纳，RTF 再 -3.3%
+
+**背景**：数据结构/数据流转评审发现 4 个线程（encoder/llm/tts/t2w）并发提交 NPU，流水线满载时互相排队（core 帧 vpm 383 vs 稳态 341，cost_llm 233 vs 稳态 91）。官方 RTF=Σ各段耗时（非墙钟），排队直接进分。
+
+**验证**：全局互斥锁串行化 VPM/decode/TTS 三处 NPU 提交段（env 门控默认关）。RTF 1.3814→1.3291/1.3328/1.342（3 次稳定，-3.3%），encode -13ms、t2w -14ms（token2mel 排队减少），精度 videomme 10/10 零翻转，墙钟 +18ms 在预算内。t2w 整体锁不可行（vocoder CPU 被串行化→1.63），token2mel 细锁留作候选。
+
+**决策**：OMNI_NPU_SERIAL=1 纳入 v5 提交 env（与 OMNI_FORCE_FA、OMNI_VISION_FA 并列）。v5 = v4 + vision.cpp（VPM FA）+ omni.cpp（NPU 串行锁 3 处，env 门控默认关）+ README env 表 3 项。本机口径 RTF 1.40 → ~1.33（-4.6%）。

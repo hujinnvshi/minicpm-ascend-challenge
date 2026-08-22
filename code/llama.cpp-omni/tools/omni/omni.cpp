@@ -3914,6 +3914,16 @@ bool last_speek_done_flag = false;
 // 让 thread 可以结束
 std::atomic<bool> llm_thread_running(true);
 std::atomic<bool> tts_thread_running(true);
+
+// [diag] OMNI_NPU_SERIAL=1: NPU 提交串行化互斥锁（默认关=官方行为）。
+// 背景（2026-08-22 实测）：encoder(VPM) 提前提交与 llm(decode) 同抢 NPU → 两段互相拖慢
+// （r4 视频 core 帧 vpm 405-454 vs 稳态 341；cost_llm 204-317 vs 稳态 91）。
+// 官方 RTF = Σ各段耗时（非墙钟）→ 消除竞争可直接降分。锁只包 NPU 提交+等待段。
+static std::mutex g_npu_serial_mtx;
+static bool g_npu_serial_enabled() {
+    static const bool v = std::getenv("OMNI_NPU_SERIAL") != nullptr;
+    return v;
+}
 std::atomic<bool> t2w_thread_running(true);
 
 // ============================================================================
@@ -6902,10 +6912,18 @@ void tts_thread_func_duplex(struct omni_context * ctx_omni, common_params *param
                     n_tokens_filtered = 0;
                 }
                 
+                // [diag] OMNI_NPU_SERIAL: 锁住 TTS 生成 NPU 段（与 VPM/decode 互斥）
+                std::unique_lock<std::mutex> npu_serial_lk(g_npu_serial_mtx, std::defer_lock);
+                if (g_npu_serial_enabled()) {
+                    npu_serial_lk.lock();
+                }
                 bool tts_gen_success = generate_audio_tokens_local(ctx_omni, params, merged_embeddings,
                                                 n_tokens_filtered, tts_n_embd, current_chunk_idx,
                                                 audio_tokens_out, is_end_of_turn, tts_wav_output_dir,
                                                 current_src_cnt, current_turn_id, current_producer_seq);
+                if (npu_serial_lk.owns_lock()) {
+                    npu_serial_lk.unlock();
+                }
                 
                 if (tts_gen_success) {
                     all_audio_tokens.insert(all_audio_tokens.end(), audio_tokens_out.begin(), audio_tokens_out.end());
@@ -6999,10 +7017,18 @@ void tts_thread_func_duplex(struct omni_context * ctx_omni, common_params *param
                 int n_tokens_for_tts = 0;
                 int current_chunk_idx = chunk_idx;
                 
+                // [diag] OMNI_NPU_SERIAL: 锁住 TTS 生成 NPU 段（与 VPM/decode 互斥）
+                std::unique_lock<std::mutex> npu_serial_lk2(g_npu_serial_mtx, std::defer_lock);
+                if (g_npu_serial_enabled()) {
+                    npu_serial_lk2.lock();
+                }
                 bool tts_gen_success = generate_audio_tokens_local(ctx_omni, params, empty_embeddings,
                                                 n_tokens_for_tts, tts_n_embd, current_chunk_idx,
                                                 audio_tokens_out, true, tts_wav_output_dir,
                                                 current_src_cnt, current_turn_id, current_producer_seq);
+                if (npu_serial_lk2.owns_lock()) {
+                    npu_serial_lk2.unlock();
+                }
                 
                 if (tts_gen_success) {
                     all_audio_tokens.insert(all_audio_tokens.end(), audio_tokens_out.begin(), audio_tokens_out.end());
@@ -9832,6 +9858,11 @@ static void duplex_encoder_thread_func(omni_context * ctx_omni, common_params * 
         };
 
         double vpm_ms = 0.0, apm_ms = 0.0;
+        // [diag] OMNI_NPU_SERIAL: 锁住 VPM/APM 的 NPU 提交段（与 llm decode 互斥，消除竞争降速）
+        std::unique_lock<std::mutex> npu_serial_lk(g_npu_serial_mtx, std::defer_lock);
+        if (g_npu_serial_enabled()) {
+            npu_serial_lk.lock();
+        }
         if (has_img && has_aud) {
             // 真并行：APM 放到独立线程，VPM 在当前线程跑
             auto apm_future = std::async(std::launch::async, apm_task);
@@ -9841,6 +9872,9 @@ static void duplex_encoder_thread_func(omni_context * ctx_omni, common_params * 
             vpm_ms = vpm_task();
         } else if (has_aud) {
             apm_ms = apm_task();
+        }
+        if (npu_serial_lk.owns_lock()) {
+            npu_serial_lk.unlock();
         }
 
         auto t_enc_end = std::chrono::high_resolution_clock::now();
@@ -10637,10 +10671,18 @@ static void duplex_llm_thread_func(omni_context * ctx_omni, common_params * para
             const int decode_src_cnt = decode_req->round_idx >= 0
                 ? decode_req->round_idx : active_src_cnt;
             const int decode_turn_id = ctx_omni->current_turn_id;
+            // [diag] OMNI_NPU_SERIAL: 锁住 LLM decode 的 NPU 提交段（与 encoder VPM 互斥）
+            std::unique_lock<std::mutex> npu_serial_lk(g_npu_serial_mtx, std::defer_lock);
+            if (g_npu_serial_enabled()) {
+                npu_serial_lk.lock();
+            }
             bool ok = duplex_do_decode(ctx_omni, params,
                                        decode_req->debug_dir, decode_req->round_idx,
                                        decode_src_cnt, decode_turn_id,
                                        &decode_ms);
+            if (npu_serial_lk.owns_lock()) {
+                npu_serial_lk.unlock();
+            }
             decode_req->ok.store(ok);
         } else {
             decode_req->ok.store(false);
