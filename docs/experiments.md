@@ -992,3 +992,29 @@ diff 结果（093-1）——两条铁证级协议分歧：
 | L4 算子层 | HOLD——唯一未探索，风险最高，decode 已 NPU 速度主导 |
 
 **性能叙事最终形态**（NZ=off 官方口径）：e2e **1.06**（speak 8 锚点，08-17 独占 ×3+，08-15 的 1.08 为 speak 16 旧锚点——噪声内一致）/ NZ=on 1.01。
+
+---
+
+### 实验 2026-08-22：VPM(ViT) Flash Attention 突破 + 结构优化系统性证伪（v5 增量）
+
+- 时间：2026-08-22 01:00-01:30（v4 提交后排队期，官方口径 rts/videomme）
+- 目标：数据结构 + NPU/CPU 结构方向的剩余优化空间
+
+**A. VPM FA（采纳）**：vision.cpp build_attn 原走 mul_mat+softmax（TODO @ngxson 未实现 FA）。新增 env `OMNI_VISION_FA` 门控 FA 分支（默认关=官方行为，零破坏）。布局对齐 llama-graph.cpp build_attn_mha：q/k 已 permute(0,2,1,3)，v 需 permute(0,2,1,3)+F32→F16 cast，输出 cont_2d(attn, q->ne[0]*q->ne[2], q->ne[1])（**不能用成员 n_embd**——resampler d_head=128/heads=32 与 ViT 72/16 不同，曾致 cont_3d 断言崩 2 次）。n_batch>1 回退 mul_mat。
+
+| 配置（官方 rts 口径） | core RTF | encode | vpm_ms | decode | tts | t2w |
+|---|---|---|---|---|---|---|
+| A0: FA 基线（VPM 无FA） | 1.401 | 0.4519 | 360.8 | 0.236 | 0.4214 | 0.2758 |
+| A1: FA + VPM FA | 1.3717 / 1.3814 | 0.4149 | 343.3 | 0.2351 | 0.4148 | 0.2709 |
+| Δ | **-2.1%** | -8.2% | -4.9% | — | — | — |
+
+精度：videomme --smoke 10，VPM FA on/off 输出 **10/10 逐字节一致**（6/10 正确率相同）；rts batch_validity 全 true（data_valid+realtime_eligible+core_sufficient+score_eligible）。
+
+**B. 系统性证伪（同批验证，全部回退）**：
+1. TTS ResiLM FA（voxcpm2_runtime.cpp use_flash_attn，OMNI_VISION_FA 误改于此——该文件是 TTS ResiLM 非 VPM）：cost_tts 341→363ms 略负 → 关闭。**教训：voxcpm2 = TTS 模型；VPM 在 vision.cpp**。
+2. TTS 队列 1→16（OMNI_TTS_QUEUE env 化）：RTF 1.386 无收益。stage_timing q_before 恒=1——**LLM 受帧输入节奏（1s）限制而非 TTS 反压，队列必然空转**（FA 后 decode 0.235<tts 0.415 也不堆积）。P1.7（8/05）8.5× 是旧无归帧口径下的历史结论。
+3. **官方 RTF 口径 = Σ各段耗时/Σaudio**（judge_support.py rtf_aggregate=compute_total/audio_total，compute_total=vpm+apm+llm_prefill+cost_llm+tts+token2wav 各帧之和）——非墙钟。**跨帧重叠/多流并发即使实现，重叠段耗时仍被相加 → 官方口径收益≈0**。B-2 NPU 多流并发路线正式关闭（8/05 P1.7 残留的"NPU 多流"方向一并作废）。
+4. KV cache 量化：ggml-cann 无 GGML_OP_QUANTIZE 算子；llama-kv-cache.cpp:56 ggml_quantize_chunk 走 CPU，计算时 dequant→f32（1765 行）→ 带宽不减反增。关闭。
+5. T2W 24 线程不绑核（910B4）：t2w 0.2758→0.2717（-1.5%），RTF 1.401→1.3809。旧机"24 不绑核 0.72/0.75 退化"在 910B4 不成立 → README 的 OMNI_T2W_THREADS=24 声明安全（官方评测不绑核也不退化）。
+
+**结论**：红线内单段耗时优化的唯一新杠杆 = VPM FA（encode -8%，RTF -2%）。官方 Σ 口径下"结构并行"类优化全部无收益；剩余理论空间 = 各段自身耗时（encode 0.41/decode 0.235/tts 0.415/t2w 0.27），均为硬件+算子层硬时间（图模式 910B 不支持、量化负收益、FA 已全开）。

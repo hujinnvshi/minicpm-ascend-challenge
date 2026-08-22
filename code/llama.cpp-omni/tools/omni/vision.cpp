@@ -293,6 +293,8 @@ struct vision_graph {
     const int n_layer;
     const float eps;
     const float kq_scale;
+    // [diag] OMNI_VISION_FA=1: VPM(ViT) attention 走 flash_attn_ext（默认关=官方行为）。
+    const bool  use_fa;
 
     ggml_context_ptr ctx0_ptr;
     ggml_context * ctx0;
@@ -313,7 +315,8 @@ struct vision_graph {
             d_head(n_embd / n_head),
             n_layer(hparams.n_layer),
             eps(hparams.eps),
-            kq_scale(1.0f / sqrtf((float)d_head)) {
+            kq_scale(1.0f / sqrtf((float)d_head)),
+            use_fa(std::getenv("OMNI_VISION_FA") != nullptr) {
         struct ggml_init_params params = {
             /*.mem_size   =*/ ctx->buf_compute_meta.size(),
             /*.mem_buffer =*/ ctx->buf_compute_meta.data(),
@@ -1027,6 +1030,24 @@ private:
 
         ggml_tensor * cur;
 
+        // [diag] OMNI_VISION_FA=1: flash attention 路径（与 llama-graph.cpp build_attn_mha 同布局，
+        // CANN FLASH_ATTN_EXT 已验证）。q/k 已是 [D, S, N, B]（permute 0,2,1,3）；
+        // v 需与 k 同布局 [D, KV_S, N, B]（mul_mat 路径的 v 是 [KV_S, N, D, B]）。
+        // 仅 n_batch==1（VPM 单图，batch encode 禁用）；n_batch>1 回退 mul_mat 路径。
+        if (use_fa && q->ne[3] == 1) {
+            const auto n_tokens = q->ne[1];
+            ggml_tensor * v_fa = ggml_permute(ctx0, v_cur, 0, 2, 1, 3);
+            if (v_fa->type == GGML_TYPE_F32) {
+                v_fa = ggml_cast(ctx0, v_fa, GGML_TYPE_F16);
+            }
+            if (k->type == GGML_TYPE_F32) {
+                k = ggml_cast(ctx0, k, GGML_TYPE_F16);
+            }
+            ggml_tensor * attn = ggml_flash_attn_ext(ctx0, q, k, v_fa, kq_mask, kq_scale, 0.0f, 0.0f);
+            // attn 与 q 同布局 [D, Q_S, N, 1] → 归并成 [n_embd, n_tokens]
+            // 注意不能用成员 n_embd/n_head（ViT hidden），resampler 的 d_head/heads 不同，动态取 q 的 ne
+            cur = ggml_cont_2d(ctx0, attn, q->ne[0] * q->ne[2], n_tokens);
+        } else {
         // TODO @ngxson : support flash attention
         {
             const auto n_tokens = q->ne[1];
@@ -1048,6 +1069,7 @@ private:
             } else {
                 cur = ggml_cont_2d(ctx0, cur, cur->ne[0]*n_head, n_tokens);
             }
+        }
         }
 
         cb(cur, "kqv_out", il);

@@ -255,3 +255,23 @@ llama.cpp-omni 与 vLLM-Omni 子赛道需选择不同镜像版本。
 - 故障知识库：服务器状态灯、常见告警、数据库报错处理
 
 **未决事项**：场景最终确认；官方 API 免费额度/限流长期稳定性
+
+## 2026-08-22 决策：VPM(ViT) Flash Attention（OMNI_VISION_FA）—— 确认采纳，RTF -2.1%，精度零翻转
+
+**背景**：v4 提交后评测排队（等待调度），深挖"数据结构和 NPU/CPU 结构"优化空间。发现 VPM 视觉编码器（vision.cpp build_attn）有 TODO 但未实现 FA，而 LLM 的 FA（OMNI_FORCE_FA）已验证 -59% decode。VPM 360ms 恒定是 encode 段（0.44s）主体。
+
+**验证过程**（2026-08-22，全部官方口径 rts --smoke 2 / videomme --smoke 10，NZ=off 官方路径）：
+1. VPM FA 分支（vision.cpp build_attn，env `OMNI_VISION_FA` 门控，默认关=官方行为）：ViT 27 层 + resampler 的 attention 走 ggml_flash_attn_ext（布局对齐 llama-graph.cpp build_attn_mha；v 需 permute(0,2,1,3)+F16 cast；n_batch>1 回退 mul_mat）。
+2. 两次崩溃修复：cont_3d nelements 断言（reshape 尺寸用成员 n_embd 错——resampler d_head/heads 与 ViT 不同，改用 q->ne[0]*q->ne[2] 动态计算）。
+3. **性能**：encode 0.4519→0.4149（-8.2%），vpm_ms 360.8→343.3（-4.9%），core RTF 1.401→1.3717/1.3814（-2.1%，2 次独立 run 稳定）。
+4. **精度**：videomme 10/10 输出逐字节一致（VPM FA on/off，LLM FA 均开）；batch_validity 全 true。
+5. **证伪项**（同批验证，全部回退）：
+   - TTS ResiLM FA（voxcpm2_runtime.cpp use_flash_attn）：tts 段无改善（stage_ms cost_tts 341→363 略负）→ 关闭回退。
+   - TTS 队列 1→16（OMNI_TTS_QUEUE）：RTF 1.386 无收益；q_before 恒=1（LLM 受输入节奏限制而非 TTS 反压，队列空转）→ 关闭回退。
+   - **官方 RTF 口径认知（重大）**：core RTF = Σ各段耗时/Σaudio（compute_total=vpm+apm+llm_prefill+cost_llm+tts+token2wav 之和），非墙钟 → **跨帧重叠/多流并发在官方口径下收益≈0**（重叠段的耗时仍被相加）→ B-2 NPU 多流并发路线关闭。
+   - KV cache 量化（--cache-type-k q8_0）：CANN 后端无 GGML_OP_QUANTIZE 算子，KV 量化走 CPU quantize+dequant（带宽不减反增）→ 关闭。
+   - T2W 24 线程不绑核（910B4）：t2w 0.2758→0.2717（略优，旧机"24 不绑核变差"结论在 910B4 不成立）→ README 的 OMNI_T2W_THREADS=24 声明安全。
+
+**决策**：采纳 VPM FA（vision.cpp 单文件改动 + OMNI_VISION_FA=1 env 随提交上传）。v5 提交包 = v4 四件套 + vision.cpp（README 文件清单 4→5）+ env 表加 OMNI_VISION_FA=1。预期官方 RTF 1.40→~1.37（同口径 -2%）。
+
+**详见**：experiments.md 2026-08-22 节；原始产物 evaluation/output/20260822_011106（A1）、20260822_011706/012018（videomme A/B）。
