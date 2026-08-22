@@ -1090,3 +1090,15 @@ diff 结果（093-1）——两条铁证级协议分歧：
 
 **结论**：910B4+FA+三锁下 CPU 亲和性非瓶颈——NPU 主导（encode+decode+tts 全 NPU），CPU 侧仅 t2w 0.257（vocoder），系统负载 ~10%（256 核空闲充足，不绑核线程无争抢），DMA 量小。P4 的 -21% 是旧机（vocoder 340ms 占比高 + decode 0.57 时代）结论，新配置不成立（与 8/21 A/B"绑核范围无影响"一致）。
 **决策**：关闭（不纳入提交 env 声明）。OMNI_NPU_BIND 代码保留（env 门控默认关，官方环境若 CPU 紧张可启用，无害）。
+
+---
+
+### 实验 2026-08-22（续4）：token2mel 细锁（只锁 Flow NPU 段）—— 负收益 -31%，回退
+
+- 时间：2026-08-22 04:02-04:07
+- 动机：全链条追踪发现 core 帧 enc 401 vs 稳态 341（+60ms）、dec 216-252 vs 91（+125-161ms）同步波动，唯一未锁 NPU 提交者 = token2mel → 假设消除该竞争可再降 RTF 11-15%
+- 实现：omni.h extern g_npu_serial_mtx/g_npu_serial_enabled（跨文件共享）+ token2wav-impl.cpp push_tokens_window 只锁 t2m_.push_tokens 段（vocoder CPU 在锁外）；env OMNI_NPU_SERIAL 复用，默认关
+- 结果：**RTF 1.7379（vs 三锁 1.3291，+31%）**，SPEAK→wav 2016ms（vs 1560）
+- 机制分析：core 帧 NPU 串行总和 enc 400+dec 220+tts 412+t2m 100 = **1132ms > 1000ms 帧周期** → 锁让 token2mel 也串行后墙钟超限 → 帧积压 → 尾帧拖长。三锁已是"串行化上限"（core 帧水平下任何额外 NPU 串行都超帧预算）；此前"整体锁 1.63"同因
+- **结论**：token2mel 细锁关闭（与整体锁同因）。**跨段串行化空间已耗尽**——三锁 = 可串行化上限；enc/dec 的 core-vs-稳态 gap 是"core 帧本身 NPU 负载高"的固有表现（不可通过锁消除）
+- 代码已回退（git checkout 3 文件，工作区= e98047e 状态）
