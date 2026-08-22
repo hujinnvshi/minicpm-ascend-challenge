@@ -254,3 +254,14 @@ cmake --build code/llama.cpp-omni/build-cann -j$(nproc)
 - **H20 NPU 观测**（3 轮独立确认）：推理中 HBM 53-72% 但 **Aicore=0%、Aivector=0%** —— npu-smi 统计对 CANN FA 执行模式不可靠（或计算为微秒级爆发），**不能据此判断 CPU/传输瓶颈**，观测路线关闭
 - **H25 perf-duplex**：发现 patch7 未覆盖的同类崩溃（ggml_backend_cann_free device=-1，perf-duplex 的 llama_init 失败路径）——诊断工具崩溃，非提交物，记录待后续修（patch8 候选）
 - **结论**：F16+FA=1.375 是当前 910B4 稳定最优；Q4_0/Q8_0/NO_PINNED/MIN_BATCH/队列/绑核全验证关闭
+
+## 2026-08-22 v5 提交（VPM FA + NPU 串行锁）——提交成功，任务调度中
+
+- **时间**：2026-08-22 02:58（UTC）
+- **包**：dist/submission_v5_20260822.zip（68.6MB，四件套）
+- **增量**（vs v4）：vision.cpp VPM(ViT) Flash Attention（OMNI_VISION_FA=1，encode -8.2%）+ omni.cpp NPU 提交串行化（OMNI_NPU_SERIAL=1，4 线程并发排队消除，RTF -3.3%）；README env 表 3 项 + 文件描述更新
+- **本机口径**：core RTF 1.401 → 1.3291（-4.6%），videomme 10/10 逐字节零翻转，batch_validity 全 true
+- **链路**：checkLogin（cookie 有效，未重登）→ upload_model_check（OBS 凭证）→ OBS PUT 68.6MB（HTTP 200，首次 400=签名 bug 重试成功）→ upload_model（result 0000 提交成功，后台进入任务调度）
+- **oss_key**：user_commit/2026/0/0/f795942961c3/03deddeb36944e5182ee41159d3aa999.tar.gz（本次；每次 check 会刷新）
+- **说明**：本机测试期间发现并回退——OMNI_T2W_STEPS=3（CANN 图缓存按 5 步构建，GPU init 失败）、t2w feed_window 整体锁（vocoder CPU 串行化 RTF 1.63）、OMNI_ENC_THREADS=8（无收益）；KV 量化/投机采样/上游 PR 融合均确认不可行（详见 experiments.md 2026-08-22 续）
+- **待办**：README 队伍名/联系方式仍未填（官方复核可能需要）；评测结果 2-3 天刷新排行榜
