@@ -274,3 +274,23 @@ cmake --build code/llama.cpp-omni/build-cann -j$(nproc)
 - **链路**：upload_model_check（新 oss_key c3d8d29a...）→ OBS PUT 200（68.6MB）→ upload_model result 0000 提交成功，进入任务调度
 - **合规评审结论**（vs SUBMISSION_GUIDE.md 全文）：代码层全部符合（4 文件无评测/计时/校验改动、不可改清单未触碰、env 门控默认关、NZ=off、RTF 官方口径、无凭据）；README §4.1 已补全
 - **注意**：NPU 串行锁（OMNI_NPU_SERIAL）属调度层互斥（不改事件/帧编号/阶段/计时上报），README 已描述原理，未按 §1.2 架构级提交申报（风险评估：锁不改变官方口径的段计时上报，仅运行时互斥，论证不属于 §1.2 范畴）
+
+## 2026-08-24 v6 提交（TTS head_code 行间并行）——提交成功，任务调度中
+
+- **时间**：2026-08-24 10:0x（UTC，login 验证码 699814）
+- **包**：dist/submission_v6_20260824.zip（68.6MB，SHA256 dae46cff...，四件套）
+- **增量**（vs v5）：omni.cpp TTS head_code logits 行间并行（OMNI_HEADCODE_THREADS=24，std::thread，
+  每行内部标量累加顺序不变 → logits 逐位一致 26/26 实测）+ per-step 计时插桩（OMNI_TTS_STEP_PROFILE，
+  诊断用默认关）；README 提为 repo 文件（scripts/submission-README.md，打包脚本 [4/4] 从文件复制）
+- **本机口径**：core RTF 1.3291 → **1.166（中位，4 次独立 run：1.139/1.151/1.181/1.186）**，-12.5%；
+  v6 最差 run 仍优于 v5 最好 run（分布零重叠，间隔 0.143）；分项 tts 0.417→0.275（-34%）；
+  batch_validity 全 true；OBS PUT 200 → upload_model result 0000 提交成功，进入任务调度
+- **链路**：sendmessage（userID=手机号 18510911437，type=phone，country_code=+86 才是正确参数；
+  旧记录缺 phone 字段导致 0077）→ login（Set-Cookie cail_session，原始头保存）→ checkLogin 0002
+  （疑似接口判定差异，不影响提交；upload_model_check 0000 校验通过）→ upload_model_check（新 oss_key
+  19f80fe8...）→ OBS PUT 200（68.6MB）→ upload_model result 0000
+- **cookie**：/tmp/ascend-cookies.txt（本次重登，cail_session 已更新；v5 的 8/21 cookie 已过期——
+  "跨天有效"说法修正：登录态有效期 <1 天，重提交前需 checkLogin 验证，过期则 sendmessage+login 重登）
+- **复测纪律**：提交前按"≥3 次取中位"补跑 2 次全量 rts（r1=1.151/r2=1.181），4 次合并中位 1.166，
+  分布与 v5（1.3291-1.342）零重叠 → 提升非噪声（详见 docs/papers-p0-probe-2026-08-24.md）
+- **待办**：评测结果 2-3 天刷新排行榜；v5（1.3291 配置）与 v6（1.166 配置）均在调度队列
