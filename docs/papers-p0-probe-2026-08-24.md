@@ -187,3 +187,27 @@
 - **结论**：matmul+bias 融合在 CANN 无匹配 API，**CLOSED**。VPM 优化线彻底收口
   （构成量化/OPERATOR_FUSION/B/B' 全部实测完毕，无红线内空间）。
 - 注：若未来 CANN 提供 F32 输入的 bias matmul（如 aclnnFusedMatMul 变体），可重估。
+
+## P1 受限图模式（per-backend，VPM only）——规避成功但 910B4 图执行不省时，CLOSED
+
+- **动机**：全量图模式崩（TTS zero norm + re-capture + 挂死），但崩溃归属 TTS/LLM
+  （KV 增长段）；VPM shape 固定段可能可规避
+- **实现**（3 处）：ggml-cann.h 声明 + ggml-cann.cpp 实现 `ggml_backend_cann_set_acl_graph`
+  （per-backend 开关，普通构建 no-op）+ vision.cpp 创建 backend 后调用（只开 VPM）
+- **运行**：GGML_CANN_ACL_GRAPH=off（全局 eager）+ GGML_CANN_PREFILL_USE_GRAPH=1
+  （VPM 是 prefill 类需此 env）
+- **结果**：
+  | 指标 | 结果 |
+  |---|---|
+  | set_acl_graph 生效 | ✅（vision backend GRAPH restricted） |
+  | 图执行次数 | ✅ 36 次 use_cann_graph=1（每帧），eager 508 次（TTS/LLM 保 eager） |
+  | capture 命中率 | ✅ 35/36 命中（仅首帧 capture，零 re-capture——地址/shape 稳定） |
+  | 崩溃 | ✅ 无（EXIT=0，规避成功） |
+  | **vpm 耗时** | ❌ **与 eager 逐帧相同**（225→218ms 为噪声级）——aclmdlRIExecuteAsync 在 910B4 上不省时 |
+- **结论**：910B4 图模式彻底 CLOSED——不是"崩"（可规避）而是"图执行本身无收益"
+  （CANN 910B 的图执行 = 同样算子，未省 launch）。910C 上是否有收益仍未知
+  （CANN 实现不同），代码保留（set_acl_graph 接口 + vision 调用，普通构建 no-op，
+  未来 910C 环境可一键启用），**不进提交包 env 声明**（无收益 + 需 USE_ACL_GRAPH 构建）。
+- **教训**：图模式的价值假设（省 launch）在 910B4 上被实测否定——"机制存在"
+  （capture/命中正常）≠ "收益存在"（执行引擎不省时）。910C 适配时若评估图模式，
+  必须实测 aclmdlRIExecuteAsync 相对 eager 的真实提速，别只看 capture 成功率。

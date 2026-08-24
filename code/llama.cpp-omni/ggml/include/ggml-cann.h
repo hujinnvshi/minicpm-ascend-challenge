@@ -59,6 +59,11 @@ GGML_BACKEND_API ggml_backend_t ggml_backend_cann_init(int32_t device);
  */
 GGML_BACKEND_API bool ggml_backend_is_cann(ggml_backend_t backend);
 
+// 🔧 [P1-图] per-backend 图模式开关（USE_ACL_GRAPH 构建时有效；受限图模式 =
+// 仅指定 backend 走 ACL graph，其他保持 eager。910B4 全量图模式实测崩
+// （TTS zero norm/re-capture），per-backend 限定可规避——VPM shape 固定段候选）
+GGML_BACKEND_API void ggml_backend_cann_set_acl_graph(ggml_backend_t backend, bool enable);
+
 /**
  * @brief Retrieves the CANN buffer type for a specified device.
  *

@@ -2400,6 +2400,14 @@ static enum ggml_status ggml_backend_cann_graph_compute(ggml_backend_t backend, 
 #else
     bool use_cann_graph = false;
 #endif  // USE_ACL_GRAPH
+
+    // 🔧 [P1-图] 诊断：图模式决策打印（env GGML_CANN_ACL_GRAPH_DEBUG=1 门控）
+    static bool graph_debug = parse_bool(get_env_as_lowercase("GGML_CANN_ACL_GRAPH_DEBUG").value_or(""));
+    if (graph_debug) {
+        fprintf(stderr, "[P1-GRAPH] compute use_cann_graph=%d capture_required=%d nodes=%d\n",
+                (int) use_cann_graph, (int) graph_capture_required, cgraph->n_nodes);
+    }
+
     evaluate_and_capture_cann_graph(cann_ctx, cgraph, use_cann_graph, graph_capture_required);
 
     return GGML_STATUS_SUCCESS;
@@ -3062,6 +3070,24 @@ ggml_backend_t ggml_backend_cann_init(int32_t device) {
 
 bool ggml_backend_is_cann(ggml_backend_t backend) {
     return backend != NULL && ggml_guid_matches(backend->guid, ggml_backend_cann_guid());
+}
+
+// 🔧 [P1-图] per-backend 图模式开关（受限图模式：仅指定 backend 走 ACL graph）
+void ggml_backend_cann_set_acl_graph(ggml_backend_t backend, bool enable) {
+#ifdef USE_ACL_GRAPH
+    if (backend != NULL && ggml_guid_matches(backend->guid, ggml_backend_cann_guid())) {
+        ggml_backend_cann_context * cann_ctx = (ggml_backend_cann_context *) backend->context;
+        cann_ctx->acl_graph_mode = enable;
+        fprintf(stderr, "[P1-GRAPH] backend %p device %d set_acl_graph=%d (GRAPH restricted)\n",
+                (void *) backend, cann_ctx->device, (int) enable);
+    } else {
+        fprintf(stderr, "[P1-GRAPH] set_acl_graph called on non-CANN backend %p\n", (void *) backend);
+    }
+#else
+    (void) backend;
+    (void) enable;
+    fprintf(stderr, "[P1-GRAPH] set_acl_graph no-op (USE_ACL_GRAPH not compiled)\n");
+#endif  // USE_ACL_GRAPH
 }
 
 int32_t ggml_backend_cann_get_device_count() {

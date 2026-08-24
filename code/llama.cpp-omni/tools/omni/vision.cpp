@@ -6,6 +6,7 @@
 #include "ggml-cpu.h"
 #include "ggml-alloc.h"
 #include "ggml-backend.h"
+#include "ggml-cann.h"
 #include "gguf.h"
 
 #if defined(ENABLE_COREML)
@@ -245,6 +246,13 @@ struct vision_ctx {
 
         if (backend) {
             LOG_INF("%s: vision using %s backend\n", __func__, ggml_backend_name(backend));
+            // 🔧 [P1-图] 受限图模式：仅 VPM backend 开 ACL graph（shape 固定段）。
+            // 接口无条件存在：普通构建（无 USE_ACL_GRAPH）为 no-op；graph 构建生效。
+            // 需配合 GGML_CANN_PREFILL_USE_GRAPH=1（VPM 是 prefill 类）+
+            // GGML_CANN_ACL_GRAPH=off（其他 backend 保 eager，规避 TTS/LLM re-capture 崩溃）
+            if (ggml_backend_is_cann(backend)) {
+                ggml_backend_cann_set_acl_graph(backend, true);
+            }
             backend_ptrs.push_back(backend);
             backend_buft.push_back(ggml_backend_get_default_buffer_type(backend));
         } else {
