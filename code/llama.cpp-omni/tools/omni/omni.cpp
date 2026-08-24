@@ -3031,6 +3031,11 @@ static llama_token sample_tts_token_simplex(struct common_sampler * smpl, struct
 }
 
 llama_token sample_tts_token(struct common_sampler * smpl, struct omni_context * ctx_omni, common_params* params, int * n_past_tts, const std::vector<llama_token> * all_generated_tokens, const std::vector<llama_token> * chunk_generated_tokens, int token_index_in_chunk, bool force_no_eos, bool is_final_text_chunk) {
+    // 🔧 [P0探针] TTS per-step 分段计时（env OMNI_TTS_STEP_PROFILE=1 门控，默认关=官方行为）
+    static const bool tts_step_profile = getenv("OMNI_TTS_STEP_PROFILE") != nullptr;
+    auto tp0 = std::chrono::steady_clock::now();
+    auto tp1 = tp0, tp2 = tp0, tp3 = tp0;
+
     // Debug: Save logits directory (set via environment variable)
     const char* logits_debug_dir = getenv("TTS_LOGITS_DEBUG_DIR");
     
@@ -3121,6 +3126,7 @@ llama_token sample_tts_token(struct common_sampler * smpl, struct omni_context *
     // 1. 获取TTS模型的最后一个位置的hidden state
     // hidden_state shape: (hidden_size=768,)
     const float * hidden_state = llama_get_embeddings_ith(ctx_omni->ctx_tts_llama, -1);
+    if (tts_step_profile) tp1 = std::chrono::steady_clock::now();  // [P0探针] after get_embeddings
     if (hidden_state == nullptr) {
         LOG_ERR("TTS: failed to get hidden state from TTS model\n");
         return 0;
@@ -3150,17 +3156,47 @@ llama_token sample_tts_token(struct common_sampler * smpl, struct omni_context *
     std::vector<float> audio_logits(num_audio_tokens, 0.0f);
     const float * head_code_w = ctx_omni->head_code_weight;
     const int hidden_size = ctx_omni->head_code_hidden_size;
-    
-    // ⚡ 优化：head_code_weight已转置为[6562, 768]，每行连续存储
-    // 连续内存访问，cache友好
-    for (int i = 0; i < num_audio_tokens; ++i) {
-        const float * row = head_code_w + i * hidden_size;
-        float sum = 0.0f;
-        for (int j = 0; j < hidden_size; ++j) {
-            sum += hidden_state[j] * row[j];
+    // 🔧 [P0探针-优化] 行间并行（std::thread）：每行内部保持与原代码完全相同的
+    // 标量累加顺序 → 数值逐位一致（零数学改动）。原代码单核 8.6ms/步（6562×768）。
+    // env OMNI_HEADCODE_THREADS 可调线程数（默认 24），0 = 禁用并行。
+    {
+        static const int hc_threads = []() {
+            const char * e = getenv("OMNI_HEADCODE_THREADS");
+            return e ? std::max(0, atoi(e)) : 24;
+        }();
+        if (hc_threads > 1 && num_audio_tokens >= 256) {
+            const int n_thr = std::min(hc_threads, num_audio_tokens);
+            std::vector<std::thread> pool;
+            pool.reserve(n_thr);
+            const int per = (num_audio_tokens + n_thr - 1) / n_thr;
+            for (int t = 0; t < n_thr; ++t) {
+                const int i0 = t * per;
+                const int i1 = std::min(i0 + per, num_audio_tokens);
+                if (i0 >= i1) break;
+                pool.emplace_back([&, i0, i1]() {
+                    for (int i = i0; i < i1; ++i) {
+                        const float * row = head_code_w + i * hidden_size;
+                        float sum = 0.0f;
+                        for (int j = 0; j < hidden_size; ++j) {
+                            sum += hidden_state[j] * row[j];
+                        }
+                        audio_logits[i] = sum;
+                    }
+                });
+            }
+            for (auto & th : pool) th.join();
+        } else {
+            for (int i = 0; i < num_audio_tokens; ++i) {
+                const float * row = head_code_w + i * hidden_size;
+                float sum = 0.0f;
+                for (int j = 0; j < hidden_size; ++j) {
+                    sum += hidden_state[j] * row[j];
+                }
+                audio_logits[i] = sum;
+            }
         }
-        audio_logits[i] = sum;
     }
+    if (tts_step_profile) tp2 = std::chrono::steady_clock::now();  // [P0探针] after head_code CPU matmul
     
     int eos_relative_idx = num_audio_tokens - 1;  // EOS token relative index: 6561
     
@@ -3291,6 +3327,8 @@ llama_token sample_tts_token(struct common_sampler * smpl, struct omni_context *
         );
     }
     
+    if (tts_step_profile) tp3 = std::chrono::steady_clock::now();  // [P0探针] after sampling
+    
     // 5. 验证采样结果在有效范围内
     if (selected_relative_idx < 0 || selected_relative_idx >= num_audio_tokens) {
         LOG_ERR("TTS: invalid selected index %d, should be in [0, %d)\n", 
@@ -3359,6 +3397,18 @@ llama_token sample_tts_token(struct common_sampler * smpl, struct omni_context *
             LOG_ERR("TTS: failed to decode audio token ID (token may exceed vocab size)\n");
             return 0;
         }
+    }
+    
+    if (tts_step_profile) {
+        // [P0探针] per-step 分段：getemb=tp0→tp1, head_code CPU matmul=tp1→tp2,
+        // sample=tp2→tp3, npu_forward(emb查表+prefill)=tp3→end
+        auto tp_end = std::chrono::steady_clock::now();
+        auto ms_us = [](std::chrono::steady_clock::time_point a, std::chrono::steady_clock::time_point b) {
+            return std::chrono::duration_cast<std::chrono::microseconds>(b - a).count() / 1000.0;
+        };
+        fprintf(stderr, "[TTS_STEP] t=%d getemb=%.2f head=%.2f sample=%.2f npu=%.2f total=%.2fms\n",
+                token_index_in_chunk,
+                ms_us(tp0, tp1), ms_us(tp1, tp2), ms_us(tp2, tp3), ms_us(tp3, tp_end), ms_us(tp0, tp_end));
     }
     
     return id;
