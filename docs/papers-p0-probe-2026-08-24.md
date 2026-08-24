@@ -94,3 +94,17 @@
   完全对应。
 - 教训：结论要标注测量方式与时间（哪些段是被直接计时的、哪些是推断的）；
   旧机结论（910B3）换新机（910B4）后必须复核。
+
+## 精度确认（2026-08-24 补充）：同 seed A/B wav 逐字节一致 —— 零影响实锤
+
+- **方法**（比 benchmark 更严格）：llama-omni-server 两次（OMNI_HEADCODE_THREADS=0 vs 24，
+  其余同：--seed 42 / NZ=off / FA+VPM_FA+NPU_SERIAL），gen_tts.py 各生成 zh 前 20 条
+  （同 ref+target），wav md5 逐字节对比
+- **结果**：**20/20 wav 逐字节一致**（md5 全同，0 不一致）——整条生成链路
+  （LLM→TTS head_code→token2mel→vocoder→wav）在并行 on/off 下输出同一份音频
+- **推论**：WER/ASV 必然相同（音频即同一文件），无需再跑 benchmark 评分；
+  head 并行对 TTS 质量影响 = 0（数学零改动 + RNG seed 固定下确定性一致）
+- **方法论沉淀**：零影响验证的最强形式 = 同 seed A/B 端到端 wav 逐字节对比
+  （比 logits 字节对比更全链路，比精度 benchmark 更严格更快——20 条 ~8 分钟生成）
+  server 需 --seed 固定（TTS 采样 RNG 来自 common_sampler，--seed 可控）
+- 产物：/tmp/tts_a_th0/（THREADS=0）vs /tmp/tts_b_th24/（THREADS=24）
