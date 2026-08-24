@@ -142,3 +142,18 @@
 - **注意**：VPM norm 是 GGML_OP_NORM（LayerNorm mean-based，非 RMS）→ 现有
   GGML_CANN_OPERATOR_FUSION（ADD+RMS_NORM）对 VPM 无效（已实测 fusion=0/1 完全一致）；
   TTS ResiLM 的 RMSNorm 融合也实测无收益（npu 6.88 vs 6.60 噪声级）→ OPERATOR_FUSION 全场景关闭
+
+## P1 ③ B 方案（CPY/CONT 削减）实测——证伪，vision.cpp 单文件无可省空间
+
+- **假设**：VPM op 统计 CPY 56 + CONT 30 = 86 个数据移动 op 可削减
+- **实测**：把 build_attn 的 `v=ggml_cont(v)`（每层 1 个）移到 mul_mat 分支 →
+  **op 计数零变化**（CONT:30 不变）——ggml_cont 对连续布局是 no-op（构建时
+  直接返回原 tensor，从未生成图节点）。vpm 中位 227.5→223.2ms 纯噪声。
+- **真相反推**：CONT 30 = cont_2d(attn)×27（布局重排必须）+ inp cont + resampler；
+  CPY 56 = k/v F32→F16 cast×54（FLASH_ATTN_EXT 只对 q 有内部 cast（aclnn_ops.cpp:3854），
+  k/v 直接 create_tensor 无 cast 处理 → 预 cast 必须）+ resampler。
+- **结论**：vision.cpp 单文件无可削减（v cont no-op、cast/cont_2d 必须）。
+  **B 关闭**。真正的肉在 ggml-cann 层：① flash_attn 内部 cast k/v（省 54 CPY ~20ms，
+  encode -9%）；② matmul+bias 融合（省 ~189 ADD ~40ms，encode -17%）。
+  两者均为 ggml-cann 核心改动（1-2 天），且官方 README L268 允许 env 上传。
+- 已回滚（vision.cpp 恢复原状，仅保留 VPM_PROFILE 插桩）；git diff 验证只剩插桩
