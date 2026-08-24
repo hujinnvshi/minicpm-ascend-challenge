@@ -178,3 +178,12 @@
   ③ **vision.cpp 预 cast（图节点，数据流明确）是更稳的设计**，ggml 层内部 cast 的 pool
   分配抖动不可接受。VPM 剩余融合空间（matmul+bias）同样有 pool/调度风险，收益未证，
   **VPM 优化线正式收口**（除 matmul+bias 大工程外无红线内空间）
+
+## P1 ③ B（matmul+bias 融合）——CLOSED，CANN 无匹配 API
+
+- **验证**：aclnn 头文件扫描——`aclnnMatmul` 4 参（self/mat2/out/cubeMathType，**无 bias**）；
+  `aclnnAddmm` 有 bias（self 支持 F32）但 **mat1/mat2 只支持 F16/BF16**——VPM 激活是 F32
+  （ggml mul_mat src1 F32）→ 需额外 F32→F16 cast → 收益被 cast 抵消（B' 已证 cast 尾部抖动）。
+- **结论**：matmul+bias 融合在 CANN 无匹配 API，**CLOSED**。VPM 优化线彻底收口
+  （构成量化/OPERATOR_FUSION/B/B' 全部实测完毕，无红线内空间）。
+- 注：若未来 CANN 提供 F32 输入的 bias matmul（如 aclnnFusedMatMul 变体），可重估。
