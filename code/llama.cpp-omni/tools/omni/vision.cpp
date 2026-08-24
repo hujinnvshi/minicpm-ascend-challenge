@@ -18,6 +18,8 @@
 #include <cstring>
 #include <fstream>
 #include <map>
+#include <chrono>
+#include <cstdio>
 #include <regex>
 #include <stdexcept>
 #include <unordered_set>
@@ -328,6 +330,10 @@ struct vision_graph {
     }
 
     ggml_cgraph * build_minicpmv() {
+        // 🔧 [P0探针] VPM 分段计时 + op 统计（env OMNI_VPM_PROFILE=1 门控，默认关=官方行为）
+        static const bool vpm_profile = getenv("OMNI_VPM_PROFILE") != nullptr;
+        auto tp0 = std::chrono::steady_clock::now();
+        auto tp1 = tp0;
         const int n_pos = n_patches;
 
         // position embeddings for the projector (not for ViT)
@@ -351,6 +357,7 @@ struct vision_graph {
                                 hparams.ffn_op,
                                 learned_pos_embd,
                                 nullptr);
+        if (vpm_profile) tp1 = std::chrono::steady_clock::now();  // [P0探针] after ViT
         // embeddings shape: [n_embd, n_patches] (batch=1) or [n_embd, n_patches, batch_size] (batch>1)
 
         // resampler projector (it is just another transformer)
@@ -413,6 +420,21 @@ struct vision_graph {
 
         // build the graph
         ggml_build_forward_expand(gf, embeddings);
+
+        if (vpm_profile) {
+            // [P0探针] 分段计时 + op 类型统计
+            auto tp2 = std::chrono::steady_clock::now();
+            auto ms_us = [](std::chrono::steady_clock::time_point a, std::chrono::steady_clock::time_point b) {
+                return std::chrono::duration_cast<std::chrono::microseconds>(b - a).count() / 1000.0;
+            };
+            std::map<enum ggml_op, int> opcnt;
+            const int n_nodes = ggml_graph_n_nodes(gf);
+            for (int i = 0; i < n_nodes; i++) opcnt[ggml_graph_node(gf, i)->op]++;
+            fprintf(stderr, "[VPM_PROFILE] setup=%.1f vit=%.1f resampler+graph=%.1f total=%.1fms nodes=%d ops:",
+                    ms_us(tp0, tp1), ms_us(tp1, tp2), ms_us(tp0, tp2), ms_us(tp0, tp2), n_nodes);
+            for (auto & kv : opcnt) fprintf(stderr, " %s:%d", ggml_op_name(kv.first), kv.second);
+            fprintf(stderr, "\n");
+        }
 
         return gf;
     }

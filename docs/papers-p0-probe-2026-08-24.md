@@ -124,3 +124,21 @@
   是官方实测结论，头文件齐全 + 编译通过 ≠ 运行时可用。**P1 图模式 CLOSED，不追。**
 - **教训**：USE_ACL_GRAPH 旧"头文件缺失"结论错在编译层判断；但方向性结论
   （910B 不用图模式）恰好正确——编译层与运行时是两层，都要实测。
+
+## P1 ③ VPM 构成量化（2026-08-24 补充）——graph build 非瓶颈，compute launch 主导
+
+- **插桩**（vision.cpp build_minicpmv 三段计时 + op 统计，env OMNI_VPM_PROFILE=1 门控默认关）
+- **graph build 仅 0.2-0.3ms**（推翻"每帧重建图是瓶颈"假设）——vpm_ms 227ms 几乎全是 compute 执行
+- **op 构成**（883 nodes，~700 执行）：MUL_MAT 169 / ADD 281（~189 为 matmul 后 bias）/
+  NORM 58 / CPY 56 / CONT 30 / FLASH_ATTN_EXT 28 / UNARY(GELU) 27 / MUL 58 /
+  RESHAPE 88+PERMUTE 85（evaluate 跳过不执行）
+- **结论**：~700 执行 op × 0.32ms/op = launch/搬运主导（MUL_MAT 理论计算 ~0.004ms/op）
+- **融合候选评估**：
+  | 候选 | 省 op 数 | 预期 | 工作量/风险 |
+  |---|---|---|---|
+  | matmul+bias 融合（aclnn 带 bias API 替代 Mm/BatchMatMul 三参调用） | ~189 ADD | encode -20%+ | 1-2 天，改 ggml-cann 核心，需验证 aclnn bias API 存在性 |
+  | NORM 融合（扩展 ADD+RMS_NORM fusion 到 GGML_OP_NORM） | ~29 | encode -5% | 1 天，新 fused kernel |
+  | CPY/CONT 削减（FA 分支 cast/cont 布局） | ~60 | encode -8% | 0.5-1 天，vision.cpp 布局 |
+- **注意**：VPM norm 是 GGML_OP_NORM（LayerNorm mean-based，非 RMS）→ 现有
+  GGML_CANN_OPERATOR_FUSION（ADD+RMS_NORM）对 VPM 无效（已实测 fusion=0/1 完全一致）；
+  TTS ResiLM 的 RMSNorm 融合也实测无收益（npu 6.88 vs 6.60 噪声级）→ OPERATOR_FUSION 全场景关闭
