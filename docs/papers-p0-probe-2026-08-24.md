@@ -108,3 +108,19 @@
   （比 logits 字节对比更全链路，比精度 benchmark 更严格更快——20 条 ~8 分钟生成）
   server 需 --seed 固定（TTS 采样 RNG 来自 common_sampler，--seed 可控）
 - 产物：/tmp/tts_a_th0/（THREADS=0）vs /tmp/tts_b_th24/（THREADS=24）
+
+## P1 图模式实测（2026-08-24 补充）——CLOSED，910B4 运行时不可用
+
+- **编译层**：build-cann-graph 全量构建成功（perf-duplex + server，USE_ACL_GRAPH=ON）
+- **off 基线**（GGML_CANN_ACL_GRAPH=off，graph binary）：TTS_STEP npu=6.60ms/步，
+  与 build-cann 普通 binary 完全一致（控制变量成立）
+- **on 实测**（GGML_CANN_ACL_GRAPH=on，decode 默认走图）：**证伪**——
+  ① TTS "zero norm detected" 数值异常（graph capture 期间 host-device 数据流破坏）
+  ② "build_whisper: Whisper encoder graph built" 反复出现 = 每帧 re-capture
+  （输入/KV 变化触发，图缓存 LRU 失效——正是理论风险点）
+  ③ frame 33 处理失败/超时 + 进程挂死（EXIT=143 强制终止）
+- **结论**：与官方 README L320 警告完全一致（"必须保持 GGML_CANN_ACL_GRAPH=off，
+  否则 vision encode 阶段可能因非法同步拷贝直接 abort"）——**910B 图模式运行时不可用**
+  是官方实测结论，头文件齐全 + 编译通过 ≠ 运行时可用。**P1 图模式 CLOSED，不追。**
+- **教训**：USE_ACL_GRAPH 旧"头文件缺失"结论错在编译层判断；但方向性结论
+  （910B 不用图模式）恰好正确——编译层与运行时是两层，都要实测。
