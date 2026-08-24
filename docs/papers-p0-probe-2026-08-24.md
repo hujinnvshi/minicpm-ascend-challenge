@@ -157,3 +157,24 @@
   encode -9%）；② matmul+bias 融合（省 ~189 ADD ~40ms，encode -17%）。
   两者均为 ggml-cann 核心改动（1-2 天），且官方 README L268 允许 env 上传。
 - 已回滚（vision.cpp 恢复原状，仅保留 VPM_PROFILE 插桩）；git diff 验证只剩插桩
+
+## P1 ③ B'（flash_attn 内部 cast k/v）实测——净负收益，回滚
+
+- **实现**：aclnn_ops.cpp ggml_cann_flash_attn_ext 加 k/v 内部 cast（复制 q 的 Step 1 模式，
+  pool allocator + aclnn_cast）+ vision.cpp 删预 cast → **CPY 56→0 实锤**（nodes 883→827）
+- **性能**（perf-duplex vpm 分布对比）：
+  | 指标 | B'前 | B'后 | Δ |
+  |---|---|---|---|
+  | p50 | 227.5 | 225.4 | -0.9% |
+  | p90 | 288.8 | 297.8 | +3.1% |
+  | p99 | 1836 | 5116 | **+179%** |
+  | max | 3577 | 5658 | +58% |
+  | 均值 | 280.7 | 363.5 | +30% |
+- **结论**：中位微降但尾部大幅恶化（p99 3.5x）——flash_attn 内部 cast 的 pool 分配在长尾帧
+  引入大抖动；官方 Σ 口径（pooled 均值）下 RTF 变差。**B' 回滚**（aclnn_ops.cpp 备份恢复 +
+  vision.cpp 预 cast 恢复，git diff 验证工作区=HEAD）
+- **教训**：① "省 op 数"≠"省时间"——cast 本身没消失（图节点→内部调用），省的是节点调度；
+  ② 改动必须看分布（p50/p90/p99/max），只看中位会漏掉尾部恶化——Σ 口径对尾部敏感；
+  ③ **vision.cpp 预 cast（图节点，数据流明确）是更稳的设计**，ggml 层内部 cast 的 pool
+  分配抖动不可接受。VPM 剩余融合空间（matmul+bias）同样有 pool/调度风险，收益未证，
+  **VPM 优化线正式收口**（除 matmul+bias 大工程外无红线内空间）
