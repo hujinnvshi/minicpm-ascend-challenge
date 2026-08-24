@@ -31,15 +31,18 @@
 
 ## 二、CLOSED 点原理级重审
 
-### 1. 量化（Q8_0/Q4_0）——关闭成立，机制 = dequant-bound
+### 1. 量化（Q8_0/Q4_0）——关闭成立，机制 = WeightQuant 算子在 910B 效率低（修正：非 dequant-bound）
 - 表层：Q8_0+FA 1.6484（decode 0.446，比 F16 慢 90%）；Q4_0 质量崩
-- 原理：ggml-cann 的量化 matmul 实现 = 先 dequant 权重到 F16 再走 FP16 Cube
-  → Q8 读取省一半带宽（0.58GB vs 1.16GB）但 dequant 开销 + F16 中间量
-  抵消，且 FP16 Cube 算力未变 → 净负。Q4 的 4-bit 精度损失致推理异常。
-- **Ascend Cube 原生 INT8 算力是 FP16 的 2 倍**——但 ggml 的 Q8_0 语义是
-  权重量化+激活 F16（非 QAT int8 双量化），CANN 无"int8 权重×fp16 激活"
-  原生 matmul（aclnn 的 int8 路径要求两侧同型）→ 原理性关闭。
-- 910C 重查项：无（同样受 ggml 语义限制，除非改数学=红线）。
+- 原理（2026-08-24 深挖修正）：Q8_0 走 **aclnnWeightQuantBatchMatmulV2**（aclnn_ops.cpp:2257）——
+  **CANN 原生权重量化 matmul**（int8 权重按 8bit 布局直喂 + scale 单独 tensor + 硬件反量化，
+  antiquantGroupSize=QK8_0=32），**不是**简单 dequant→F16 路径。8/21 反慢根因 = WeightQuant
+  算子在 910B4 上效率低（内部反量化开销 > 省一半带宽的收益），F16+FA 的 0.234 才是带宽最优。
+- **910B4 CANN 无 FP8**（acl_base.h 搜 ACL_FP8/FP8E4 零命中）→ 1 字节量化路径不存在；
+  Q8_0（1 字节权重）已是 CANN 原生支持的极限，实测反慢。
+- **"看到有人在量化"（2026-08-24 用户反馈）解读**：排行榜队伍在 910C 上量化有效——
+  910C 的 WeightQuant 算子效率高（新一代硬件原生 int8/FP8 Cube）+ 可能支持 FP8 →
+  **量化有效是硬件差异（910C 的武器），不是我们 910B4 的遗漏**（910B4 已走原生算子且实测反慢）。
+- 910C 重查项：FP8/WeightQuant 效率（若官方环境确认 910C，量化是 decode 段杠杆）。
 
 ### 2. KV 量化——关闭成立（910B4），910C 必须重查
 - 表层：CANN 无 QUANTIZE 算子，CPU 反量化带宽反增
