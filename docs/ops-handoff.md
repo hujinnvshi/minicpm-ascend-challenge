@@ -294,3 +294,21 @@ cmake --build code/llama.cpp-omni/build-cann -j$(nproc)
 - **复测纪律**：提交前按"≥3 次取中位"补跑 2 次全量 rts（r1=1.151/r2=1.181），4 次合并中位 1.166，
   分布与 v5（1.3291-1.342）零重叠 → 提升非噪声（详见 docs/papers-p0-probe-2026-08-24.md）
 - **待办**：评测结果 2-3 天刷新排行榜；v5（1.3291 配置）与 v6（1.166 配置）均在调度队列
+
+## 2026-08-25 提交调度状态与文档核对（v6 README 哈希问题）
+
+- **用户反馈**：提交（v1-v6）从未被调度到评测资源。榜单（8/24 21:17 刷新）10 队全为 8/11-8/21 旧分，
+  **8/21 后官方零新增出分**（不只我们，所有队伍无新分）→ 官方评测输出停滞或队列极长
+- **查证限制**：8/24 cookie 8/25 已对 commit 接口失效（get_all_commit_data → 900007 未登录；
+  但 checkLogin 返回 0000——checkLogin 判定不可靠的又一例证，**查提交状态以 get_all_commit_data 为准**）。
+  get_submit_status（通道开放）无需登录（race 0 仍开放 true）；get_rank_list 带 cookie 可查
+- **待办**：重登（sendmessage → 用户验证码 → login）→ get_all_commit_data（state）+ get_commit_log（final_score），
+  区分"排队中 vs 校验失败被搁置"；必要时群内反馈调度进度（8/21 公告明示"如有疑问，可在群内反馈"）
+- **🔴 v6 包 README 最终提交哈希无效（2026-08-25 实测）**：v6 包内 llama.cpp-omni.zip 与 staging
+  HEAD `1dd42b7` 的 git archive 逐字节一致（sha256 d89d91c4...），但外层 README 写"最终提交哈希 af67cfe"——
+  af67cfe 在主仓库与 staging 均不存在（无效对象名）。推断：v5 时代 staging HEAD=af67cfe，8/24 v6 打包时
+  staging 重建（重 clone 官方+覆盖提交 → 1dd42b7），README 哈希未同步。风险：SUBMISSION_GUIDE §4.1
+  人工复核对照 llama.cpp-omni.zip 内 git log 不一致 → 打回。**修复：v7 重打包 README 哈希改 1dd42b7**，
+  打包流程已在 /tmp/staging-llama-cpp-omni 验证（HEAD=1dd42b7，status clean）
+- **文档整理（同日）**：新增 session-2026-08-25.md；competition-readiness.md 加 §0 最新状态；
+  CLAUDE.md 硬件/图模式/Video-MME/导航/进度全量修正；status-assessment.md 标历史
