@@ -312,3 +312,16 @@ cmake --build code/llama.cpp-omni/build-cann -j$(nproc)
   打包流程已在 /tmp/staging-llama-cpp-omni 验证（HEAD=1dd42b7，status clean）
 - **文档整理（同日）**：新增 session-2026-08-25.md；competition-readiness.md 加 §0 最新状态；
   CLAUDE.md 硬件/图模式/Video-MME/导航/进度全量修正；status-assessment.md 标历史
+
+## 2026-08-26 v7 提交（VPM 同尺寸批量编码）——提交成功，任务调度中
+
+- **时间**：2026-08-26 03:4x（UTC；cookie 8/26 02:00 登录仍有效，跳过 login 直接 check→PUT→confirm）
+- **包**：dist/submission_v7_20260826.zip（68.6MB，SHA256 5b379cd6...，四件套）
+- **增量**（vs v6）：omni.cpp VPM 同尺寸批量编码（OMNI_VISION_BATCH_ALL 默认开；duplex 帧 overview+slice 同尺寸 336×602 合并 batch=2 一次编码，官方 vision_image_batch_encode API）——移植自 doma（深大&广工）公开归档 patch_vpm_batch.patch（原自 zs213118）
+- **本机口径（⚠️ 设备已换 910B2 64GB，NUMA node6=192-223）**：core RTF **1.0303 → 0.9366（中位 3 run：0.9366/0.9351/0.9377，-9.1%）**，v7 最差 < v6 最好（分布零重叠，间隔 0.084）；encode 0.3288→0.2548（-22.5%）；batch_validity 全 true；videomme 10/10 逐题零翻转（batch on/off）
+- **同批验证否决项**（doma 其余方案，910B2 上）：t2m CONT 消除 +3.1% 负收益（token2wav 段变慢）；TTS FA -0.7% 噪声内无收益（非 bit-identical）；均回退。head_code NPU/4 步 flow/layer cap 30 未移植（A/B 成本高/红线/需 prompt_cache 机制）
+- **哈希修复**：README 哈希占位 __STAGING_HEAD__ 打包时 sed 替换（staging HEAD 0a93f4a）——v6 的 af67cfe 失效问题根治；包验证 5/5（四件套/哈希一致/archive 重放逐字节一致/无违规项）
+- **链路**：upload_model_check（新 oss_key a9ef47f0...）→ OBS PUT 200（68.6MB）→ upload_model result 0000
+- **提交描述**：v7: +VPM 同尺寸批量编码 (OMNI_VISION_BATCH_ALL, encode -22.5%), RTF 1.0303->0.9366(910B2 同机 3run 中位, 分布零重叠), videomme 10/10 零翻转
+- **预期**：官方 910C 出分 ≈ v6 预估 0.69-0.73 × (1 - 5~9%) ≈ 0.63-0.69 → 排名第 7-8（910C 上 VPM batch 收益可能更大——encode 段在 910C 占比虽小但 batch 加速比同硬件）
+- **竞品情报**：doma 完整优化归档公开（gegemeimingzi/MiniCPM-o-Ascend-Optimization-Docs）——证实大学有 910C（"910B3→910C 换服务器"），其 8/21 后 sprint17/18 含 LLM layer cap 30 + T2W depth 8（改推理数学，官方 0.5417 来源）；详见 docs/competitor-intel-doma-2026-08-26.md

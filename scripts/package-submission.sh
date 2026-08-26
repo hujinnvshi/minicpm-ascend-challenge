@@ -66,7 +66,7 @@ git -C "$STAGING" -c user.name="submission" -c user.email="submission@local" \
   commit -q -m "chore: submission $(date +%Y-%m-%d) — 4 处 CANN/omni 优化补丁（默认行为=官方基线 b06198f）
 
 - ggml-cann.cpp: patch7 ggml_backend_cann_free 前 set_device（修复 910B4 析构线程 device 丢失崩溃）
-- omni.cpp: diag 开关（OMNI_DEBUG_PREFILL/TOPK/DUMP）+ OMNI_T2W_STEPS env + image_id 门控 + 系统提示 + NPU 串行锁（OMNI_NPU_SERIAL）+ TTS head_code 行间并行（OMNI_HEADCODE_THREADS，数值逐位一致）
+- omni.cpp: diag 开关（OMNI_DEBUG_PREFILL/TOPK/DUMP）+ OMNI_T2W_STEPS env + image_id 门控 + 系统提示 + NPU 串行锁（OMNI_NPU_SERIAL）+ TTS head_code 行间并行（OMNI_HEADCODE_THREADS，数值逐位一致）+ VPM 同尺寸批量编码（OMNI_VISION_BATCH_ALL，encode -22.5%、RTF -9.1%）
 - omni.h: T2WOut/last_chunk 结构对齐
 - vision.cpp: Omni_DUMP_EMBED diag 开关"
 STAGING_HEAD=$(git -C "$STAGING" log --oneline -1 | cat)
@@ -156,8 +156,11 @@ fi
 echo ""
 echo "[4/4] 外层 README.md（官方 SUBMISSION_GUIDE §4 结构）"
 # README 从 repo 文件复制（scripts/submission-README.md，随提交维护，避免 heredoc 漂移）
+# 最终提交哈希用 staging HEAD 替换占位（v6 曾因哈希固化 af67cfe 失效被审计——必须打包时替换）
 cp "$REPO_ROOT/scripts/submission-README.md" "$PKG_DIR/README.md"
-echo "  ✓ README.md 生成（scripts/submission-README.md）"
+STAGING_HEAD_SHORT=$(git -C "$STAGING" log --oneline -1 | cut -c1-7)
+sed -i "s/__STAGING_HEAD__/$STAGING_HEAD_SHORT/" "$PKG_DIR/README.md"
+echo "  ✓ README.md 生成（staging HEAD=$STAGING_HEAD_SHORT 已替换）"
 
 # ═══════════════ 5. 组装 submission.zip ═══════════════
 echo ""

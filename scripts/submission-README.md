@@ -9,8 +9,8 @@
 | 架构级改动 | 否（本提交为常规优化，未修改评测入口/计时/校验逻辑；修改点见 §2） |
 | 开发基线分支 | `bench/huawei`（官方） |
 | 基线提交哈希 | `b06198f`（refine rtf test #100） |
-| 最终提交哈希 | `af67cfe`（staging 仓库 HEAD，见 llama.cpp-omni.zip 内 git log） |
-| 目标硬件 | Atlas 800T A2 / 昇腾 910B4 单卡（32GB HBM）· aarch64 |
+| 最终提交哈希 | `__STAGING_HEAD__`（staging 仓库 HEAD，见 llama.cpp-omni.zip 内 git log） |
+| 目标硬件 | Atlas 800T A2 / 昇腾 910B2 单卡（64GB HBM，2026-08-26 平台重分配后本机）· aarch64 |
 | 软件 | CANN 9.1.0-beta.3 · ccec · CMake · Python 3.12 |
 
 ## 2. 优化说明
@@ -20,7 +20,7 @@
 | 文件 | 修改 | 原理/用途 | 是否改变行为 |
 |---|---|---|---|
 | `ggml/src/ggml-cann/ggml-cann.cpp` | 补丁 7：`ggml_backend_cann_free` 前 `ggml_cann_set_device` | 修复 910B4 上 omni_free 在未设置过 device 的线程执行时 CANN context null 崩溃（否则评测链路在析构阶段 abort） | 否（生命周期正确性修复） |
-| `tools/omni/omni.cpp` | 诊断开关（`OMNI_DEBUG_PREFILL`/`OMNI_DEBUG_TOPK`）+ `OMNI_T2W_STEPS` env 化 + image_id 门控 + 系统提示 + **NPU 提交串行化互斥锁（`OMNI_NPU_SERIAL` 门控）** + **TTS head_code logits 行间并行（`OMNI_HEADCODE_THREADS`，默认 24）+ per-step 计时插桩（`OMNI_TTS_STEP_PROFILE`）** | env 默认关闭/默认值=官方；NPU 锁消除 4 线程并发排队（encoder/llm/tts 三段互斥），RTF -3.3%；head_code matmul（6562×768，原 CPU 单核标量 8.6ms/步）行间并行后 3.1ms/步，每行内部累加顺序不变 → **logits 逐位一致**（26/26 实测），tts 0.417→0.275、RTF -14.3% | 否（默认关闭；并行版数值逐位一致） |
+| `tools/omni/omni.cpp` | 诊断开关（`OMNI_DEBUG_PREFILL`/`OMNI_DEBUG_TOPK`）+ `OMNI_T2W_STEPS` env 化 + image_id 门控 + 系统提示 + **NPU 提交串行化互斥锁（`OMNI_NPU_SERIAL` 门控）** + **TTS head_code logits 行间并行（`OMNI_HEADCODE_THREADS`，默认 24）+ per-step 计时插桩（`OMNI_TTS_STEP_PROFILE`）** + **VPM 同尺寸批量编码（`OMNI_VISION_BATCH_ALL`，默认开）** | env 默认关闭/默认值=官方；NPU 锁消除 4 线程并发排队（encoder/llm/tts 三段互斥），RTF -3.3%；head_code matmul（6562×768，原 CPU 单核标量 8.6ms/步）行间并行后 3.1ms/步，每行内部累加顺序不变 → **logits 逐位一致**（26/26 实测），tts 0.417→0.275、RTF -14.3%；**VPM batch**：duplex 每帧 overview+slice 同尺寸（336×602）合并单次 batch 编码（官方 vision_image_batch_encode），encode -22.5%、RTF -9.1%（910B2 同机 A/B 分布零重叠），videomme 10/10 零翻转 | 否（默认关闭/默认值=官方；并行版数值逐位一致） |
 | `tools/omni/omni.h` | T2WOut/last_chunk_timings 结构字段对齐 | 与 omni.cpp 配套 | 否 |
 | `tools/omni/vision.cpp` | `Omni_DUMP_EMBED` 诊断开关 + **VPM(ViT) Flash Attention（`OMNI_VISION_FA` 门控）** | env 默认关闭；VPM 原走 mul_mat+softmax（上游 TODO），FA 分支对齐 llama-graph 布局，encode -8.2%、RTF -2.1%、精度零翻转 | 否（默认关闭） |
 
@@ -37,6 +37,7 @@
 | `OMNI_VISION_FA` | 未设（VPM 无 FA） | 1 | VPM(视觉编码) | **VPM(ViT) Flash Attention**（vision.cpp build_attn FA 分支）；encode 0.452→0.415（-8.2%）；videomme 10/10 逐字节零翻转 |
 | `OMNI_NPU_SERIAL` | 未设（4 线程并发提交） | 1 | 全链路 NPU 提交 | **NPU 提交串行化互斥锁**（VPM/LLM-decode/TTS 三段互斥）：消除 4 线程并发排队（core 帧 vpm 383→341、cost_llm 233→91 稳态水平），RTF -3.3%；墙钟 +18ms 在帧间隔预算内；videomme 10/10 零翻转 |
 | `OMNI_HEADCODE_THREADS` | 24 | 24 | TTS head_code | **TTS logits 行间并行**（head_code 6562×768 CPU matmul，原单核标量 8.6ms/步，占 TTS 段 53%）：行间 std::thread 并行 → 3.1ms/步；每行内部标量累加顺序与原代码完全相同 → **logits 逐位一致**（THREADS=0 vs 24 实测 26/26 bin 字节一致）；tts 0.417→0.275（-34%）、core RTF 1.3291→1.139（-14.3%）；0=禁用回退官方 |
+| `OMNI_VISION_BATCH_ALL` | 未设（串行） | 1（默认开） | VPM(视觉编码) | **VPM 同尺寸批量编码**：duplex 每帧 overview+slice 同尺寸（336×602），合并 batch=2 一次编码（官方 vision_image_batch_encode API）；encode 0.329→0.255（**-22.5%**）、core RTF -9.1%（910B2 同机 A/B 3+3 run 分布零重叠：1.0303→0.9366）；videomme 10/10 逐题零翻转；`0`=关闭回退串行 |
 | `GGML_CANN_WEIGHT_NZ` | off | off | LLM | 官方要求（`evaluation/README.md` L317：必须保持 off，否则空串/复读异常输出） |
 | `GGML_CANN_ACL_GRAPH` | off | off | LLM | 910B 不支持图模式，保持关闭 |
 | NUMA 绑核（taskset） | — | NPU 同 node CPU | 全链路 | 避免跨 NUMA DMA；机器相关，先探测 `cat /sys/bus/pci/devices/<NPU_BDF>/numa_node` |
@@ -50,6 +51,7 @@
 | **+ `OMNI_FORCE_FA=1`（本提交）** | **1.38** | **1599ms** | **0.23** |
 | **本提交（FA + VPM FA + NPU 串行锁）** | **1.33** | **1559ms** | **0.24** |
 | **v6 增量（+ head_code 行间并行）** | **1.139** | — | 0.24 |
+| **v7 增量（+ VPM 批量编码，910B2）** | **0.9366** | — | encode 0.329→0.255 |
 
 > v6 实测（2026-08-24，官方 b06198f harness 全量 rts，turn=7 core 7 帧）：core RTF **1.139**（分项 encode 0.359 + llm_prefill 0.016 + llm_decode 0.240 + tts 0.275 + token2wav 0.249），batch_validity 全 true（data_valid+realtime_eligible+core_sufficient+score_eligible）。tts 段 -34% 来自 head_code 行间并行（逐位一致，见 §2.1）。
 
