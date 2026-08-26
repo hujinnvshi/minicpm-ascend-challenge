@@ -19,7 +19,7 @@ DIST="$REPO_ROOT/dist"
 PKG_DIR="$DIST/submission_${TAG}_${DATE}"
 PKG="$DIST/submission_${TAG}_${DATE}.zip"
 STAGING="/tmp/staging-llama-cpp-omni"
-OFFICIAL="/root/official-tmp"          # 官方 bench/huawei 仓库（HEAD=b06198f）
+OFFICIAL="${OFFICIAL_TMP:-/root/official-tmp}"   # 官方 bench/huawei 仓库（HEAD=b06198f）；可用 OFFICIAL_TMP 覆盖
 
 echo "════════════════════════════════════════════"
 echo "  submission.zip 四件套打包（官方 b06198f 规范）"
@@ -47,28 +47,31 @@ git clone -q --no-checkout "$OFFICIAL" "$STAGING"
 git -C "$STAGING" checkout -q HEAD
 echo "  staging 仓库已建立: $(git -C "$STAGING" log --oneline -1 | cat)"
 
-# 1b. 覆盖我方改动（4 文件，全部默认行为=官方，红线合规）
-cp "$REPO_ROOT/code/llama.cpp-omni/ggml/src/ggml-cann/ggml-cann.cpp" "$STAGING/ggml/src/ggml-cann/ggml-cann.cpp"
+# 1b. 覆盖我方改动（6 文件，全部默认行为=官方，红线合规）
+cp "$REPO_ROOT/code/llama.cpp-omni/ggml/include/ggml-cann.h"           "$STAGING/ggml/include/ggml-cann.h"
+cp "$REPO_ROOT/code/llama.cpp-omni/ggml/src/ggml-cann/ggml-cann.cpp"   "$STAGING/ggml/src/ggml-cann/ggml-cann.cpp"
+cp "$REPO_ROOT/code/llama.cpp-omni/ggml/src/ggml-cann/aclnn_ops.cpp"   "$STAGING/ggml/src/ggml-cann/aclnn_ops.cpp"
 cp "$REPO_ROOT/code/llama.cpp-omni/tools/omni/omni.cpp"                "$STAGING/tools/omni/omni.cpp"
 cp "$REPO_ROOT/code/llama.cpp-omni/tools/omni/omni.h"                  "$STAGING/tools/omni/omni.h"
 cp "$REPO_ROOT/code/llama.cpp-omni/tools/omni/vision.cpp"              "$STAGING/tools/omni/vision.cpp"
 
-# 1c. 确认改动范围（应恰为 4 文件）
+# 1c. 确认改动范围（应恰为 6 文件）
 CHANGED=$(git -C "$STAGING" status --short)
 echo "  改动文件:"
 echo "$CHANGED" | sed 's/^/    /'
 N_CHANGED=$(echo "$CHANGED" | grep -c '^ M')
-[ "$N_CHANGED" -eq 4 ] || { echo "WARN: 预期 4 个改动文件，实际 $N_CHANGED"; }
+[ "$N_CHANGED" -eq 6 ] || { echo "WARN: 预期 6 个改动文件，实际 $N_CHANGED"; }
 
 # 1d. 提交 + git archive
 git -C "$STAGING" add -A
 git -C "$STAGING" -c user.name="submission" -c user.email="submission@local" \
-  commit -q -m "chore: submission $(date +%Y-%m-%d) — 4 处 CANN/omni 优化补丁（默认行为=官方基线 b06198f）
+  commit -q -m "chore: submission $(date +%Y-%m-%d) — 6 处 CANN/omni 优化补丁（默认行为=官方基线 b06198f）
 
-- ggml-cann.cpp: patch7 ggml_backend_cann_free 前 set_device（修复 910B4 析构线程 device 丢失崩溃）
+- ggml-cann.h/.cpp: patch7 ggml_backend_cann_free 前 set_device + per-backend ACL 图模式接口（ggml_backend_cann_set_acl_graph，USE_ACL_GRAPH 构建时有效）
+- aclnn_ops.cpp: CANN FA contiguity 修复（非规范 [B,S,N,D] 视图连续拷贝，B<=1 忽略 dim3）——消除多 token prefill 崩溃、解锁 910C 图模式
 - omni.cpp: diag 开关（OMNI_DEBUG_PREFILL/TOPK/DUMP）+ OMNI_T2W_STEPS env + image_id 门控 + 系统提示 + NPU 串行锁（OMNI_NPU_SERIAL）+ TTS head_code 行间并行（OMNI_HEADCODE_THREADS，数值逐位一致）+ VPM 同尺寸批量编码（OMNI_VISION_BATCH_ALL，encode -22.5%、RTF -9.1%）
 - omni.h: T2WOut/last_chunk 结构对齐
-- vision.cpp: Omni_DUMP_EMBED diag 开关"
+- vision.cpp: Omni_DUMP_EMBED diag 开关 + 图模式受限使能（per-backend set_acl_graph）"
 STAGING_HEAD=$(git -C "$STAGING" log --oneline -1 | cat)
 echo "  staging HEAD: $STAGING_HEAD"
 

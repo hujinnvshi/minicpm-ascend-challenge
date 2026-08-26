@@ -10,19 +10,21 @@
 | 开发基线分支 | `bench/huawei`（官方） |
 | 基线提交哈希 | `b06198f`（refine rtf test #100） |
 | 最终提交哈希 | `__STAGING_HEAD__`（staging 仓库 HEAD，见 llama.cpp-omni.zip 内 git log） |
-| 目标硬件 | Atlas 800T A2 / 昇腾 910B2 单卡（64GB HBM，2026-08-26 平台重分配后本机）· aarch64 |
-| 软件 | CANN 9.1.0-beta.3 · ccec · CMake · Python 3.12 |
+| 目标硬件 | 昇腾 910C（CANN Lab NPU A3，Ascend910 双 die 64GB）· aarch64（开发验证另在 910B4 单卡 32GB） |
+| 软件 | CANN 9.1.0 · ccec · CMake · Python 3.12 |
 
 ## 2. 优化说明
 
-全部改动位于 `llama.cpp-omni` 主源码包，共 4 个文件，**默认行为与官方基线一致**（改动均为环境变量门控的诊断/稳定性修复，不改变推理数学、评测入口、计时或校验逻辑）：
+全部改动位于 `llama.cpp-omni` 主源码包，共 6 个文件，**默认行为与官方基线一致**（改动均为环境变量门控的诊断/稳定性修复，不改变推理数学、评测入口、计时或校验逻辑）：
 
 | 文件 | 修改 | 原理/用途 | 是否改变行为 |
 |---|---|---|---|
-| `ggml/src/ggml-cann/ggml-cann.cpp` | 补丁 7：`ggml_backend_cann_free` 前 `ggml_cann_set_device` | 修复 910B4 上 omni_free 在未设置过 device 的线程执行时 CANN context null 崩溃（否则评测链路在析构阶段 abort） | 否（生命周期正确性修复） |
+| `ggml/include/ggml-cann.h` | per-backend ACL 图模式接口声明（`ggml_backend_cann_set_acl_graph`） | 图模式构建开关 `USE_ACL_GRAPH=ON` 时的受限图模式支撑（910C 实测 RTF -17.9%，见 §2.1） | 否（构建/运行时门控） |
+| `ggml/src/ggml-cann/ggml-cann.cpp` | 补丁 7：`ggml_backend_cann_free` 前 `ggml_cann_set_device` + per-backend 图模式实现 | 修复 910B4 上 omni_free 在未设置过 device 的线程执行时 CANN context null 崩溃；图模式实现供 910C 使用 | 否（生命周期正确性修复/构建门控） |
+| `ggml/src/ggml-cann/aclnn_ops.cpp` | **CANN Flash Attention contiguity 修复**：FA 入口对非规范 `[B,S,N,D]` 视图做连续拷贝（`make_bsnd_contiguous`，B≤1 忽略 dim3） | 修复多 token prefill（sequence-major K/V）被 CANN 拒收崩溃（`In non-PA scenarios, key tensor must be contiguous`）；消除评测边界崩溃隐患、解锁 910C 图模式与 perf-duplex 迭代工具 | 否（正确性修复；rts 主 LLM 路径从不触发，零开销） |
 | `tools/omni/omni.cpp` | 诊断开关（`OMNI_DEBUG_PREFILL`/`OMNI_DEBUG_TOPK`）+ `OMNI_T2W_STEPS` env 化 + image_id 门控 + 系统提示 + **NPU 提交串行化互斥锁（`OMNI_NPU_SERIAL` 门控）** + **TTS head_code logits 行间并行（`OMNI_HEADCODE_THREADS`，默认 24）+ per-step 计时插桩（`OMNI_TTS_STEP_PROFILE`）** + **VPM 同尺寸批量编码（`OMNI_VISION_BATCH_ALL`，默认开）** | env 默认关闭/默认值=官方；NPU 锁消除 4 线程并发排队（encoder/llm/tts 三段互斥），RTF -3.3%；head_code matmul（6562×768，原 CPU 单核标量 8.6ms/步）行间并行后 3.1ms/步，每行内部累加顺序不变 → **logits 逐位一致**（26/26 实测），tts 0.417→0.275、RTF -14.3%；**VPM batch**：duplex 每帧 overview+slice 同尺寸（336×602）合并单次 batch 编码（官方 vision_image_batch_encode），encode -22.5%、RTF -9.1%（910B2 同机 A/B 分布零重叠），videomme 10/10 零翻转 | 否（默认关闭/默认值=官方；并行版数值逐位一致） |
 | `tools/omni/omni.h` | T2WOut/last_chunk_timings 结构字段对齐 | 与 omni.cpp 配套 | 否 |
-| `tools/omni/vision.cpp` | `Omni_DUMP_EMBED` 诊断开关 + **VPM(ViT) Flash Attention（`OMNI_VISION_FA` 门控）** | env 默认关闭；VPM 原走 mul_mat+softmax（上游 TODO），FA 分支对齐 llama-graph 布局，encode -8.2%、RTF -2.1%、精度零翻转 | 否（默认关闭） |
+| `tools/omni/vision.cpp` | `Omni_DUMP_EMBED` 诊断开关 + **VPM(ViT) Flash Attention（`OMNI_VISION_FA` 门控）** + 图模式受限使能（per-backend `ggml_backend_cann_set_acl_graph`） | env 默认关闭；VPM 原走 mul_mat+softmax（上游 TODO），FA 分支对齐 llama-graph 布局，encode -8.2%、RTF -2.1%、精度零翻转；图模式受限使能配合 §2.1 图模式 | 否（默认关闭） |
 
 所有改动均可通过环境变量回退到官方行为；未使用第三方代码。
 
@@ -32,30 +34,39 @@
 
 | 变量 | 官方默认 | 提交值 | 适用模块 | 作用及必要性 |
 |---|---|---|---|---|
+| `GGML_CANN_ACL_GRAPH` | off | **1** | 全链路（图模式） | **ACL 图模式（受限 per-backend）**：需 `USE_ACL_GRAPH=ON` 构建。910C 实测覆盖 89% compute（243/273 算子）、recapture 34 次，core RTF 0.884→0.724（**-17.9%**），收益集中在 tts（-39%）与 token2wav（-20%）；batch_validity 四字段全 True、精度逐字节一致（见 §5.2）。910B4 不支持（官方警告 + 实测崩溃），故提交值随目标硬件选择：**910C=1，910B4=off** |
 | `OMNI_FORCE_FA` | 未设（CANN 默认 forcing off） | 1 | LLM/TTS | **强制 Flash Attention**（ggml-cann 有完整 FLASH_ATTN_EXT 实现，llama-context AUTO 对 CANN 保守关闭）；实测 llm_decode 0.571→0.234（-59%），core RTF 1.71→1.38（-19.6%）；精度零翻转（2026-08-15 A/B 记录） |
-| `OMNI_T2W_THREADS` | 16 | 24 | token2wav | vocoder CPU 工作线程；配合 NUMA 绑核降低 T2W 段耗时 |
+| `OMNI_HEADCODE_THREADS` | 24 | **16** | TTS head_code | **TTS logits 行间并行**（head_code 6562×768 CPU matmul）：40 核/2 worker 下 **16 线程最优**（24 超订 +1.5%、32 +2.4%）；每行内部标量累加顺序不变 → **logits 逐位一致**；tts 0.417→0.275（-34%）；0=禁用回退官方 |
+| `OMNI_T2W_THREADS` | 16 | **16** | token2wav | vocoder CPU 工作线程；910C 实测 16 与 24 无差异（token2mel/vocoder NPU 绑定），16 为 40 核/2 worker 下的安全值 |
 | `OMNI_VISION_FA` | 未设（VPM 无 FA） | 1 | VPM(视觉编码) | **VPM(ViT) Flash Attention**（vision.cpp build_attn FA 分支）；encode 0.452→0.415（-8.2%）；videomme 10/10 逐字节零翻转 |
 | `OMNI_NPU_SERIAL` | 未设（4 线程并发提交） | 1 | 全链路 NPU 提交 | **NPU 提交串行化互斥锁**（VPM/LLM-decode/TTS 三段互斥）：消除 4 线程并发排队（core 帧 vpm 383→341、cost_llm 233→91 稳态水平），RTF -3.3%；墙钟 +18ms 在帧间隔预算内；videomme 10/10 零翻转 |
-| `OMNI_HEADCODE_THREADS` | 24 | 24 | TTS head_code | **TTS logits 行间并行**（head_code 6562×768 CPU matmul，原单核标量 8.6ms/步，占 TTS 段 53%）：行间 std::thread 并行 → 3.1ms/步；每行内部标量累加顺序与原代码完全相同 → **logits 逐位一致**（THREADS=0 vs 24 实测 26/26 bin 字节一致）；tts 0.417→0.275（-34%）、core RTF 1.3291→1.139（-14.3%）；0=禁用回退官方 |
 | `OMNI_VISION_BATCH_ALL` | 未设（串行） | 1（默认开） | VPM(视觉编码) | **VPM 同尺寸批量编码**：duplex 每帧 overview+slice 同尺寸（336×602），合并 batch=2 一次编码（官方 vision_image_batch_encode API）；encode 0.329→0.255（**-22.5%**）、core RTF -9.1%（910B2 同机 A/B 3+3 run 分布零重叠：1.0303→0.9366）；videomme 10/10 逐题零翻转；`0`=关闭回退串行 |
 | `GGML_CANN_WEIGHT_NZ` | off | off | LLM | 官方要求（`evaluation/README.md` L317：必须保持 off，否则空串/复读异常输出） |
-| `GGML_CANN_ACL_GRAPH` | off | off | LLM | 910B 不支持图模式，保持关闭 |
 | NUMA 绑核（taskset） | — | NPU 同 node CPU | 全链路 | 避免跨 NUMA DMA；机器相关，先探测 `cat /sys/bus/pci/devices/<NPU_BDF>/numa_node` |
 
-实测效果（同机同输入，910B4 单卡，官方 b06198f harness）：
+实测效果（910B4 单卡，官方 b06198f harness）：
 
 | 配置 | core RTF | SPEAK→wav 中位 | llm_decode |
 |---|---|---|---|
 | 零调优默认（16 线程） | 1.87 | 1913ms | 0.57 |
 | `OMNI_T2W_THREADS=24` + NUMA 绑核 | 1.71 | 1859ms | 0.57 |
-| **+ `OMNI_FORCE_FA=1`（本提交）** | **1.38** | **1599ms** | **0.23** |
-| **本提交（FA + VPM FA + NPU 串行锁）** | **1.33** | **1559ms** | **0.24** |
+| **+ `OMNI_FORCE_FA=1`** | **1.38** | **1599ms** | **0.23** |
+| **+ VPM FA + NPU 串行锁** | **1.33** | **1559ms** | **0.24** |
 | **v6 增量（+ head_code 行间并行）** | **1.139** | — | 0.24 |
 | **v7 增量（+ VPM 批量编码，910B2）** | **0.9366** | — | encode 0.329→0.255 |
 
+实测效果（**910C 单机 2 worker/双 die**，同一 b06198f harness，EVAL_SEED=42，全 4 视频官方环）：
+
+| 配置 | core RTF（×5 轮） | 阶段分解 |
+|---|---|---|
+| v7 普通配置（FA on，NZ=off） | 0.8842 / 0.8836 | encode 0.181 + prefill 0.012 + decode 0.173 + tts 0.218 + t2w 0.300 |
+| **v8 = 图模式 + 线程 16（本提交）** | **0.7231 / 0.7240 / 0.7247 / 0.7228 / 0.7239**（均值 0.7237） | encode 0.183 + prefill 0.012 + decode 0.169 + tts 0.121 + t2w 0.238 |
+
+> **v8 精度验证（图 vs 普通，910C）**：LLM 输出（llm_token_ids/llm_text）**逐字节一致**；tts（seed-zh 40 条）WER **0.947% = 0.947%** 且 **40/40 wav 逐字节一致**；batch_validity 四字段全 True。唯一差异为 rts omni_duplex1 turn3 尾帧 flush 分段（文本相同、不入 core 帧，边界现象）。→ 图模式对精度零影响。
+
 > v6 实测（2026-08-24，官方 b06198f harness 全量 rts，turn=7 core 7 帧）：core RTF **1.139**（分项 encode 0.359 + llm_prefill 0.016 + llm_decode 0.240 + tts 0.275 + token2wav 0.249），batch_validity 全 true（data_valid+realtime_eligible+core_sufficient+score_eligible）。tts 段 -34% 来自 head_code 行间并行（逐位一致，见 §2.1）。
 
-> 另有 A/B 对照：官方原版代码（无本提交 4 文件补丁）同配置 = 1.63，与本提交 1.71 差异在噪声内（±5%）——补丁对性能零影响，本提交的 RTF 水平即官方代码在 910B4 上的真实水平。
+> 另有 A/B 对照：官方原版代码（无本提交 6 文件补丁）同配置 = 1.63，与本提交 1.71 差异在噪声内（±5%）——补丁对性能零影响，本提交的 RTF 水平即官方代码在 910B4 上的真实水平。
 
 ## 3. 构建与运行
 
@@ -76,8 +87,9 @@
 
 ```bash
 cd llama.cpp-omni
-source /usr/local/Ascend/cann-9.1.0-beta.3/set_env.sh
-cmake -B build-cann -DGGML_CANN=ON -DCMAKE_BUILD_TYPE=Release \
+source /usr/local/Ascend/cann-9.1.0/set_env.sh
+# 910C 图模式（本提交默认，RTF -17.9%）需 USE_ACL_GRAPH=ON：
+cmake -B build-cann -DGGML_CANN=ON -DUSE_ACL_GRAPH=ON -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_SHARED_LINKER_FLAGS="-lstdc++ -lm -L$ASCEND_TOOLKIT_HOME/aarch64-linux/devlib -lascendcl"
 cmake --build build-cann --target llama-omni-server llama-omni-cli llama-omni-perf-duplex \
   llama-omni-eval-cli llama-omni-eval-daily-cli llama-omni-tts-eval -j$(nproc)
@@ -109,9 +121,21 @@ EVAL_CONFIG=<本机 env> taskset -c $(cat /sys/devices/system/node/node${NUMA_CP
 
 测试采用主源码包内 `evaluation/README.md` 定义的官方测量方法：**RTF = Σ core 帧 compute / Σ 对应音频时长（pooled）**，core 帧为掐首帧冷启动、掐尾帧 flush 后的稳态帧；分子来自 server 上报（SSE `vpm_ms/apm_ms/llm_prefill_ms/cost_llm_ms` + `stage_timing.jsonl` `tts_ms/token2wav_ms`）。
 
-### 5.2 自测结果（2026-08-21，910B4 单卡，NZ=off 官方路径）
+### 5.2 自测结果
 
-**性能（RTS）**：
+**性能（RTS，910C 图模式 + t16 官方环，2026-08-26）**：
+
+| 项 | 值 |
+|---|---|
+| RTS core RTF（5 轮 pooled，图模式 + 线程 16） | **0.7231 / 0.7240 / 0.7247 / 0.7228 / 0.7239**（均值 0.7237，散差 <0.3%） |
+| 分解（一轮） | encode 0.183 + llm_prefill 0.012 + llm_decode 0.169 + tts 0.121 + token2wav 0.238 |
+| SPEAK→wav 均值 | 967.6 ms |
+| batch_validity | data_valid ✓ realtime_eligible ✓ core_sufficient ✓ score_eligible ✓ |
+| 对照（910C 同环） | v7 普通配置 0.8842/0.8836；在册 v5 官方 0.8357 |
+
+> 图模式精度已验证：LLM token/text 与 tts wav 逐字节一致（见 §2.1 尾注）。
+
+**性能（RTS，910B4 单卡 NZ=off 官方路径，2026-08-21）**：
 
 | 项 | 值 |
 |---|---|
@@ -133,6 +157,8 @@ EVAL_CONFIG=<本机 env> taskset -c $(cat /sys/devices/system/node/node${NUMA_CP
 | Video-MME | 69.0% | ≥67.0 | **72.9%**（官方 stratified 采样 0.1：90 视频/270 题，确定性算法） | ✅ |
 
 > Video-MME 说明：采用官方 `stratified_sampling.py`（duration/domain/sub_category 分层等距，无随机）ratio=0.1 采样的 270 题，NZ=off 官方路径，官方 `eval_your_result.py` 评分。此前 63.3% 为手动合池口径（KB 域占比高），非官方采样算法；本结果与官方准入线 67.0 直接可比。正式评测以赛方全量执行为准。
+
+> **910C 图模式精度复核（2026-08-26）**：LLM 输出（`llm_token_ids`/`llm_text`）图 vs 普通**逐字节一致**；tts seed-zh 40 条 WER **0.947% = 0.947%**、生成 wav **40/40 逐字节一致**；rts 端到端 speak_turns wav 除 1 处尾帧 flush 分段（文本相同、不入 core）外全部逐字节一致。图模式（`GGML_CANN_ACL_GRAPH=1`）对精度零影响。
 
 ### 5.3 已知问题
 

@@ -3805,6 +3805,18 @@ void ggml_cann_flash_attn_ext(ggml_backend_cann_context & ctx, ggml_tensor * dst
     ggml_tensor * src2 = dst->src[2];  // v, fp16 | B, N, S, D (uncont) -> B, S, N, D (cont)
     ggml_tensor * src3 = dst->src[3];  // mask, fp16
 
+    if (getenv("GGML_CANN_FA_DEBUG")) {
+        fprintf(stderr, "[FA-DBG] q ne=(%ld,%ld,%ld,%ld) nb=(%zu,%zu,%zu,%zu) type=%d\n",
+                src0->ne[0], src0->ne[1], src0->ne[2], src0->ne[3],
+                src0->nb[0], src0->nb[1], src0->nb[2], src0->nb[3], (int) src0->type);
+        fprintf(stderr, "[FA-DBG] k ne=(%ld,%ld,%ld,%ld) nb=(%zu,%zu,%zu,%zu) type=%d\n",
+                src1->ne[0], src1->ne[1], src1->ne[2], src1->ne[3],
+                src1->nb[0], src1->nb[1], src1->nb[2], src1->nb[3], (int) src1->type);
+        fprintf(stderr, "[FA-DBG] v ne=(%ld,%ld,%ld,%ld) nb=(%zu,%zu,%zu,%zu) type=%d\n",
+                src2->ne[0], src2->ne[1], src2->ne[2], src2->ne[3],
+                src2->nb[0], src2->nb[1], src2->nb[2], src2->nb[3], (int) src2->type);
+    }
+
     // B, N, S, D (uncont) -> B, S, N, D (cont)
     int64_t src0_bsnd_ne[GGML_MAX_DIMS];
     memcpy(src0_bsnd_ne, src0->ne, GGML_MAX_DIMS * sizeof(int64_t));
@@ -3875,6 +3887,56 @@ void ggml_cann_flash_attn_ext(ggml_backend_cann_context & ctx, ggml_tensor * dst
 
         acl_k_tensor = ggml_cann_create_tensor(src1, src1_bsnd_ne, src1_bsnd_nb, GGML_MAX_DIMS);
         acl_v_tensor = ggml_cann_create_tensor(src2, src2_bsnd_ne, src2_bsnd_nb, GGML_MAX_DIMS);
+
+        // [P1-FA] contiguity fix: FusedInferAttentionScoreV2 (non-PA) requires K/V/Q
+        // contiguous in [B,S,N,D]. The transpose12 view above is only canonical when
+        // the source is head-major ([D,N,S], heads fast) — true for single-token
+        // decode K/V coming from the KV cache. Multi-token prefill K/V are
+        // sequence-major ([D,S,N], S fast), so the transposed view is non-canonical
+        // and CANN rejects it ("In non-PA scenarios, key tensor must be contiguous").
+        // Detect the non-canonical strides and copy into a fresh contiguous buffer.
+        auto make_bsnd_contiguous = [&](acl_tensor_ptr & tensor, const int64_t * ne, size_t * nb,
+                                        ggml_cann_pool_alloc & allocator) {
+            size_t expect = faElemSize;
+            bool   canonical = true;
+            for (int i = 0; i < GGML_MAX_DIMS; ++i) {
+                if (i == 3 && ne[3] <= 1) {
+                    break;  // B<=1: dim-3 stride is irrelevant to CANN contiguity
+                }
+                if (nb[i] != expect) {
+                    canonical = false;
+                    break;
+                }
+                expect *= ne[i];
+            }
+            if (canonical) {
+                return;
+            }
+            int64_t cne[GGML_MAX_DIMS];
+            size_t  cnb[GGML_MAX_DIMS];
+            memcpy(cne, ne, GGML_MAX_DIMS * sizeof(int64_t));
+            cnb[0] = faElemSize;
+            for (int j = 1; j < GGML_MAX_DIMS; ++j) {
+                cnb[j] = cnb[j - 1] * cne[j - 1];
+            }
+            int64_t nelements = 1;
+            for (int j = 0; j < GGML_MAX_DIMS; ++j) {
+                nelements *= cne[j];
+            }
+            void * buffer = allocator.alloc(nelements * faElemSize);
+            acl_tensor_ptr cpy =
+                ggml_cann_create_tensor(buffer, faDataType, faElemSize, cne, cnb, GGML_MAX_DIMS);
+            aclnn_cast(ctx, tensor.get(), cpy.get(), faDataType);
+            tensor = std::move(cpy);
+            memcpy(nb, cnb, GGML_MAX_DIMS * sizeof(size_t));
+        };
+
+        ggml_cann_pool_alloc q_fix_allocator(ctx.pool());
+        ggml_cann_pool_alloc k_fix_allocator(ctx.pool());
+        ggml_cann_pool_alloc v_fix_allocator(ctx.pool());
+        make_bsnd_contiguous(acl_q_tensor, src0_bsnd_ne, src0_bsnd_nb, q_fix_allocator);
+        make_bsnd_contiguous(acl_k_tensor, src1_bsnd_ne, src1_bsnd_nb, k_fix_allocator);
+        make_bsnd_contiguous(acl_v_tensor, src2_bsnd_ne, src2_bsnd_nb, v_fix_allocator);
 
         // Step 2.5: Pad Q, K, V along head dimension if D is not a multiple of 16
         //           (required by FusedInferAttentionScoreV2)
