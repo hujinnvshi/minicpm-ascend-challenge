@@ -31,9 +31,18 @@ ls /usr/local/Ascend/*/tools/bisheng_compiler/bin/ccec   # ccec 编译器（构�
 cd /workspace
 git clone -b v7-doma-port https://github.com/hujinnvshi/minicpm-ascend-challenge.git
 cd minicpm-ascend-challenge
-git log --oneline -1    # 期望 f45f67e（v7 最新）
+git log --oneline -1    # 期望 ef5472a（v7 最新，含 test_case 入库）
 # v7 核心代码：code/llama.cpp-omni/tools/omni/omni.cpp 含 OMNI_VISION_BATCH_ALL（VPM 批量编码）
+# rts 测试用例已随仓库提供：evaluation/judge-final/assets/test_case/（4 个 test_case，免生成）
 ```
+
+## 2.5 隔离环境数据通道（本机 ↔ 910C 不通，全部走独立通道）
+
+| 数据 | 通道 | 状态 |
+|---|---|---|
+| 代码 + 文档 + test_case | GitHub（v7-doma-port 分支） | ✅ 已就绪（test_case 6.8MB 已入库） |
+| 模型权重（19GB 全模态） | ModelScope 下载（见 §3） | 910C 环境执行 |
+| 评测结果回传 | 贴回对话 / push 分支 docs/ | 用户操作 |
 
 ## 3. 模型下载（ModelScope，权重 19GB 全模态）
 
