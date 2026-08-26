@@ -119,7 +119,30 @@ taskset -c <NPU同node核> ./run_all.sh --tasks rts --smoke 2 --no-build
 | 设备会被平台重分配 | 每次开机先 npu-smi 探测，勿信文档硬件参数 |
 | omni_init 超时 | BATCH_WORKER_FAILED 是瞬态，重试即可（模型加载有时 >120s） |
 
-## 8. 需要回传本机的信息
+## 8. Hermes Agent 部署（910C 上装 agent，自主完成构建/验证/回传）
+
+> 910C 与本站隔离，装 Hermes 后可直接对话操作（构建/跑 rts/探针），验证闭环自主完成。
+
+```bash
+# 1. 安装（自动装 uv/python/venv/launcher）
+curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
+
+# 2. 配置模型（选 provider + 填 API key——DeepSeek 原生 API 或 DashScope；910C 隔离，key 需手工填）
+hermes setup
+
+# 3. 启动（交互式对话）
+hermes
+
+# 4. 常用：单次查询 / 健康检查
+hermes chat -q "910C 环境探测：npu-smi info + cat /usr/local/Ascend/*/version.cfg"
+hermes doctor
+```
+
+- 装好后对 Hermes 说：按 README-910C.md §1-§6 执行 910C 验证（构建/rts/图模式探针），结果回传
+- 若 install.sh 网络不通（github 443 超时）：备选 `pip install hermes-agent`，或本机打包安装
+- 会话持久化：~/.hermes/（config/keys/sessions），与主仓库互不干扰
+
+## 9. 需要回传本机的信息
 
 1. npu-smi 输出（型号/算力确认）
 2. CANN version.cfg + ccec 确认
