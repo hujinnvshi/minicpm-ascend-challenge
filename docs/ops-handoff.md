@@ -325,3 +325,13 @@ cmake --build code/llama.cpp-omni/build-cann -j$(nproc)
 - **提交描述**：v7: +VPM 同尺寸批量编码 (OMNI_VISION_BATCH_ALL, encode -22.5%), RTF 1.0303->0.9366(910B2 同机 3run 中位, 分布零重叠), videomme 10/10 零翻转
 - **预期**：官方 910C 出分 ≈ v6 预估 0.69-0.73 × (1 - 5~9%) ≈ 0.63-0.69 → 排名第 7-8（910C 上 VPM batch 收益可能更大——encode 段在 910C 占比虽小但 batch 加速比同硬件）
 - **竞品情报**：doma 完整优化归档公开（gegemeimingzi/MiniCPM-o-Ascend-Optimization-Docs）——证实大学有 910C（"910B3→910C 换服务器"），其 8/21 后 sprint17/18 含 LLM layer cap 30 + T2W depth 8（改推理数学，官方 0.5417 来源）；详见 docs/competitor-intel-doma-2026-08-26.md
+
+## 2026-08-26 v8 提交（ACL 图模式 + 线程 16，910C）——提交成功，任务调度中
+
+- **包**：dist/submission_v8-910c_20260826.zip（66MB，SHA256 08e619ff41237f0f83fdf3c3700f4aa1c76468afe7ecf282f65c01ee811d5c02，四件套）
+- **代码**：910c 分支（c7ec345）＝官方 b06198f + **6 文件**（ggml-cann.h/.cpp、aclnn_ops.cpp、omni.cpp/.h、vision.cpp，含此前漏掉的 ggml-cann.h 图模式声明）
+- **链路**：sendmessage（验证码）→ login 0000 → upload_model_check（oss_key user_commit/2026/0/0/f795942961c3/1453ac102b744f6ead0b897b0734bc24.tar.gz）→ OBS PUT 200（66025195 bytes）→ upload_model result 0000
+- **提交描述**：v8: +ACL图模式(GGML_CANN_ACL_GRAPH=1)+线程16, 910C core RTF 0.7237(-17.9% vs v7 0.884), CANN FA contiguity修复, 精度零影响(tts WER 0.845%, LLM逐字节一致)
+- **包质量审计**：外层恰 4 文件、无 __MACOSX__/._/.DS_Store、llama.cpp-omni.zip 为 git archive（staging HEAD 4c01622，相对官方恰 6 文件，工作树干净）、integration-support.zip 单顶层目录含 README、demo.mp4 有效（h264 37s）、README UTF-8 全节齐、无凭据
+- **精度验证（910C 实测）**：tts WER 0.845%（200 条，图=eager 逐字节一致）；LLM token/text 逐字节一致；rts batch_validity 全 True
+- **今日额度**：v7（1 次）+ v8（2 次）= 2/3
