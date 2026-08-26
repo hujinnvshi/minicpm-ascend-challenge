@@ -530,6 +530,48 @@ static bool encode_image_with_vision_chunks(vision_ctx * ctx_vision, int n_threa
     const int n_slices = n_total - 1;
     const bool use_batched = vision_get_batch_encode(ctx_vision) && (n_slices > 1);
 
+    // [v7-1] 批量优化：所有 entry（overview + slices）同尺寸时合并为单次 batch 编码。
+    // duplex 每帧 overview 与 slice 同尺寸（实测 336x602），原代码串行 overview+slices 两次完整图计算；
+    // 同尺寸合并 batch=2 一次编码，省一次 kernel 启动 + 设备端 batch 并行。
+    // 来源：doma（gegemeimingzi 归档，原自 zs213118）实测 RTF -5.9%、encode -17~24%，精度 0 翻转。
+    // OMNI_VISION_BATCH_ALL=0/off 可关闭（默认开）；小批量 ≤8 自动启用。
+    bool all_same_size = n_total >= 2;
+    for (int i = 1; i < n_total; i++) {
+        if (img_res_v.entries[i]->nx != img_res_v.entries[0]->nx
+            || img_res_v.entries[i]->ny != img_res_v.entries[0]->ny) {
+            all_same_size = false;
+            break;
+        }
+    }
+    static const bool batch_all_enabled = []() {
+        const char * s = std::getenv("OMNI_VISION_BATCH_ALL");
+        return s == nullptr || (std::string(s) != "0" && std::string(s) != "off");
+    }();
+    const bool batch_all = batch_all_enabled && all_same_size && n_total <= 8;
+
+    if (batch_all) {
+        // 合并 overview + slices 为单个 batch 编码
+        const int64_t t_batch_us = ggml_time_us();
+        vision_image_f32_batch all_batch;
+        for (int i = 0; i < n_total; i++) {
+            all_batch.entries.push_back(std::move(img_res_v.entries[i]));
+        }
+        const int per_image_floats = n_embd * n_tokens;
+        std::vector<float> batched_output((size_t)per_image_floats * n_total);
+        bool encoded = vision_image_batch_encode(ctx_vision, n_threads, &all_batch, batched_output.data());
+        if (!encoded) {
+            LOG_ERR("Unable to batch-encode %d entries\n", n_total);
+            return false;
+        }
+        for (int i = 0; i < n_total; i++) {
+            vision_chunks[i].resize(per_image_floats);
+            std::memcpy(vision_chunks[i].data(),
+                        batched_output.data() + (size_t)i * per_image_floats,
+                        (size_t)per_image_floats * sizeof(float));
+        }
+        LOG_INF("%s: %d entries batch-encoded (all same size) in %8.2f ms\n",
+                __func__, n_total, (ggml_time_us() - t_batch_us) / 1000.0);
+    } else {
     // 1) encode the overview image (entry 0)
     {
         const int64_t t_step_us = ggml_time_us();
@@ -585,6 +627,7 @@ static bool encode_image_with_vision_chunks(vision_ctx * ctx_vision, int n_threa
             LOG_INF("%s: %d slice(s) encoded serially in %8.2f ms\n", __func__, n_slices, (ggml_time_us() - t_step_us) / 1000.0);
         }
     }
+    } // end else (非 batch_all 路径)
 
     const int64_t t_img_enc_end_us = ggml_time_us();
     float t_img_enc_ms = (t_img_enc_end_us - t_img_enc_start_us) / 1000.0;
