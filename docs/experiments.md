@@ -1102,3 +1102,32 @@ diff 结果（093-1）——两条铁证级协议分歧：
 - 机制分析：core 帧 NPU 串行总和 enc 400+dec 220+tts 412+t2m 100 = **1132ms > 1000ms 帧周期** → 锁让 token2mel 也串行后墙钟超限 → 帧积压 → 尾帧拖长。三锁已是"串行化上限"（core 帧水平下任何额外 NPU 串行都超帧预算）；此前"整体锁 1.63"同因
 - **结论**：token2mel 细锁关闭（与整体锁同因）。**跨段串行化空间已耗尽**——三锁 = 可串行化上限；enc/dec 的 core-vs-稳态 gap 是"core 帧本身 NPU 负载高"的固有表现（不可通过锁消除）
 - 代码已回退（git checkout 3 文件，工作区= e98047e 状态）
+
+---
+
+### v7: VPM 同尺寸 batch 编码移植（2026-08-26，910B2 同机官方口径）
+
+**来源**：doma（深大&广工）公开归档 patch_vpm_batch.patch（原自 zs213118）——duplex 每帧 overview+slice 同尺寸（336x602）→ 合并 batch=2 一次编码。
+
+**实现**：omni.cpp `encode_image_with_vision_chunks` 加 batch_all 分支（env `OMNI_VISION_BATCH_ALL` 默认开，0/off 关闭，n_total≤8 且全同尺寸才触发）。依赖官方已有 vision_image_batch_encode API。
+
+**910B2 同机 A/B（官方 rts core 帧 pooled，NZ=off，v6 全配置）**：
+| 配置 | run 1 | run 2 | run 3 | 中位 |
+|---|---|---|---|---|
+| v6 基线（stash 期 build-v7） | 1.0349 | 1.0303 | 1.0221 | 1.0303 |
+| v7（+VPM batch） | 0.9366 | 0.9351 | 0.9377 | 0.9366 |
+- **RTF -9.1%**，v7 最差 0.9377 < v6 最好 1.0221（间隔 0.084，零重叠）
+- encode 段 0.3288→0.2548（**-22.5%**，与 doma 910C 的 -17~24% 吻合=机制印证）
+- batch_validity 全 true（3+3 run）；videomme 10/10 逐题零翻转（batch on/off 答案一致）
+- **⚠️ 设备注意**：本机已被平台重分配为 **910B2（64GB，NUMA node6=CPU 192-223）**，非 CLAUDE.md 记录的 910B4——v6 基线 1.166（910B4）不可直接比，全部同机 A/B
+
+**同批移植验证结论（doma 其余方案）**：
+| 方案 | 结果 | 结论 |
+|---|---|---|
+| t2m CONT 消除（OMNI_T2M_SKIP_REDUNDANT_CONT=ADD_MUL） | 0.960/0.9731/0.9656 vs v7 0.9366（**+3.1% 负收益**，token2wav 段 0.233-0.238 vs 0.2282 确认变慢） | ❌ 910B2 放弃（doma 910B3 是 -3.9%，硬件行为不同） |
+| TTS FA（OMNI_TTS_FLASH_ATTN，omni.cpp tts_ctx_params 路径） | 0.9261/0.9304/0.9317 vs v7 0.9366（**增量 -0.7% 噪声内**，tts 段 0.2676 vs 0.271 几乎不变） | ❌ 910B2 无收益放弃（doma 910C -7.6% 是 910C 特性；非 bit-identical） |
+| head_code NPU（doma sprint3） | 未测（与 v6 CPU 并行版 A/B 成本高） | 保留 910C 候选 |
+| LLM layer cap 30（doma sprint17/18） | 未测（改推理数学，破自定红线） | 排除 |
+| 4 步 flow（OMNI_T2W_N_TIMESTEPS） | 未测（需 prompt_cache 匹配机制，我们 5 步拐点 CLOSED） | 保留候选 |
+
+**v7 提交物 = VPM batch only**（f4aaa80），TTS FA/CONT 代码已回退（工作区干净）。
