@@ -27,11 +27,20 @@ ls /usr/local/Ascend/*/tools/bisheng_compiler/bin/ccec   # ccec 编译器（构�
 
 ## 2. 拉代码（v7 分支）
 
+**方式 A（公共项目，免邮箱权限，推荐）**：910C 验证专用公共仓库（含 v7 代码树 + test_case + README-910C，无敏感信息）：
+```bash
+cd /workspace
+git clone https://github.com/hujinnvshi/minicpm-ascend-challenge-910c.git
+cd minicpm-ascend-challenge-910c
+cat README-910C.md    # 构建/运行/探针全流程（§1-§6）
+```
+
+**方式 B（完整仓库，需邮箱确认后）**：
 ```bash
 cd /workspace
 git clone -b v7-doma-port https://github.com/hujinnvshi/minicpm-ascend-challenge.git
 cd minicpm-ascend-challenge
-git log --oneline -1    # 期望 ef5472a（v7 最新，含 test_case 入库）
+git log --oneline -1    # 期望 9b1e704（v7 最新，含 test_case 入库）
 # v7 核心代码：code/llama.cpp-omni/tools/omni/omni.cpp 含 OMNI_VISION_BATCH_ALL（VPM 批量编码）
 # rts 测试用例已随仓库提供：evaluation/judge-final/assets/test_case/（4 个 test_case，免生成）
 ```
