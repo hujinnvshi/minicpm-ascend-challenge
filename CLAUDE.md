@@ -71,8 +71,8 @@ npu-smi info -t usages -i 1
 
 ## 文档导航（先读这些）
 
-- `docs/session-2026-08-25.md` —— ⭐最新会话交接（当前状态/问题/下一步，新会话先读）
-- `docs/session-2026-08-24.md` —— 上一交接（TTS head_code 突破 + v6 提交）
+- `docs/session-2026-08-26.md` —— ⭐最新会话交接（官方 910C 出分回写：v5 RTF 0.8357 精度 4/4 全过，v6 待出分；新会话先读）
+- `docs/session-2026-08-25.md` —— 上一交接（赛事说明相符性核对 + v6 包哈希问题）
 - `docs/competition-readiness.md` —— ⭐就绪度总览（§0 为 2026-08-25 最新状态，精度/性能/风险一表）
 - `docs/ops-handoff.md` —— ⭐提交记录与凭证约定（v1-v6 全链路）
 - `docs/eval-spec.md` —— 官方评测规范（基线/准入/Demo/提交物）
@@ -82,9 +82,9 @@ npu-smi info -t usages -i 1
 
 ### 文档时效地图（docs/ 65 篇分层）
 
-- **活跃（当前主线，数字可信）**：session-2026-08-24/25、ops-handoff、competition-readiness（§0）、
+- **活跃（当前主线，数字可信）**：session-2026-08-24/25/26、ops-handoff、competition-readiness（§0）、
   announcement-2026-08-21、experiments、decisions、env-scan、papers-p0-probe-2026-08-24、
-  closed-optimizations-deep-analysis-2026-08-24
+  closed-optimizations-deep-analysis-2026-08-24、knowledge-map（8/26 已回写官方出分）、status-assessment（8/26 头部已覆盖）
 - **历史（数字已被取代，仅查过程/决策背景）**：competition-readiness（§0 以下）、status-assessment、
   performance-report、submission-checklist、prep-roadmap、track1-*、workflow-overview、
   session-2026-08-04/05/10、organizer-inquiry-*、videomme-* 系列等 8/17 前文档
@@ -97,10 +97,11 @@ npu-smi info -t usages -i 1
 - **分支**：main=完整提交；`p2-duplex-exit0`=性能诊断（未 merge，信息性）。
 - **CodeGraph** 已索引（`.codegraph/`）—— 查代码先用 `codegraph_explore`，别直接 grep。
 
-## 当前进度（一句话，2026-08-25）
+## 当前进度（一句话，2026-08-26）
 
-**v6 已提交（8/24，本机 core RTF 中位 1.166，4 run 零重叠）**：FA + VPM FA + NPU 串行 + TTS head_code 行间并行，
-精度四项全达标（Daily 79.8% / TTS WER 0.97% ASV 0.708 / VideoMME 72.9% 官方采样口径），Demo 3 进程跑通。
-⚠️ **v5/v6 在官方队列尚未出分**（8/21 后榜单零新增，调度状态待重登查询）；⚠️ v6 包 README 最终提交哈希
-af67cfe 无效（staging 已重建为 1dd42b7，v7 需修正）；截止 8/31 剩 6 天。
-详细见 `docs/session-2026-08-25.md` + `docs/competition-readiness.md` §0。
+**官方 910C 出分（8/26 回写）：v5 配置 RTF 0.8357（beat 基线 23.1%）+ 精度 4/4 全过准入
+（Daily 79.6% / VideoMME 69.3% / WER 1.336 / ASV 0.709）→ 三张入场券全拿，进入有效排名。**
+v6（8/24 head 并行，本机 RTF 1.166）**尚未出分**，预期优于 0.8357（本地比 v5 快 14.3%）。
+⚠️ v6 包 README 最终提交哈希 af67cfe 无效（staging 已重建为 1dd42b7，复核打回才需 v7）；
+截止 8/31 剩 5 天，每天限 3 次提交，无更强配置不重提交。
+详细见 `docs/session-2026-08-26.md`（最新交接）+ `docs/competition-readiness.md` §0。
