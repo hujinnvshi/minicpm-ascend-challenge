@@ -104,8 +104,10 @@ npu-smi info -t usages -i 1
 v6（8/24 head 并行，本机 RTF 1.166）**尚未出分**，预期优于 0.8357（本地比 v5 快 14.3%）。
 ⚠️ v6 包 README 最终提交哈希 af67cfe 无效（staging 已重建为 1dd42b7，复核打回才需 v7）；
 截止 8/31 剩 5 天，每天限 3 次提交，无更强配置不重提交。
-**🆕 910C 实测（8/26 晚回写，gitcode 仓库）：v7 普通配置 RTF 0.884（FA 生效/batch_validity 全 true）；
-图模式（GGML_CANN_ACL_GRAPH=1）+ t16 = 0.726（-17.9%）→ v8 必开图模式；CANN FA contiguity
-缺陷已修复（aclnn_ops.cpp）；⚠️ 图模式精度未验证（晚上做精度冒烟），通过后 v8 打包提交（5 文件）。
-详见 docs/910c-progress-v8-2026-08-26.md + docs/910c-cannlab-onboarding-2026-08-26.md。**
+**🆕 910C 实测（8/26 晚回写，910c 分支 c7ec345）：v8 = 图模式（GGML_CANN_ACL_GRAPH=1）+ t16
+= RTF 0.7237×5 轮（-17.9%，tts -39%/t2w -20%）；✅ 精度已验证（LLM 输出逐字节一致、
+tts seed-zh 40 条 WER 0.947%=0.947%、40/40 wav 逐字节一致、batch_validity 全 true）→
+**v8 提交门禁全过，可打包提交**（6 文件：+ggml-cann.h +aclnn_ops.cpp，README 已 v8 化，
+USE_ACL_GRAPH=ON 构建）；910C 段分解最大段 = token2wav 0.238（CPU vocoder 不随 NPU 加速）
+→ Phase 2 第一候选 t2w 步数修复。详见 docs/910c-progress-v8-2026-08-26.md（精度验证版）。**
 详细见 `docs/session-2026-08-26.md`（最新交接）+ `docs/competition-readiness.md` §0。
