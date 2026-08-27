@@ -2281,7 +2281,15 @@ static void evaluate_and_capture_cann_graph(ggml_backend_cann_context * cann_ctx
                                             bool                        cann_graph_capture_required) {
 #ifdef USE_ACL_GRAPH
     if (use_cann_graph && cann_graph_capture_required) {  // Begin CANN graph capture
-        ACL_CHECK(aclmdlRICaptureBegin(cann_ctx->stream(), ACL_MODEL_RI_CAPTURE_MODE_GLOBAL));
+        // 🔧 [P1-图] GGML_CANN_ACL_GRAPH_RELAXED=1 用 RELAXED 捕获模式（允许捕获期同步拷贝/
+        // malloc，消除 rtMemcpy-during-capture 崩溃；默认 GLOBAL=官方行为）
+        static bool relaxed = parse_bool(get_env_as_lowercase("GGML_CANN_ACL_GRAPH_RELAXED").value_or(""));
+        const aclmdlRICaptureMode capture_mode =
+            relaxed ? ACL_MODEL_RI_CAPTURE_MODE_RELAXED : ACL_MODEL_RI_CAPTURE_MODE_GLOBAL;
+        ACL_CHECK(aclmdlRICaptureBegin(cann_ctx->stream(), capture_mode));
+        if (relaxed) {
+            fprintf(stderr, "[P1-GRAPH] capture mode RELAXED\n");
+        }
     }
 #endif  // USE_ACL_GRAPH
     // Only perform the graph execution if CANN graphs are not enabled, or we are capturing the graph.

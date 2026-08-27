@@ -4520,7 +4520,17 @@ struct omni_context * omni_init(struct common_params * params, int media_type, b
             gguf_root_dir = gguf_root_dir.substr(0, last_slash);  // 获取 tts 的父目录
         }
         ctx_omni->token2wav_model_dir = gguf_root_dir + "/token2wav-gguf";
-        
+
+        // 🔧 OMNI_T2W_MODEL_DIR: 覆盖 token2wav 模型目录（含 prompt_cache.gguf）。
+        // 用于实验性 prompt_cache（如 flow 步数重建）；默认空=官方路径，行为不变。
+        {
+            const char * t2w_dir_env = getenv("OMNI_T2W_MODEL_DIR");
+            if (t2w_dir_env && t2w_dir_env[0]) {
+                ctx_omni->token2wav_model_dir = t2w_dir_env;
+                print_with_timestamp("Token2Wav: model dir overridden by OMNI_T2W_MODEL_DIR=%s\n", t2w_dir_env);
+            }
+        }
+
         std::string encoder_test = ctx_omni->token2wav_model_dir + "/encoder.gguf";
         {
             std::ifstream f(encoder_test);

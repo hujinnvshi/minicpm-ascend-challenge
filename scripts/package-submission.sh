@@ -99,6 +99,13 @@ cp "$REPO_ROOT/scripts/demo.sh"       "$INT_SUP/integration-support/scripts/" 2>
 cp "$REPO_ROOT/scripts/serve.sh"      "$INT_SUP/integration-support/scripts/" 2>/dev/null || true
 cp "$REPO_ROOT/scripts/numa-bind.sh"  "$INT_SUP/integration-support/scripts/" 2>/dev/null || true
 
+# v8.1: 4 步 prompt_cache（t2w 4 步必需，见外层 README §7.1）+ 生成工具
+if [ -d "$REPO_ROOT/dist/v81_assets/token2wav-steps4" ]; then
+  mkdir -p "$INT_SUP/integration-support/token2wav-steps4"
+  cp "$REPO_ROOT/dist/v81_assets/token2wav-steps4/prompt_cache.gguf" "$INT_SUP/integration-support/token2wav-steps4/"
+  cp "$REPO_ROOT/dist/v81_assets/t2w-cache-export.cpp" "$INT_SUP/integration-support/t2w-cache-export.cpp"
+fi
+
 # integration-support 自带 README（§6 要求）
 cat > "$INT_SUP/integration-support/README.md" <<'EOF'
 # integration-support — MiniCPM-o Demo 集成与复现支持
@@ -113,6 +120,8 @@ cat > "$INT_SUP/integration-support/README.md" <<'EOF'
 | `scripts/demo.sh` | 一键启动 3 进程 Demo（网关 8006 / worker 22400 / backend 22500） |
 | `scripts/serve.sh` | 单服务启动辅助 |
 | `scripts/numa-bind.sh` | NPU 同 NUMA node CPU 自动绑定（910B 机型差异兼容） |
+| `token2wav-steps4/prompt_cache.gguf` | 4 步 flow-matching 缓存（`OMNI_T2W_STEPS=4` 必需，SHA-256 见主包 README §7.1） |
+| `t2w-cache-export.cpp` | 4 步缓存生成工具（复现用） |
 
 ## 启动顺序（与主包 README §4.4 一致）
 
