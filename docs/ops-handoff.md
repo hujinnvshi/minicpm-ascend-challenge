@@ -335,3 +335,13 @@ cmake --build code/llama.cpp-omni/build-cann -j$(nproc)
 - **包质量审计**：外层恰 4 文件、无 __MACOSX__/._/.DS_Store、llama.cpp-omni.zip 为 git archive（staging HEAD 4c01622，相对官方恰 6 文件，工作树干净）、integration-support.zip 单顶层目录含 README、demo.mp4 有效（h264 37s）、README UTF-8 全节齐、无凭据
 - **精度验证（910C 实测）**：tts WER 0.845%（200 条，图=eager 逐字节一致）；LLM token/text 逐字节一致；rts batch_validity 全 True
 - **今日额度**：v7（1 次）+ v8（2 次）= 2/3
+
+## 2026-08-27 v8.1 提交（RELAXED 图捕获 + t2w 4 步）——提交成功，任务调度中
+
+- **包**：dist/submission_v8.1-910c_20260827.zip（222MB，SHA256 2759af2be32d0fdd...，四件套）
+- **代码**：910c 分支 e6e381e（= v8 6 文件 + ggml-cann.cpp RELAXED 捕获 + omni.cpp T2W_MODEL_DIR env）
+- **新增**：4 步 prompt_cache.gguf（168MB，SHA256 5b28e7ba...，随 integration-support 按 §7.1/§9.1 文档化）+ 生成工具
+- **链路**：sendmessage → login 0000 → upload_model_check（oss_key 4873d5a8...）→ OBS PUT 200（222145444 bytes）→ upload_model result 0000
+- **提交描述**：v8.1: +RELAXED图捕获+4步flow, 910C core RTF 0.7006(-3.2% vs v8 0.724), WER 0.845%零影响, 含4步prompt_cache(SHA256 5b28e7ba)
+- **验证数据**：core RTF 0.7037/0.7026/0.6956（均值 0.7006）；tts WER 0.845%（200 条 = 基线）；batch_validity 全 True
+- **状态**：覆盖在途 v8，为当前最新评测对象
