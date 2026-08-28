@@ -355,3 +355,15 @@ cmake --build code/llama.cpp-omni/build-cann -j$(nproc)
 - **验证数据**：core RTF memo 关 0.6974 → memo 开 0.6772/0.6698（均值 0.6735，-3.4%）；staging 冒烟 0.6667；encode 0.181→0.152（VPM 180.4→152.0ms/批）；tts WER 0.845% = 0.845% = 历史基线；core wav memo 开/关逐字节一致；batch_validity 全 True
 - **归因**：memo 为纯宿主端确定性缓存（(embed_dim,H,W) 确定性函数，位元与重算一致）；p2 文档"ON 自确定性失败"系 turn3 尾帧竞态误归因，const-cache(2b) 增量≈0 未采纳
 - **状态**：覆盖在途 v8.1，为当前最新评测对象
+
+## 2026-08-28 v8.3 提交（+t2w flow 2 步，首个改数学收益）——提交成功，任务调度中
+
+- **包**：dist/submission_v8.3-910c_20260828.zip（146MB，SHA256 726a07713ffd482aef2789409a56cd4d9ec2233ce0a45e7841b1289581a21f56，四件套）
+- **代码**：910c 分支 5bed0ae（= v8.2 + 无代码改动；仅运行时 env `OMNI_T2W_STEPS=2` + 2 步 prompt_cache）
+- **新增**：2 步 prompt_cache.gguf（90MB，SHA256 a9c0f423...，signature ref 音色）+ 生成工具（t2w-cache-export）
+- **链路**：sendmessage → login 0000 → upload_model_check（oss_key 08488a5b...）→ OBS PUT 200（149676444 bytes）→ upload_model result 0000
+- **提交描述**：v8.3: +t2w flow 2步(OMNI_T2W_STEPS=2, t2w段-21%), 910C core RTF 0.6239(-6.4% vs v8.2 0.6667), 全量WER 1.394%(<1.56门禁), ASV 0.7132(=基线), 含2步prompt_cache(SHA256 a9c0f423)
+- **验证数据**：core RTF 0.6239（v8.2 单变量对照 0.6667，-6.4%）；t2w 段 0.210→0.166；**全量 2020 条 WER 1.394%**（< 门禁 1.56，≈官方基线 1.336）；ASV/SIM 0.7132（= 4 步基线，≥0.689）；batch_validity 全 True
+- **突破点**：首个"改数学"优化（flow 迭代 5→2 步）通过官方精度门禁；配套 2 步 cache 打通（此前 steps<5 挂死/无 wav）
+- **关闭**：DiT depth 削减（depth8 WER 25.6% 崩）；vocoder 裁剪评估后放弃（GAN 核心，WER 敏感）
+- **状态**：覆盖在途 v8.2，为当前最新评测对象
