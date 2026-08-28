@@ -54,13 +54,14 @@ cp "$REPO_ROOT/code/llama.cpp-omni/ggml/src/ggml-cann/aclnn_ops.cpp"   "$STAGING
 cp "$REPO_ROOT/code/llama.cpp-omni/tools/omni/omni.cpp"                "$STAGING/tools/omni/omni.cpp"
 cp "$REPO_ROOT/code/llama.cpp-omni/tools/omni/omni.h"                  "$STAGING/tools/omni/omni.h"
 cp "$REPO_ROOT/code/llama.cpp-omni/tools/omni/vision.cpp"              "$STAGING/tools/omni/vision.cpp"
+cp "$REPO_ROOT/code/llama.cpp-omni/tools/omni/token2wav/token2wav-impl.cpp" "$STAGING/tools/omni/token2wav/token2wav-impl.cpp"
 
-# 1c. 确认改动范围（应恰为 6 文件）
+# 1c. 确认改动范围（v8.5 起为 7 文件，含 token2wav-impl.cpp conv_mm）
 CHANGED=$(git -C "$STAGING" status --short)
 echo "  改动文件:"
 echo "$CHANGED" | sed 's/^/    /'
 N_CHANGED=$(echo "$CHANGED" | grep -c '^ M')
-[ "$N_CHANGED" -eq 6 ] || { echo "WARN: 预期 6 个改动文件，实际 $N_CHANGED"; }
+[ "$N_CHANGED" -eq 6 ] || [ "$N_CHANGED" -eq 7 ] || { echo "WARN: 预期 6-7 个改动文件，实际 $N_CHANGED"; }
 
 # 1d. 提交 + git archive
 git -C "$STAGING" add -A
@@ -99,8 +100,12 @@ cp "$REPO_ROOT/scripts/demo.sh"       "$INT_SUP/integration-support/scripts/" 2>
 cp "$REPO_ROOT/scripts/serve.sh"      "$INT_SUP/integration-support/scripts/" 2>/dev/null || true
 cp "$REPO_ROOT/scripts/numa-bind.sh"  "$INT_SUP/integration-support/scripts/" 2>/dev/null || true
 
-# v8.4: 1 步 prompt_cache（t2w 1 步必需，见外层 README §7.1）+ 生成工具
-if [ -d "$REPO_ROOT/dist/v84_assets/token2wav-steps1" ]; then
+# v8.5: 1 步 prompt_cache + conv_mm（t2w 1 步必需，见外层 README §7.1）+ 生成工具
+if [ -d "$REPO_ROOT/dist/v85_assets/token2wav-steps1" ]; then
+  mkdir -p "$INT_SUP/integration-support/token2wav-steps1"
+  cp "$REPO_ROOT/dist/v85_assets/token2wav-steps1/prompt_cache.gguf" "$INT_SUP/integration-support/token2wav-steps1/"
+  cp "$REPO_ROOT/dist/v85_assets/t2w-cache-export.cpp" "$INT_SUP/integration-support/t2w-cache-export.cpp"
+elif [ -d "$REPO_ROOT/dist/v84_assets/token2wav-steps1" ]; then
   mkdir -p "$INT_SUP/integration-support/token2wav-steps1"
   cp "$REPO_ROOT/dist/v84_assets/token2wav-steps1/prompt_cache.gguf" "$INT_SUP/integration-support/token2wav-steps1/"
   cp "$REPO_ROOT/dist/v84_assets/t2w-cache-export.cpp" "$INT_SUP/integration-support/t2w-cache-export.cpp"

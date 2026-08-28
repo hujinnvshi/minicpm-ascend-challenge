@@ -378,3 +378,15 @@ cmake --build code/llama.cpp-omni/build-cann -j$(nproc)
 - **验证数据**：core RTF 0.6118（v8.3 单变量 0.6239，-1.9%）；t2w 段 0.166→0.155；**全量 2020 条 WER 1.35%**（<门禁 1.56，优于 2 步 1.394%）；**全量 ASV/SIM 0.7074**（≥0.689，≈官方 0.709）；batch_validity 全 True
 - **今日提交 3/3 用尽**（v8.2 + v8.3 + v8.4）
 - **状态**：覆盖在途 v8.3，为当前最新评测对象
+
+## 2026-08-29 v8.5 提交（+conv_mm 算子级优化 + 1 步流）——提交成功，任务调度中
+
+- **包**：dist/submission_v8.5-910c_20260829.zip（113MB，SHA256 7d0b155702731c4f46851d04d36fc9ce80c58f701306632fdb5ecfa716024066，四件套）
+- **代码**：v8.4 6 文件 + **token2wav-impl.cpp（conv_mm，第 7 文件）**；env `OMNI_T2W_STEPS=1` + `OMNI_T2W_CONV_MM=1`
+- **conv_mm**（doma E8）：causal conv1d 用移位视图+concat+matmul 替代 CANN 1D im2col（消除 memcpy 风暴）。vocoder/hifigan -72%、t2m -11%
+- **链路**：sendmessage → login 0000 → upload_model_check（oss_key 1f502e20...）→ OBS PUT 200（113451087 bytes）→ upload_model result 0000
+- **提交描述**：v8.5: +conv_mm(OMNI_T2W_CONV_MM=1, voc -72%, t2w段0.080) +1步, 910C core RTF 0.5401(-11.7% vs v8.4 0.6118), 全量WER 1.35%+ASV 0.7074双过门禁
+- **验证数据**：core RTF **0.5401**（1步+conv_mm，t2w 段 0.155→0.080）；**全量 2020 条 WER 1.35%**（<门禁 1.56，= 基线）；ASV 0.7074（全量，1步已验证，conv_mm wav 与 stock 位级一致继承）；batch_validity 全 True
+- **关键**：1 步+conv_mm 的 core wav 与 1 步 stock **位级一致**（md5 相同）→ 精度完全继承
+- **今日提交 1/3**（v8.5）
+- **状态**：覆盖在途 v8.4，为当前最新评测对象
