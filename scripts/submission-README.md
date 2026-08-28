@@ -36,8 +36,8 @@
 |---|---|---|---|---|
 | `GGML_CANN_ACL_GRAPH` | off | **1** | 全链路（图模式） | **ACL 图模式（受限 per-backend）**：需 `USE_ACL_GRAPH=ON` 构建。910C 实测覆盖 89% compute（243/273 算子）、recapture 34 次，core RTF 0.884→0.724（**-17.9%**），收益集中在 tts（-39%）与 token2wav（-20%）；batch_validity 四字段全 True、精度逐字节一致（见 §5.2）。910B4 不支持（官方警告 + 实测崩溃），故提交值随目标硬件选择：**910C=1，910B4=off** |
 | `GGML_CANN_ACL_GRAPH_RELAXED` | 未设（GLOBAL 捕获） | 1 | 图模式捕获 | **RELAXED 捕获模式**（`ACL_MODEL_RI_CAPTURE_MODE_RELAXED`）：允许捕获期同步拷贝/malloc，消除 `rtMemcpy-during-capture` 崩溃（GLOBAL 模式拒绝），**解锁 t2w 4 步图模式**；5 步无回归、对输出透明（仅已知尾帧 flush 分段，不入 core） |
-| `OMNI_T2W_STEPS` | 5 | **2** | token2wav | **flow-matching 迭代 2 步**（官方 5 步）：token2mel（DiT）迭代 -60%，t2w 段 -21%（0.210→0.166）、core RTF **-6.4%**（0.6667→0.6239）；**必须配套 2 步 prompt_cache（见 §9.1）**，否则 init 拒绝/输出破坏 |
-| `OMNI_T2W_MODEL_DIR` | 空（官方路径） | `<2步 cache 目录>` | token2wav | 覆盖 token2wav 模型目录（含 2 步 `prompt_cache.gguf`）；指向随包提供的 `token2wav-steps2/`（§9.1），默认空=官方路径行为不变 |
+| `OMNI_T2W_STEPS` | 5 | **1** | token2wav | **flow-matching 迭代 1 步**（官方 5 步，极限压缩）：t2m 计算再减半，t2w 段 0.166→0.155、core RTF **-1.9%**（0.6239→0.6118，累计 vs v8.2 -8.2%）；**必须配套 1 步 prompt_cache（见 §7.1）** |
+| `OMNI_T2W_MODEL_DIR` | 空（官方路径） | `<1步 cache 目录>` | token2wav | 覆盖 token2wav 模型目录（含 1 步 `prompt_cache.gguf`）；指向随包提供的 `token2wav-steps1/`（§7.1），默认空=官方路径行为不变 |
 | `GGML_VPM_SINCOS_MEMO` | 未设（每帧重算） | **1** | VPM(视觉编码) | **VPM sincos pos_embed 宿主端 memo**（v8.2）：pos_embed 为 (embed_dim,H,W) 确定性函数，每帧重算 ~30-40ms（sincos + 嵌套 vector churn）；memo 后 VPM 180.4→152.0ms/批、encode -17%、core RTF -3.4%（0.6974→0.6735）；core wav 与关闭态逐字节一致 + tts WER 0.845%=基线；`0`/未设=每帧重算官方行为 |
 | `OMNI_FORCE_FA` | 未设（CANN 默认 forcing off） | 1 | LLM/TTS | **强制 Flash Attention**（ggml-cann 有完整 FLASH_ATTN_EXT 实现，llama-context AUTO 对 CANN 保守关闭）；实测 llm_decode 0.571→0.234（-59%），core RTF 1.71→1.38（-19.6%）；精度零翻转（2026-08-15 A/B 记录） |
 | `OMNI_HEADCODE_THREADS` | 24 | **16** | TTS head_code | **TTS logits 行间并行**（head_code 6562×768 CPU matmul）：40 核/2 worker 下 **16 线程最优**（24 超订 +1.5%、32 +2.4%）；每行内部标量累加顺序不变 → **logits 逐位一致**；tts 0.417→0.275（-34%）；0=禁用回退官方 |
@@ -66,7 +66,8 @@
 | v7 普通配置（FA on，NZ=off） | 0.8842 / 0.8836 | encode 0.181 + prefill 0.012 + decode 0.173 + tts 0.218 + t2w 0.300 |
 | **v8.1 = 图模式 + 线程16 + RELAXED 捕获 + t2w 4 步** | **0.7037 / 0.7026 / 0.6956**（均值 0.7006，vs v8 0.7237 → **-3.2%**） | encode 0.183 + prefill 0.012 + decode 0.169 + tts 0.121 + t2w 0.212 |
 | **v8.2 = v8.1 + VPM sincos memo** | **0.6974 → 0.6772 / 0.6698**（均值 0.6735，同机同 binary 单变量 A/B，vs v8.1 → **-3.4%**） | encode 0.181→0.152 + prefill 0.013 + decode 0.172 + tts 0.123 + t2w 0.212 |
-| **v8.3 = v8.2 + t2w 2 步流（本提交）** | **0.6667 → 0.6239**（v8.2 同 binary 单变量，t2w 段 0.210→0.166） | encode 0.154 + prefill 0.013 + decode 0.170 + tts 0.122 + t2w 0.166 |
+| **v8.3 = v8.2 + t2w 2 步流** | **0.6667 → 0.6239**（v8.2 同 binary 单变量，t2w 段 0.210→0.166） | encode 0.154 + prefill 0.013 + decode 0.170 + tts 0.122 + t2w 0.166 |
+| **v8.4 = v8.3 + t2w 1 步流（本提交）** | **0.6239 → 0.6118**（v8.3 单变量，t2w 段 0.166→0.155） | encode 0.154 + prefill 0.013 + decode 0.170 + tts 0.122 + t2w 0.155 |
 
 > **v8 精度验证（图 vs 普通，910C）**：LLM 输出（llm_token_ids/llm_text）**逐字节一致**；tts（seed-zh 40 条）WER **0.947% = 0.947%** 且 **40/40 wav 逐字节一致**；batch_validity 四字段全 True。唯一差异为 rts omni_duplex1 turn3 尾帧 flush 分段（文本相同、不入 core 帧，边界现象）。→ 图模式对精度零影响。
 
@@ -144,7 +145,7 @@ EVAL_CONFIG=<本机 env> taskset -c $(cat /sys/devices/system/node/node${NUMA_CP
 
 > **v8.2 memo 精度（2026-08-28）**：VPM sincos memo 为纯宿主端确定性缓存（位元与重算一致）。门禁三项全过：① rts core 帧 speak_turns wav 在 memo 开/关（同机同 binary 单变量）**逐字节一致**（VPM→LLM→tts→t2w 全链路无损）；② tts WER **0.845% = 0.845%**（200 条，= 历史 4 步基线）；③ batch_validity 四字段全 True。
 
-> **v8.3 t2w 2 步流精度（2026-08-28，改数学类优化）**：flow-matching 迭代 5→2 步。**全量 2020 条 WER 1.394%**（< 门禁 1.56，≈ 官方基线 1.336）；**ASV/SIM 0.7132**（200 条 = 4 步基线 0.7132，≥ 门禁 0.689，说话人特征由 prompt/spk 条件变量决定、为 flow 不变量）；batch_validity 四字段全 True。VideoMME/Daily-Omni 不受影响（t2w 不参与这两项评测）。
+> **v8.4 t2w 1 步流精度（2026-08-28，改数学类优化）：flow-matching 迭代 5→1 步（极限压缩）。全量 2020 条 WER 1.35%（< 门禁 1.56，优于 2 步 1.394%）；全量 ASV/SIM 0.7074（≥ 门禁 0.689，≈ 官方基线 0.709，speaker 特征为 flow 不变量）；batch_validity 四字段全 True。VideoMME/Daily-Omni 不受影响（t2w 不参与）。
 
 **性能（RTS，910B4 单卡 NZ=off 官方路径，2026-08-21）**：
 
@@ -188,19 +189,19 @@ EVAL_CONFIG=<本机 env> taskset -c $(cat /sys/devices/system/node/node${NUMA_CP
 
 本提交使用官方 F16 模型（`MiniCPM-o-4_5-F16.gguf` + vision/audio/tts/projector F16 + `token2wav-gguf/`），**不修改原始权重**。
 
-### 7.1 2 步 prompt_cache.gguf（flow-matching 2 步所需的转换缓存）
+### 7.1 1 步 prompt_cache.gguf（flow-matching 1 步所需的转换缓存）
 
-`OMNI_T2W_STEPS=2` 需要与步数匹配的 `prompt_cache.gguf`（官方缓存为 5 步，estimator 张量强依赖步数）。本提交随包提供转换后的缓存：
+`OMNI_T2W_STEPS=1` 需要与步数匹配的 `prompt_cache.gguf`（官方缓存为 5 步，estimator 张量强依赖步数）。本提交随包提供转换后的缓存：
 
 | 项 | 值 |
 |---|---|
-| 文件 | `integration-support.zip` 内 `token2wav-steps2/prompt_cache.gguf` |
-| 来源 | 官方 `ref_minicpm_signature.wav` 的 prompt bundle（`speech_tokenizer_v2_25hz.onnx` + `campplus.onnx` 提取）经 `init_from_prompt_bundle` 以 `n_timesteps=2` 重建（`T2W_EXPORT_CACHE_DIR` 导出） |
+| 文件 | `integration-support.zip` 内 `token2wav-steps1/prompt_cache.gguf` |
+| 来源 | 官方 `ref_minicpm_signature.wav` 的 prompt bundle 经 `init_from_prompt_bundle` 以 `n_timesteps=1` 重建（`T2W_EXPORT_CACHE_DIR` 导出） |
 | 模型角色 | token2wav 流式缓存（conformer + estimator 状态） |
-| 量化类型 | F32（与官方一致，仅步数 5→2） |
-| 大小 | 90,256,864 bytes |
-| **SHA-256** | `a9c0f423ce04575ae6d94216073b0f5e61dbe135e49dc6cdf66ab355e80dc61a` |
-| 放置路径 | 解压 `integration-support.zip` 后，`integration-support/token2wav-steps2/prompt_cache.gguf`；构建/启动时设 `OMNI_T2W_MODEL_DIR=<该目录>` |
+| 量化类型 | F32（与官方一致，仅步数 5→1） |
+| 大小 | 51,197,408 bytes |
+| **SHA-256** | `63c614604bfab9fa2f9f04e534007feb15245fdfdaeaa68ab51db6b70a91645b` |
+| 放置路径 | 解压 `integration-support.zip` 后，`integration-support/token2wav-steps1/prompt_cache.gguf`；构建/启动时设 `OMNI_T2W_MODEL_DIR=<该目录>` |
 
 生成工具：`integration-support/t2w-cache-export.cpp`（独立小工具，复现命令见 §3.4）。
 

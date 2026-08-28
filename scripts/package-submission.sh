@@ -99,8 +99,12 @@ cp "$REPO_ROOT/scripts/demo.sh"       "$INT_SUP/integration-support/scripts/" 2>
 cp "$REPO_ROOT/scripts/serve.sh"      "$INT_SUP/integration-support/scripts/" 2>/dev/null || true
 cp "$REPO_ROOT/scripts/numa-bind.sh"  "$INT_SUP/integration-support/scripts/" 2>/dev/null || true
 
-# v8.3: 2 步 prompt_cache（t2w 2 步必需，见外层 README §7.1）+ 生成工具
-if [ -d "$REPO_ROOT/dist/v83_assets/token2wav-steps2" ]; then
+# v8.4: 1 步 prompt_cache（t2w 1 步必需，见外层 README §7.1）+ 生成工具
+if [ -d "$REPO_ROOT/dist/v84_assets/token2wav-steps1" ]; then
+  mkdir -p "$INT_SUP/integration-support/token2wav-steps1"
+  cp "$REPO_ROOT/dist/v84_assets/token2wav-steps1/prompt_cache.gguf" "$INT_SUP/integration-support/token2wav-steps1/"
+  cp "$REPO_ROOT/dist/v84_assets/t2w-cache-export.cpp" "$INT_SUP/integration-support/t2w-cache-export.cpp"
+elif [ -d "$REPO_ROOT/dist/v83_assets/token2wav-steps2" ]; then
   mkdir -p "$INT_SUP/integration-support/token2wav-steps2"
   cp "$REPO_ROOT/dist/v83_assets/token2wav-steps2/prompt_cache.gguf" "$INT_SUP/integration-support/token2wav-steps2/"
   cp "$REPO_ROOT/dist/v83_assets/t2w-cache-export.cpp" "$INT_SUP/integration-support/t2w-cache-export.cpp"

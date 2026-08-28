@@ -367,3 +367,14 @@ cmake --build code/llama.cpp-omni/build-cann -j$(nproc)
 - **突破点**：首个"改数学"优化（flow 迭代 5→2 步）通过官方精度门禁；配套 2 步 cache 打通（此前 steps<5 挂死/无 wav）
 - **关闭**：DiT depth 削减（depth8 WER 25.6% 崩）；vocoder 裁剪评估后放弃（GAN 核心，WER 敏感）
 - **状态**：覆盖在途 v8.2，为当前最新评测对象
+
+## 2026-08-28 v8.4 提交（+t2w flow 1 步，极限压缩）——提交成功，任务调度中
+
+- **包**：dist/submission_v8.4-910c_20260828.zip（113MB，SHA256 a0443a997341743fb8db8f0146496202857a6940644599bd39858a6efe668ded，四件套）
+- **代码**：910c 分支（= v8.2 6 文件，无新代码；仅运行时 env `OMNI_T2W_STEPS=1` + 1 步 prompt_cache）
+- **新增**：1 步 prompt_cache.gguf（51MB，SHA256 63c61460...，signature ref 音色）
+- **链路**：sendmessage → login 0000 → upload_model_check（oss_key 34278d2b...）→ OBS PUT 200（113448266 bytes）→ upload_model result 0000
+- **提交描述**：v8.4: +t2w flow 1步(OMNI_T2W_STEPS=1, t2w段0.155), 910C core RTF 0.6118(-1.9% vs v8.3, 累计-8.2%), 全量WER 1.35%+ASV 0.7074双过门禁, 含1步prompt_cache(SHA256 63c61460)
+- **验证数据**：core RTF 0.6118（v8.3 单变量 0.6239，-1.9%）；t2w 段 0.166→0.155；**全量 2020 条 WER 1.35%**（<门禁 1.56，优于 2 步 1.394%）；**全量 ASV/SIM 0.7074**（≥0.689，≈官方 0.709）；batch_validity 全 True
+- **今日提交 3/3 用尽**（v8.2 + v8.3 + v8.4）
+- **状态**：覆盖在途 v8.3，为当前最新评测对象
