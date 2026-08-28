@@ -345,3 +345,13 @@ cmake --build code/llama.cpp-omni/build-cann -j$(nproc)
 - **提交描述**：v8.1: +RELAXED图捕获+4步flow, 910C core RTF 0.7006(-3.2% vs v8 0.724), WER 0.845%零影响, 含4步prompt_cache(SHA256 5b28e7ba)
 - **验证数据**：core RTF 0.7037/0.7026/0.6956（均值 0.7006）；tts WER 0.845%（200 条 = 基线）；batch_validity 全 True
 - **状态**：覆盖在途 v8，为当前最新评测对象
+
+## 2026-08-28 v8.2 提交（+VPM sincos pos_embed memo）——提交成功，任务调度中
+
+- **包**：dist/submission_v8.2-910c_20260828.zip（222MB，SHA256 b62d9e77e6ad1b368386f656c6e2bf2eccc15aed3fb91f92a3989a8f52cdf899，四件套）
+- **代码**：910c 分支 5bed0ae（= v8.1 + vision.cpp VPM sincos pos_embed memo 门控化，`GGML_VPM_SINCOS_MEMO=1`；staging HEAD 4525d4b）
+- **链路**：sendmessage → login 0000 → upload_model_check（oss_key 3871362468...）→ OBS PUT 200（222146340 bytes）→ upload_model result 0000
+- **提交描述**：v8.2: +VPM sincos pos_embed memo(GGML_VPM_SINCOS_MEMO=1, encode -17%), 910C core RTF 0.6735(-3.4% vs v8.1 0.7006), WER 0.845%=基线, core wav 逐字节一致, 门禁全过
+- **验证数据**：core RTF memo 关 0.6974 → memo 开 0.6772/0.6698（均值 0.6735，-3.4%）；staging 冒烟 0.6667；encode 0.181→0.152（VPM 180.4→152.0ms/批）；tts WER 0.845% = 0.845% = 历史基线；core wav memo 开/关逐字节一致；batch_validity 全 True
+- **归因**：memo 为纯宿主端确定性缓存（(embed_dim,H,W) 确定性函数，位元与重算一致）；p2 文档"ON 自确定性失败"系 turn3 尾帧竞态误归因，const-cache(2b) 增量≈0 未采纳
+- **状态**：覆盖在途 v8.1，为当前最新评测对象
