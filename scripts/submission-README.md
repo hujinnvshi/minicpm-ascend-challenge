@@ -24,7 +24,7 @@
 | `ggml/src/ggml-cann/aclnn_ops.cpp` | **CANN Flash Attention contiguity 修复**：FA 入口对非规范 `[B,S,N,D]` 视图做连续拷贝（`make_bsnd_contiguous`，B≤1 忽略 dim3） | 修复多 token prefill（sequence-major K/V）被 CANN 拒收崩溃（`In non-PA scenarios, key tensor must be contiguous`）；消除评测边界崩溃隐患、解锁 910C 图模式与 perf-duplex 迭代工具 | 否（正确性修复；rts 主 LLM 路径从不触发，零开销） |
 | `tools/omni/omni.cpp` | 诊断开关（`OMNI_DEBUG_PREFILL`/`OMNI_DEBUG_TOPK`）+ `OMNI_T2W_STEPS` env 化 + image_id 门控 + 系统提示 + **NPU 提交串行化互斥锁（`OMNI_NPU_SERIAL` 门控）** + **TTS head_code logits 行间并行（`OMNI_HEADCODE_THREADS`，默认 24）+ per-step 计时插桩（`OMNI_TTS_STEP_PROFILE`）** + **VPM 同尺寸批量编码（`OMNI_VISION_BATCH_ALL`，默认开）** | env 默认关闭/默认值=官方；NPU 锁消除 4 线程并发排队（encoder/llm/tts 三段互斥），RTF -3.3%；head_code matmul（6562×768，原 CPU 单核标量 8.6ms/步）行间并行后 3.1ms/步，每行内部累加顺序不变 → **logits 逐位一致**（26/26 实测），tts 0.417→0.275、RTF -14.3%；**VPM batch**：duplex 每帧 overview+slice 同尺寸（336×602）合并单次 batch 编码（官方 vision_image_batch_encode），encode -22.5%、RTF -9.1%（910B2 同机 A/B 分布零重叠），videomme 10/10 零翻转 | 否（默认关闭/默认值=官方；并行版数值逐位一致） |
 | `tools/omni/omni.h` | T2WOut/last_chunk_timings 结构字段对齐 | 与 omni.cpp 配套 | 否 |
-| `tools/omni/vision.cpp` | `Omni_DUMP_EMBED` 诊断开关 + **VPM(ViT) Flash Attention（`OMNI_VISION_FA` 门控）** + 图模式受限使能（per-backend `ggml_backend_cann_set_acl_graph`） | env 默认关闭；VPM 原走 mul_mat+softmax（上游 TODO），FA 分支对齐 llama-graph 布局，encode -8.2%、RTF -2.1%、精度零翻转；图模式受限使能配合 §2.1 图模式 | 否（默认关闭） |
+| `tools/omni/vision.cpp` | `Omni_DUMP_EMBED` 诊断开关 + **VPM(ViT) Flash Attention（`OMNI_VISION_FA` 门控）** + 图模式受限使能（per-backend `ggml_backend_cann_set_acl_graph`） + **VPM sincos pos_embed 宿主端 memo（`GGML_VPM_SINCOS_MEMO` 门控，默认关，v8.2）** | env 默认关闭；VPM 原走 mul_mat+softmax（上游 TODO），FA 分支对齐 llama-graph 布局，encode -8.2%、RTF -2.1%、精度零翻转；图模式受限使能配合 §2.1 图模式；**memo**：pos_embed 内容为 (embed_dim,H,W) 确定性函数，每帧重算 ~30-40ms（sincos+嵌套 vector churn），memo 后 VPM 180.4→152.0ms/批、encode -17%、RTF -3.4%，core wav 与 memo 关闭逐字节一致 | 否（默认关闭） |
 
 所有改动均可通过环境变量回退到官方行为；未使用第三方代码。
 
@@ -38,6 +38,7 @@
 | `GGML_CANN_ACL_GRAPH_RELAXED` | 未设（GLOBAL 捕获） | 1 | 图模式捕获 | **RELAXED 捕获模式**（`ACL_MODEL_RI_CAPTURE_MODE_RELAXED`）：允许捕获期同步拷贝/malloc，消除 `rtMemcpy-during-capture` 崩溃（GLOBAL 模式拒绝），**解锁 t2w 4 步图模式**；5 步无回归、对输出透明（仅已知尾帧 flush 分段，不入 core） |
 | `OMNI_T2W_STEPS` | 5 | **4** | token2wav | **flow-matching 迭代 4 步**（官方 5 步）：token2mel（DiT）迭代 -20% → t2w 段 -11%、core RTF -3.2%（0.7237→0.7006，全环 3 轮分布零重叠）；**必须配套 4 步 prompt_cache（见 §9.1）**，否则 init 拒绝/输出破坏 |
 | `OMNI_T2W_MODEL_DIR` | 空（官方路径） | `<4步 cache 目录>` | token2wav | 覆盖 token2wav 模型目录（含 4 步 `prompt_cache.gguf`）；指向随包提供的 `token2wav-steps4/`（§9.1），默认空=官方路径行为不变 |
+| `GGML_VPM_SINCOS_MEMO` | 未设（每帧重算） | **1** | VPM(视觉编码) | **VPM sincos pos_embed 宿主端 memo**（v8.2）：pos_embed 为 (embed_dim,H,W) 确定性函数，每帧重算 ~30-40ms（sincos + 嵌套 vector churn）；memo 后 VPM 180.4→152.0ms/批、encode -17%、core RTF -3.4%（0.6974→0.6735）；core wav 与关闭态逐字节一致 + tts WER 0.845%=基线；`0`/未设=每帧重算官方行为 |
 | `OMNI_FORCE_FA` | 未设（CANN 默认 forcing off） | 1 | LLM/TTS | **强制 Flash Attention**（ggml-cann 有完整 FLASH_ATTN_EXT 实现，llama-context AUTO 对 CANN 保守关闭）；实测 llm_decode 0.571→0.234（-59%），core RTF 1.71→1.38（-19.6%）；精度零翻转（2026-08-15 A/B 记录） |
 | `OMNI_HEADCODE_THREADS` | 24 | **16** | TTS head_code | **TTS logits 行间并行**（head_code 6562×768 CPU matmul）：40 核/2 worker 下 **16 线程最优**（24 超订 +1.5%、32 +2.4%）；每行内部标量累加顺序不变 → **logits 逐位一致**；tts 0.417→0.275（-34%）；0=禁用回退官方 |
 | `OMNI_T2W_THREADS` | 16 | **16** | token2wav | vocoder CPU 工作线程；910C 实测 16 与 24 无差异（token2mel/vocoder NPU 绑定），16 为 40 核/2 worker 下的安全值 |
@@ -63,7 +64,8 @@
 | 配置 | core RTF（×5 轮） | 阶段分解 |
 |---|---|---|
 | v7 普通配置（FA on，NZ=off） | 0.8842 / 0.8836 | encode 0.181 + prefill 0.012 + decode 0.173 + tts 0.218 + t2w 0.300 |
-| **v8.1 = 图模式 + 线程16 + RELAXED 捕获 + t2w 4 步（本提交）** | **0.7037 / 0.7026 / 0.6956**（均值 0.7006，vs v8 0.7237 → **-3.2%**） | encode 0.183 + prefill 0.012 + decode 0.169 + tts 0.121 + t2w 0.212 |
+| **v8.1 = 图模式 + 线程16 + RELAXED 捕获 + t2w 4 步** | **0.7037 / 0.7026 / 0.6956**（均值 0.7006，vs v8 0.7237 → **-3.2%**） | encode 0.183 + prefill 0.012 + decode 0.169 + tts 0.121 + t2w 0.212 |
+| **v8.2 = v8.1 + VPM sincos memo（本提交）** | **0.6974 → 0.6772 / 0.6698**（均值 0.6735，同机同 binary 单变量 A/B，vs v8.1 → **-3.4%**） | encode 0.181→0.152 + prefill 0.013 + decode 0.172 + tts 0.123 + t2w 0.212 |
 
 > **v8 精度验证（图 vs 普通，910C）**：LLM 输出（llm_token_ids/llm_text）**逐字节一致**；tts（seed-zh 40 条）WER **0.947% = 0.947%** 且 **40/40 wav 逐字节一致**；batch_validity 四字段全 True。唯一差异为 rts omni_duplex1 turn3 尾帧 flush 分段（文本相同、不入 core 帧，边界现象）。→ 图模式对精度零影响。
 
@@ -131,12 +133,15 @@ EVAL_CONFIG=<本机 env> taskset -c $(cat /sys/devices/system/node/node${NUMA_CP
 | 项 | 值 |
 |---|---|
 | RTS core RTF（3 轮 pooled，图模式 + RELAXED + 线程 16 + t2w 4 步） | **0.7037 / 0.7026 / 0.6956**（均值 0.7006，散差 <0.5%） |
-| 分解（一轮） | encode 0.183 + llm_prefill 0.012 + llm_decode 0.169 + tts 0.121 + token2wav 0.212 |
+| RTS core RTF（v8.2 + VPM sincos memo，同环 2 轮） | **0.6974（memo 关）→ 0.6772 / 0.6698**（均值 0.6735，-3.4%） |
+| 分解（一轮） | encode 0.183 + llm_prefill 0.012 + llm_decode 0.169 + tts 0.121 + token2wav 0.212（v8.2 encode 0.181→0.152） |
 | SPEAK→wav 均值 | 955 ms |
 | batch_validity | data_valid ✓ realtime_eligible ✓ core_sufficient ✓ score_eligible ✓ |
 | 对照（910C 同环） | v8（5 步）0.7237；v7 普通配置 0.8842/0.8836；在册 v5 官方 0.8357 |
 
 > 图模式精度已验证：LLM token/text 与 tts wav 逐字节一致（见 §2.1 尾注）。
+
+> **v8.2 memo 精度（2026-08-28）**：VPM sincos memo 为纯宿主端确定性缓存（位元与重算一致）。门禁三项全过：① rts core 帧 speak_turns wav 在 memo 开/关（同机同 binary 单变量）**逐字节一致**（VPM→LLM→tts→t2w 全链路无损）；② tts WER **0.845% = 0.845%**（200 条，= 历史 4 步基线）；③ batch_validity 四字段全 True。
 
 **性能（RTS，910B4 单卡 NZ=off 官方路径，2026-08-21）**：
 

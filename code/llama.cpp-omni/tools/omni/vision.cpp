@@ -2229,6 +2229,22 @@ static std::vector<std::vector<std::vector<float>>> get_2d_sincos_pos_embed_from
 }
 
 static std::vector<std::vector<float>> get_2d_sincos_pos_embed(int embed_dim, const std::pair<int, int> image_size) {
+    // [P2] memoized: content is a deterministic function of (embed_dim, H, W);
+    // per-frame recomputation costs ~30-40ms of sincos + nested vector churn.
+    // 门控：GGML_VPM_SINCOS_MEMO=1 启用（默认关=官方行为；v8.2 采纳 -3.7%）。
+    static std::map<std::pair<int, std::pair<int,int>>, std::vector<std::vector<float>>> memo;
+    static int memo_enabled = -1;
+    if (memo_enabled == -1) {
+        const char * s = std::getenv("GGML_VPM_SINCOS_MEMO");
+        memo_enabled = (s && s[0] == '1') ? 1 : 0;
+    }
+    const auto key = std::make_pair(embed_dim, image_size);
+    if (memo_enabled) {
+        auto it = memo.find(key);
+        if (it != memo.end()) {
+            return it->second;
+        }
+    }
     int grid_h_size = image_size.first;
     int grid_w_size = image_size.second;
 
@@ -2267,6 +2283,9 @@ static std::vector<std::vector<float>> get_2d_sincos_pos_embed(int embed_dim, co
         }
     }
 
+    if (memo_enabled) {
+        return memo.emplace(key, std::move(pos_embed_2d)).first->second;
+    }
     return pos_embed_2d;
 }
 
