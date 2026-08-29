@@ -101,7 +101,7 @@ int vision_n_output_tokens(const struct vision_ctx * ctx);
 int vision_n_mmproj_embd(const struct vision_ctx * ctx);
 
 // vision preprocess
-bool vision_image_preprocess(struct vision_ctx * ctx, const struct vision_image_u8 * img, struct vision_image_f32_batch * res_imgs );
+bool vision_image_preprocess(struct vision_ctx * ctx, const struct vision_image_u8 * img, struct vision_image_f32_batch * res_imgs, int n_threads = 1);
 
 // vision forward
 bool vision_image_encode      (struct vision_ctx * ctx, int n_threads, struct vision_image_f32 * img, float * vec);

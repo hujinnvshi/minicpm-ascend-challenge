@@ -25,6 +25,23 @@ typedef void (*ggml_backend_cuda_set_disable_graph_t)(ggml_backend_t backend, bo
 #endif
 #include <vector>
 #include "ggml-cpu.h"
+
+// 🔧 [t2m-CONT] doma sprint13 移植：ggml_cont_if_needed —— 仅跳过 ADD/MUL producer 的冗余 CONT
+// （bit-identical 已验证；CONCAT 必须保留，跳过会改数值）。env: OMNI_T2M_SKIP_REDUNDANT_CONT
+// （ADD/MUL/ADD_MUL/CONCAT/ALL），默认 off = 原逻辑零变化。
+static ggml_tensor * ggml_cont_if_needed(ggml_context * ctx, ggml_tensor * src) {
+    static const char * skip = getenv("OMNI_T2M_SKIP_REDUNDANT_CONT");
+    if (skip && ggml_is_contiguous(src)) {
+        bool match = false;
+        if (strcmp(skip, "ADD") == 0)      match = (src->op == GGML_OP_ADD);
+        else if (strcmp(skip, "MUL") == 0) match = (src->op == GGML_OP_MUL);
+        else if (strcmp(skip, "ADD_MUL") == 0) match = (src->op == GGML_OP_ADD || src->op == GGML_OP_MUL);
+        else if (strcmp(skip, "CONCAT") == 0) match = (src->op == GGML_OP_CONCAT);
+        else match = (src->op == GGML_OP_ADD || src->op == GGML_OP_MUL || src->op == GGML_OP_CONCAT);
+        if (match) return src;
+    }
+    return ggml_cont(ctx, src);
+}
 #ifdef GGML_USE_CUDA
 #include "ggml-cuda.h"
 #endif
@@ -136,7 +153,7 @@ ggml_tensor * flow_build_token_embedding_ctb(ggml_context * ctx,
     ggml_tensor * ids_1d = ggml_reshape_1d(ctx, token_ids_tb_i32, T * B);
     ggml_tensor * emb_2d = ggml_get_rows(ctx, token_embedding_weight, ids_1d);
     ggml_tensor * emb_3d = ggml_reshape_3d(ctx, emb_2d, input_size, T, B);
-    return ggml_cont(ctx, emb_3d);
+    return ggml_cont_if_needed(ctx, emb_3d);
 }
 // 用于对spk向量做L2归一化(CB)
 ggml_tensor * flow_build_l2_normalize_cb(ggml_context * ctx, ggml_tensor * x_cb, float eps) {
@@ -156,7 +173,7 @@ ggml_tensor * flow_build_l2_normalize_cb(ggml_context * ctx, ggml_tensor * x_cb,
     ggml_tensor * denom_1b = ggml_sqrt(ctx, ggml_add(ctx, sum_1b, eps_1b));
     ggml_tensor * denom_cb = ggml_repeat(ctx, denom_1b, x_cb);
     ggml_tensor * y        = ggml_div(ctx, x_cb, denom_cb);
-    return ggml_cont(ctx, y);
+    return ggml_cont_if_needed(ctx, y);
 }
 // 用于给CB矩阵加bias
 ggml_tensor * flow_build_add_bias_2d(ggml_context * ctx, ggml_tensor * y_cb, ggml_tensor * bias_c) {
@@ -174,12 +191,12 @@ ggml_tensor * flow_build_add_bias_2d(ggml_context * ctx, ggml_tensor * y_cb, ggm
 ggml_tensor * flow_build_linear_ctb(ggml_context * ctx, ggml_tensor * x_ctb, ggml_tensor * w_in_out, ggml_tensor * b_out) {
     // 用于线性投影(CTB)
     ggml_tensor * y = flow_matching::build_linear(ctx, x_ctb, w_in_out, b_out);
-    return y ? ggml_cont(ctx, y) : nullptr;
+    return y ? ggml_cont_if_needed(ctx, y) : nullptr;
 }
 ggml_tensor * flow_build_linear_cb(ggml_context * ctx, ggml_tensor * x_cb, ggml_tensor * w_in_out, ggml_tensor * b_out) {
     // 用于线性投影(CB)
     ggml_tensor * y = flow_matching::build_linear(ctx, x_cb, w_in_out, b_out);
-    return y ? ggml_cont(ctx, y) : nullptr;
+    return y ? ggml_cont_if_needed(ctx, y) : nullptr;
 }
 }  // namespace
 flowCausalMaskedDiffWithXvec::flowCausalMaskedDiffWithXvec(
@@ -235,7 +252,7 @@ flowSetupCacheOut flowCausalMaskedDiffWithXvec::build_setup_cache_graph(
     }
     ggml_tensor * feat_ctb = decoder_->build_forward_chunk_graph(ctx, mu_ctb, spk_proj_cb, mel_ctb_f32, n_timesteps,
                                                                  temperature, nullptr, cache_out_ptr);
-    out.feat_ctb            = ggml_cont(ctx, feat_ctb);
+    out.feat_ctb            = ggml_cont_if_needed(ctx, feat_ctb);
     out.conformer_cnn_cache = enc_out.new_cnn_cache_ctb;
     out.conformer_att_cache = enc_out.new_att_cache;
     out.estimator_cache     = cache_out_ptr;
@@ -262,8 +279,8 @@ flowEncoderOnlyOut flowCausalMaskedDiffWithXvec::build_inference_chunk_encoder_o
     ggml_tensor * spk_proj_cb  = flow_build_linear_cb(ctx, spk_norm_cb, spk_affine_weight_, spk_affine_bias_);
     auto enc_out               = encoder_->forward_chunk(ctx, xs_ctb, last_chunk, conformer_cnn_cache_in, conformer_att_cache_in);
     ggml_tensor * mu_ctb       = flow_build_linear_ctb(ctx, enc_out.ys_ctb, encoder_proj_weight_, encoder_proj_bias_);
-    out.mu_ctb              = ggml_cont(ctx, mu_ctb);
-    out.spk_proj_cb         = ggml_cont(ctx, spk_proj_cb);
+    out.mu_ctb              = ggml_cont_if_needed(ctx, mu_ctb);
+    out.spk_proj_cb         = ggml_cont_if_needed(ctx, spk_proj_cb);
     out.conformer_cnn_cache = enc_out.new_cnn_cache_ctb;
     out.conformer_att_cache = enc_out.new_att_cache;
     return out;
@@ -300,7 +317,7 @@ flowInferenceChunkOut flowCausalMaskedDiffWithXvec::build_inference_chunk_graph(
     }
     ggml_tensor * feat_ctb = decoder_->build_forward_chunk_graph(ctx, mu_ctb, spk_proj_cb, cond_ctb, n_timesteps,
                                                                  temperature, estimator_cache_in, cache_out_ptr);
-    out.feat_ctb            = ggml_cont(ctx, feat_ctb);
+    out.feat_ctb            = ggml_cont_if_needed(ctx, feat_ctb);
     out.conformer_cnn_cache = enc_out.new_cnn_cache_ctb;
     out.conformer_att_cache = enc_out.new_att_cache;
     out.estimator_cache     = cache_out_ptr;
@@ -355,7 +372,7 @@ ggml_tensor * fm_attn_flatten_heads_qk(ggml_context * ctx,
         return nullptr;
     }
     ggml_tensor * permuted   = ggml_permute(ctx, heads, 0, 2, 1, 3);
-    ggml_tensor * contiguous = ggml_cont(ctx, permuted);
+    ggml_tensor * contiguous = ggml_cont_if_needed(ctx, permuted);
     return ggml_reshape_3d(ctx, contiguous, head_dim, T, (int64_t) num_heads * B);
 }
 ggml_tensor * fm_attn_flatten_heads_v(ggml_context * ctx,
@@ -369,7 +386,7 @@ ggml_tensor * fm_attn_flatten_heads_v(ggml_context * ctx,
     }
     ggml_tensor * flat_qk    = fm_attn_flatten_heads_qk(ctx, heads, head_dim, T, B, num_heads);
     ggml_tensor * permuted   = ggml_permute(ctx, flat_qk, 1, 0, 2, 3);
-    ggml_tensor * contiguous = ggml_cont(ctx, permuted);
+    ggml_tensor * contiguous = ggml_cont_if_needed(ctx, permuted);
     return ggml_reshape_3d(ctx, contiguous, T, head_dim, (int64_t) num_heads * B);
 }
 ggml_tensor * fm_attn_merge_heads_to_channels(ggml_context * ctx,
@@ -383,7 +400,7 @@ ggml_tensor * fm_attn_merge_heads_to_channels(ggml_context * ctx,
     }
     ggml_tensor * view4d     = ggml_reshape_4d(ctx, heads_flat, head_dim, T, num_heads, B);
     ggml_tensor * permuted   = ggml_permute(ctx, view4d, 0, 2, 1, 3);
-    ggml_tensor * contiguous = ggml_cont(ctx, permuted);
+    ggml_tensor * contiguous = ggml_cont_if_needed(ctx, permuted);
     return ggml_reshape_3d(ctx, contiguous, (int64_t) head_dim * num_heads, T, B);
 }
 ggml_tensor * fm_attn_apply_qk_norm(ggml_context * ctx,
@@ -411,7 +428,7 @@ ggml_tensor * fm_attn_prepare_attn_mask(ggml_context * ctx,
     ggml_tensor * mask_4d = ggml_reshape_4d(ctx, mask, T_k, T_q, 1, B);
     ggml_tensor * tmpl_4d = ggml_new_tensor_4d(ctx, GGML_TYPE_F32, T_k, T_q, num_heads, B);
     ggml_tensor * mask_hb = ggml_repeat(ctx, mask_4d, tmpl_4d);
-    ggml_tensor * mask_hb_cont = ggml_cont(ctx, mask_hb);
+    ggml_tensor * mask_hb_cont = ggml_cont_if_needed(ctx, mask_hb);
     ggml_tensor * mask_bh      = ggml_reshape_3d(ctx, mask_hb_cont, T_k, T_q, B * num_heads);
     return mask_bh;
 }
@@ -695,7 +712,7 @@ ggml_tensor * fm_cfm_cnn_slot_to_4d(ggml_context * ctx,
                                            int64_t        C_cache,
                                            int64_t        pad,
                                            int64_t        B) {
-    ggml_tensor * cont = ggml_cont(ctx, cache3d);
+    ggml_tensor * cont = ggml_cont_if_needed(ctx, cache3d);
     return ggml_reshape_4d(ctx, cont, C_cache, pad, 1, B);
 }
 }  // namespace
@@ -1057,7 +1074,7 @@ ggml_tensor * fmCausalConv1d::build_forward_graph(ggml_context * ctx, ggml_tenso
     const int64_t Cin_w = weight_->ne[1];
     const int64_t Cout  = weight_->ne[2];
     ggml_tensor * x_tcb = ggml_permute(ctx, x, 1, 0, 2, 3);
-    x_tcb               = ggml_cont(ctx, x_tcb);
+    x_tcb               = ggml_cont_if_needed(ctx, x_tcb);
     const int     pad_left = static_cast<int>(K - 1);
     ggml_tensor * x_pad    = ggml_pad_ext(ctx, x_tcb, pad_left, 0, 0, 0, 0, 0, 0, 0);
     ggml_tensor * col = ggml_im2col(ctx, weight_, x_pad, 1, 0, 0, 0, 1, 0, false, GGML_TYPE_F32);
@@ -1097,17 +1114,48 @@ ggml_tensor * fmCausalConv1d::build_forward_chunk_graph(ggml_context * ctx,
         cache_in = ggml_view_3d(ctx, zero_x_pad, Cin, pad, B, zero_x_pad->nb[1], zero_x_pad->nb[2], 0);
     } else {
     }
-    cache_in = ggml_cont(ctx, cache_in);
+    cache_in = ggml_cont_if_needed(ctx, cache_in);
     ggml_tensor * cache_tcb = ggml_permute(ctx, cache_in, 1, 0, 2, 3);
-    cache_tcb               = ggml_cont(ctx, cache_tcb);
+    cache_tcb               = ggml_cont_if_needed(ctx, cache_tcb);
     ggml_tensor * x_tcb = ggml_permute(ctx, x, 1, 0, 2, 3);
-    x_tcb               = ggml_cont(ctx, x_tcb);
+    x_tcb               = ggml_cont_if_needed(ctx, x_tcb);
     ggml_tensor * x_cat_tcb = ggml_concat(ctx, cache_tcb, x_tcb, 0);
-    ggml_tensor * col = ggml_im2col(ctx, weight_, x_cat_tcb, 1, 0, 0, 0, 1, 0, false, GGML_TYPE_F32);
-    ggml_tensor * col_2d = ggml_reshape_2d(ctx, col, K * Cin_w, dt * B);
-    ggml_tensor * w_2d = ggml_reshape_2d(ctx, weight_, K * Cin_w, Cout);
-    ggml_tensor * mm = ggml_mul_mat(ctx, w_2d, col_2d);
-    ggml_tensor * y = ggml_reshape_3d(ctx, mm, Cout, dt, B);
+    ggml_tensor * y         = nullptr;
+    // [v8.5] E8 conv_mm（doma sprint16，OMNI_T2W_CONV_MM=1）：K 移位视图+concat+单次 matmul，
+    // 替代 CANN 1D im2col（im2col+permute+数百次 D2D memcpy 风暴）。数值等价（非位等）。默认关=官方行为。
+    static int conv_mm = -1;
+    if (conv_mm == -1) {
+        const char * e = std::getenv("OMNI_T2W_CONV_MM");
+        conv_mm        = (e && e[0] == '1') ? 1 : 0;
+    }
+    if (conv_mm) {
+        // [Cin,T] 布局（c fast）+ view 沿 t 移位 + concat 后转 [c*K+k]（与 im2col col 布局一致）
+        ggml_tensor * x_ct = ggml_cont_if_needed(ctx, ggml_permute(ctx, x_cat_tcb, 1, 0, 2, 3));  // [Cin, T_all, B]
+        std::vector<ggml_tensor *> views;
+        views.reserve((size_t) K);
+        for (int64_t k = 0; k < K; ++k) {
+            ggml_tensor * v = ggml_view_3d(ctx, x_ct, Cin, dt, B,
+                                           x_ct->nb[1], x_ct->nb[2], k * x_ct->nb[1]);   // [Cin, dt, B]
+            views.push_back(ggml_cont_if_needed(ctx, v));
+        }
+        ggml_tensor * x_kkc = views[0];
+        for (size_t k = 1; k < views.size(); ++k) {
+            x_kkc = ggml_concat(ctx, x_kkc, views[k], 0);   // [k*Cin, dt, B] idx=k*Cin+c
+        }
+        x_kkc = ggml_cont_if_needed(ctx, x_kkc);
+        ggml_tensor * x_3d = ggml_reshape_3d(ctx, x_kkc, Cin, K, dt * B);   // [Cin, K, dt*B]
+        ggml_tensor * x_pk = ggml_cont_if_needed(ctx, ggml_permute(ctx, x_3d, 1, 0, 2, 3));  // [K, Cin, dt*B] -> idx=c*K+k
+        ggml_tensor * x_2d = ggml_reshape_2d(ctx, x_pk, K * Cin_w, dt * B);
+        ggml_tensor * w_2d = ggml_reshape_2d(ctx, weight_, K * Cin_w, Cout);
+        ggml_tensor * mm   = ggml_mul_mat(ctx, w_2d, x_2d);
+        y                  = ggml_reshape_3d(ctx, mm, Cout, dt, B);
+    } else {
+        ggml_tensor * col = ggml_im2col(ctx, weight_, x_cat_tcb, 1, 0, 0, 0, 1, 0, false, GGML_TYPE_F32);
+        ggml_tensor * col_2d = ggml_reshape_2d(ctx, col, K * Cin_w, dt * B);
+        ggml_tensor * w_2d = ggml_reshape_2d(ctx, weight_, K * Cin_w, Cout);
+        ggml_tensor * mm = ggml_mul_mat(ctx, w_2d, col_2d);
+        y = ggml_reshape_3d(ctx, mm, Cout, dt, B);
+    }
     if (bias_ != nullptr) {
         ggml_tensor * bias_broadcast = ggml_reshape_3d(ctx, bias_, Cout, 1, 1);
         y                            = ggml_add(ctx, y, bias_broadcast);
@@ -1115,15 +1163,15 @@ ggml_tensor * fmCausalConv1d::build_forward_chunk_graph(ggml_context * ctx,
     if (new_cache != nullptr) {
         ggml_tensor * x_cont = x;
         if (x_cont->op != GGML_OP_RESHAPE && x_cont->op != GGML_OP_NONE) {
-            x_cont = ggml_cont(ctx, x_cont);
+            x_cont = ggml_cont_if_needed(ctx, x_cont);
         }
         ggml_tensor * x_cat_ctb = ggml_concat(ctx, cache_in, x_cont, 1);
-        x_cat_ctb               = ggml_cont(ctx, x_cat_ctb);
+        x_cat_ctb               = ggml_cont_if_needed(ctx, x_cat_ctb);
         const size_t nb1    = x_cat_ctb->nb[1];
         const size_t nb2    = x_cat_ctb->nb[2];
         const size_t offset = nb1 * static_cast<size_t>(dt);
         ggml_tensor * tail_view = ggml_view_3d(ctx, x_cat_ctb, Cin, pad, B, nb1, nb2, offset);
-        ggml_tensor * tail_ctb = ggml_cont(ctx, tail_view);
+        ggml_tensor * tail_ctb = ggml_cont_if_needed(ctx, tail_view);
         *new_cache = tail_ctb;
     }
     return y;
@@ -2487,10 +2535,10 @@ bool fmFlowMatchingGGUFModelLoader::forward(const float *        mu_bct,
     ggml_tensor * mu_t            = nullptr;
     ggml_tensor * cond_t          = nullptr;
     mu_upload_bct = ggml_new_tensor_3d(ctx, GGML_TYPE_F32, T, C, B);
-    mu_t          = ggml_cont(ctx, ggml_permute(ctx, mu_upload_bct, 1, 0, 2, 3));
+    mu_t          = ggml_cont_if_needed(ctx, ggml_permute(ctx, mu_upload_bct, 1, 0, 2, 3));
     if (cond_bct) {
         cond_upload_bct = ggml_new_tensor_3d(ctx, GGML_TYPE_F32, T, C, B);
-        cond_t          = ggml_cont(ctx, ggml_permute(ctx, cond_upload_bct, 1, 0, 2, 3));
+        cond_t          = ggml_cont_if_needed(ctx, ggml_permute(ctx, cond_upload_bct, 1, 0, 2, 3));
     }
     ggml_tensor * spks_t = spks_bc ? ggml_new_tensor_2d(ctx, GGML_TYPE_F32, C, B) : nullptr;
     ggml_tensor * y = cfm_->build_forward_graph(ctx, mu_t, nullptr, spks_t, cond_t, n_timesteps, temperature);
@@ -2498,7 +2546,7 @@ bool fmFlowMatchingGGUFModelLoader::forward(const float *        mu_bct,
         ggml_free(ctx);
         return false;
     }
-    ggml_tensor * y_bct = ggml_cont(ctx, ggml_permute(ctx, y, 1, 0, 2, 3));
+    ggml_tensor * y_bct = ggml_cont_if_needed(ctx, ggml_permute(ctx, y, 1, 0, 2, 3));
     ggml_cgraph * gf = ggml_new_graph_custom(ctx, GGML_DEFAULT_GRAPH_SIZE * 64, false);
     ggml_build_forward_expand(gf, y_bct);
     if (!galloc_) {
@@ -2591,10 +2639,10 @@ bool fmFlowMatchingGGUFModelLoader::forward_chunk(const float *        mu_bct,
     ggml_tensor * mu_t            = nullptr;
     ggml_tensor * cond_t          = nullptr;
     mu_upload_bct = ggml_new_tensor_3d(ctx, GGML_TYPE_F32, T_chunk, C, B);
-    mu_t          = ggml_cont(ctx, ggml_permute(ctx, mu_upload_bct, 1, 0, 2, 3));
+    mu_t          = ggml_cont_if_needed(ctx, ggml_permute(ctx, mu_upload_bct, 1, 0, 2, 3));
     if (cond_bct) {
         cond_upload_bct = ggml_new_tensor_3d(ctx, GGML_TYPE_F32, T_chunk, C, B);
-        cond_t          = ggml_cont(ctx, ggml_permute(ctx, cond_upload_bct, 1, 0, 2, 3));
+        cond_t          = ggml_cont_if_needed(ctx, ggml_permute(ctx, cond_upload_bct, 1, 0, 2, 3));
     }
     ggml_tensor * spks_t = spks_bc ? ggml_new_tensor_2d(ctx, GGML_TYPE_F32, C, B) : nullptr;
     fmCFMCache cache_in;
@@ -2615,8 +2663,8 @@ bool fmFlowMatchingGGUFModelLoader::forward_chunk(const float *        mu_bct,
                                                 cache_in_out->cnn_ne[1], cache_in_out->cnn_ne[0]);
         att_upload_c       = ggml_new_tensor_4d(ctx, GGML_TYPE_F32, cache_in_out->att_ne[3], cache_in_out->att_ne[2],
                                                 cache_in_out->att_ne[1], cache_in_out->att_ne[0]);
-        cnn_in_t           = ggml_cont(ctx, ggml_permute(ctx, cnn_upload_c, 3, 2, 1, 0));
-        att_in_t           = ggml_cont(ctx, ggml_permute(ctx, att_upload_c, 3, 2, 1, 0));
+        cnn_in_t           = ggml_cont_if_needed(ctx, ggml_permute(ctx, cnn_upload_c, 3, 2, 1, 0));
+        att_in_t           = ggml_cont_if_needed(ctx, ggml_permute(ctx, att_upload_c, 3, 2, 1, 0));
         cache_in.cnn_cache = cnn_in_t;
         cache_in.att_cache = att_in_t;
         cache_in.n_time    = cache_in_out->n_time;
@@ -2636,9 +2684,9 @@ bool fmFlowMatchingGGUFModelLoader::forward_chunk(const float *        mu_bct,
     ggml_tensor * y_bct     = nullptr;
     ggml_tensor * cnn_out_c = nullptr;
     ggml_tensor * att_out_c = nullptr;
-    y_bct     = ggml_cont(ctx, ggml_permute(ctx, y, 1, 0, 2, 3));
-    cnn_out_c = ggml_cont(ctx, ggml_permute(ctx, cache_out.cnn_cache, 3, 2, 1, 0));
-    att_out_c = ggml_cont(ctx, ggml_permute(ctx, cache_out.att_cache, 3, 2, 1, 0));
+    y_bct     = ggml_cont_if_needed(ctx, ggml_permute(ctx, y, 1, 0, 2, 3));
+    cnn_out_c = ggml_cont_if_needed(ctx, ggml_permute(ctx, cache_out.cnn_cache, 3, 2, 1, 0));
+    att_out_c = ggml_cont_if_needed(ctx, ggml_permute(ctx, cache_out.att_cache, 3, 2, 1, 0));
     ggml_cgraph * gf = ggml_new_graph_custom(ctx, GGML_DEFAULT_GRAPH_SIZE * 128, false);
     ggml_build_forward_expand(gf, y_bct);
     ggml_build_forward_expand(gf, cnn_out_c);
@@ -3353,7 +3401,7 @@ bool ueUpsampleEncoderGGUFModelRunner::forward(const float *          xs_btc,
     }
     ggml_tensor * mask_tb = nullptr;
     if (masks_out && out.masks) {
-        mask_tb = ggml_cont(ctx, out.masks);
+        mask_tb = ggml_cont_if_needed(ctx, out.masks);
     }
     ggml_cgraph * gf = ggml_new_graph_custom(ctx, GGML_DEFAULT_GRAPH_SIZE * 256, false);
     ggml_build_forward_expand(gf, out.ys_ctb);
@@ -3458,7 +3506,7 @@ bool ueUpsampleEncoderGGUFModelRunner::forward_chunk(const float *        xs_btc
             return false;
         }
         cnn_upload_tcb = ggml_new_tensor_3d(ctx, GGML_TYPE_F32, cache_in_out->cnn_T, C, B);
-        cnn_ctb        = ggml_cont(ctx, ggml_permute(ctx, cnn_upload_tcb, 1, 0, 2, 3));
+        cnn_ctb        = ggml_cont_if_needed(ctx, ggml_permute(ctx, cnn_upload_tcb, 1, 0, 2, 3));
     }
     if (cache_in_out && cache_in_out->has_att_cache()) {
         if (cache_in_out->att_B != B) {
@@ -3477,7 +3525,7 @@ bool ueUpsampleEncoderGGUFModelRunner::forward_chunk(const float *        xs_btc
         ggml_free(ctx);
         return false;
     }
-    ggml_tensor * new_cnn_tcb = ggml_cont(ctx, ggml_permute(ctx, new_cnn_ctb, 1, 0, 2, 3));
+    ggml_tensor * new_cnn_tcb = ggml_cont_if_needed(ctx, ggml_permute(ctx, new_cnn_ctb, 1, 0, 2, 3));
     ggml_cgraph * gf = ggml_new_graph_custom(ctx, GGML_DEFAULT_GRAPH_SIZE * 256, false);
     ggml_build_forward_expand(gf, ys_ctb);
     ggml_build_forward_expand(gf, new_cnn_tcb);
@@ -3568,7 +3616,7 @@ ggml_tensor * ue_mha_flatten_heads_qk(ggml_context * ctx,
         return nullptr;
     }
     ggml_tensor * permuted   = ggml_permute(ctx, heads_dhtb, 0, 2, 1, 3);
-    ggml_tensor * contiguous = ggml_cont(ctx, permuted);
+    ggml_tensor * contiguous = ggml_cont_if_needed(ctx, permuted);
     return ggml_reshape_3d(ctx, contiguous, head_dim, T, (int64_t) num_heads * B);
 }
 ggml_tensor * ue_mha_flatten_heads_v(ggml_context * ctx,
@@ -3582,7 +3630,7 @@ ggml_tensor * ue_mha_flatten_heads_v(ggml_context * ctx,
     }
     ggml_tensor * flat_qk    = ue_mha_flatten_heads_qk(ctx, heads_dhtb, head_dim, T, B, num_heads);
     ggml_tensor * permuted   = ggml_permute(ctx, flat_qk, 1, 0, 2, 3);
-    ggml_tensor * contiguous = ggml_cont(ctx, permuted);
+    ggml_tensor * contiguous = ggml_cont_if_needed(ctx, permuted);
     return ggml_reshape_3d(ctx, contiguous, T, head_dim, (int64_t) num_heads * B);
 }
 ggml_tensor * ue_mha_merge_heads_to_channels(ggml_context * ctx,
@@ -3596,7 +3644,7 @@ ggml_tensor * ue_mha_merge_heads_to_channels(ggml_context * ctx,
     }
     ggml_tensor * view4d     = ggml_reshape_4d(ctx, heads_flat_dtbH, head_dim, T, num_heads, B);
     ggml_tensor * permuted   = ggml_permute(ctx, view4d, 0, 2, 1, 3);
-    ggml_tensor * contiguous = ggml_cont(ctx, permuted);
+    ggml_tensor * contiguous = ggml_cont_if_needed(ctx, permuted);
     return ggml_reshape_3d(ctx, contiguous, (int64_t) head_dim * num_heads, T, B);
 }
 // 从张量中切片
@@ -3679,7 +3727,7 @@ ggml_tensor * ue_mha_prepare_valid_mask_bh(ggml_context * ctx,
     ggml_tensor * m_4d      = ggml_reshape_4d(ctx, m_tqb, T_k, T_q, 1, B);
     ggml_tensor * tmpl_4d   = ggml_new_tensor_4d(ctx, GGML_TYPE_F32, T_k, T_q, num_heads, B);
     ggml_tensor * m_hb      = ggml_repeat(ctx, m_4d, tmpl_4d);
-    ggml_tensor * m_hb_cont = ggml_cont(ctx, m_hb);
+    ggml_tensor * m_hb_cont = ggml_cont_if_needed(ctx, m_hb);
     return ggml_reshape_3d(ctx, m_hb_cont, T_k, T_q, B * num_heads);
 }
 }  // namespace
@@ -3763,7 +3811,7 @@ ggml_tensor * ueMultiHeadedAttention::build_forward_attention(ggml_context * ctx
     const int64_t T_q = scores_ktqh_b->ne[1];
     const int64_t H   = scores_ktqh_b->ne[2];
     const int64_t B   = scores_ktqh_b->ne[3];
-    ggml_tensor * scores_cont = ggml_cont(ctx, scores_ktqh_b);
+    ggml_tensor * scores_cont = ggml_cont_if_needed(ctx, scores_ktqh_b);
     ggml_tensor * scores_bh   = ggml_reshape_3d(ctx, scores_cont, T_k, T_q, B * H);
     ggml_tensor * probs = nullptr;
     if (mask != nullptr) {
@@ -3906,7 +3954,7 @@ static ggml_tensor * ue_prelook_build_pad_zeros_ctb(ggml_context * ctx, int64_t 
     ggml_tensor * zero_scalar = ggml_arange(ctx, 0.0f, 1.0f, 1.0f);
     ggml_tensor * pad_4d      = ggml_repeat_4d(ctx, zero_scalar, C, Tpad, B, 1);
     ggml_tensor * pad_3d      = ggml_reshape_3d(ctx, pad_4d, C, Tpad, B);
-    return ggml_cont(ctx, pad_3d);
+    return ggml_cont_if_needed(ctx, pad_3d);
 }
 static ggml_tensor * ue_prelook_build_conv1d_f32_ctb(ggml_context * ctx,
                                           ggml_tensor *  w_kic_oc,
@@ -3918,7 +3966,7 @@ static ggml_tensor * ue_prelook_build_conv1d_f32_ctb(ggml_context * ctx,
     const int64_t Cinw = w_kic_oc->ne[1];
     const int64_t Cout = w_kic_oc->ne[2];
     ggml_tensor * x_tcb = ggml_permute(ctx, x_ctb, 1, 0, 2, 3);
-    x_tcb               = ggml_cont(ctx, x_tcb);
+    x_tcb               = ggml_cont_if_needed(ctx, x_tcb);
     ggml_tensor * y_tcb = nullptr;
     for (int64_t b_idx = 0; b_idx < B; ++b_idx) {
         const size_t  offset = x_tcb->nb[2] * static_cast<size_t>(b_idx);
@@ -3931,7 +3979,7 @@ static ggml_tensor * ue_prelook_build_conv1d_f32_ctb(ggml_context * ctx,
         }
     }
     ggml_tensor * y_ctb = ggml_permute(ctx, y_tcb, 1, 0, 2, 3);
-    y_ctb               = ggml_cont(ctx, y_ctb);
+    y_ctb               = ggml_cont_if_needed(ctx, y_ctb);
     if (b_oc != nullptr) {
         ggml_tensor * b_bcast = ggml_reshape_3d(ctx, b_oc, Cout, 1, 1);
         y_ctb                 = ggml_add(ctx, y_ctb, b_bcast);
@@ -3941,7 +3989,7 @@ static ggml_tensor * ue_prelook_build_conv1d_f32_ctb(ggml_context * ctx,
 static ggml_tensor * ue_prelook_slice_time_ctb(ggml_context * ctx, ggml_tensor * x_ctb, int64_t t0, int64_t tlen) {
     const size_t  off = x_ctb->nb[1] * static_cast<size_t>(t0);
     ggml_tensor * v   = ggml_view_3d(ctx, x_ctb, x_ctb->ne[0], tlen, x_ctb->ne[2], x_ctb->nb[1], x_ctb->nb[2], off);
-    return ggml_cont(ctx, v);
+    return ggml_cont_if_needed(ctx, v);
 }
 }  // namespace
 // 初始化前向prelook
@@ -3968,18 +4016,18 @@ ggml_tensor * uePreLookaheadLayer::build_forward_graph(ggml_context * ctx, ggml_
     const int64_t K1 = conv1_weight_->ne[0];
     ggml_tensor * pad_r = ue_prelook_build_pad_zeros_ctb(ctx, C, pre_lookahead_len_, B);
     ggml_tensor * x_cat = ggml_concat(ctx, inputs_ctb, pad_r, 1);
-    x_cat               = ggml_cont(ctx, x_cat);
+    x_cat               = ggml_cont_if_needed(ctx, x_cat);
     ggml_tensor * y1 = ue_prelook_build_conv1d_f32_ctb(ctx, conv1_weight_, conv1_bias_, x_cat);
     y1 = ggml_leaky_relu(ctx, y1, 0.01f, false);
-    y1 = ggml_cont(ctx, y1);
+    y1 = ggml_cont_if_needed(ctx, y1);
     const int64_t K2 = conv2_weight_->ne[0];
     ggml_tensor * pad_l2 = ue_prelook_build_pad_zeros_ctb(ctx, C, 2, B);
     ggml_tensor * y1_cat = ggml_concat(ctx, pad_l2, y1, 1);
-    y1_cat               = ggml_cont(ctx, y1_cat);
+    y1_cat               = ggml_cont_if_needed(ctx, y1_cat);
     ggml_tensor * y2 = ue_prelook_build_conv1d_f32_ctb(ctx, conv2_weight_, conv2_bias_, y1_cat);
-    y2               = ggml_cont(ctx, y2);
+    y2               = ggml_cont_if_needed(ctx, y2);
     ggml_tensor * out = ggml_add(ctx, y2, inputs_ctb);
-    return ggml_cont(ctx, out);
+    return ggml_cont_if_needed(ctx, out);
 }
 ggml_tensor * uePreLookaheadLayer::build_forward_chunk_graph(ggml_context * ctx,
                                                              ggml_tensor *  inputs_ctb,
@@ -3997,7 +4045,7 @@ ggml_tensor * uePreLookaheadLayer::build_forward_chunk_graph(ggml_context * ctx,
     const int64_t K1 = conv1_weight_->ne[0];
     ggml_tensor * y1 = ue_prelook_build_conv1d_f32_ctb(ctx, conv1_weight_, conv1_bias_, inputs_ctb);
     y1               = ggml_leaky_relu(ctx, y1, 0.01f, false);
-    y1               = ggml_cont(ctx, y1);
+    y1               = ggml_cont_if_needed(ctx, y1);
     const int64_t t1 = y1->ne[1];
     ggml_tensor * new_cache = ue_prelook_slice_time_ctb(ctx, y1, t1 - cache_t(), cache_t());
     if (new_cache_ctb_out) {
@@ -4009,12 +4057,12 @@ ggml_tensor * uePreLookaheadLayer::build_forward_chunk_graph(ggml_context * ctx,
     } else {
     }
     ggml_tensor * y1_cat = ggml_concat(ctx, cache, y1, 1);
-    y1_cat               = ggml_cont(ctx, y1_cat);
+    y1_cat               = ggml_cont_if_needed(ctx, y1_cat);
     ggml_tensor * y2 = ue_prelook_build_conv1d_f32_ctb(ctx, conv2_weight_, conv2_bias_, y1_cat);
-    y2               = ggml_cont(ctx, y2);
+    y2               = ggml_cont_if_needed(ctx, y2);
     ggml_tensor * in_trunc = ue_prelook_slice_time_ctb(ctx, inputs_ctb, 0, t1);
     ggml_tensor * out      = ggml_add(ctx, y2, in_trunc);
-    return ggml_cont(ctx, out);
+    return ggml_cont_if_needed(ctx, out);
 }
 }  // namespace upsample_encoder_v2
 }  // namespace omni
@@ -4039,7 +4087,7 @@ ggml_tensor * ue_rel_mha_flatten_heads_qk(ggml_context * ctx,
         return nullptr;
     }
     ggml_tensor * permuted   = ggml_permute(ctx, heads_dhtb, 0, 2, 1, 3);
-    ggml_tensor * contiguous = ggml_cont(ctx, permuted);
+    ggml_tensor * contiguous = ggml_cont_if_needed(ctx, permuted);
     return ggml_reshape_3d(ctx, contiguous, head_dim, T, (int64_t) num_heads * B);
 }
 // 把通道维 reshape 成 head 维度
@@ -4054,7 +4102,7 @@ ggml_tensor * ue_rel_mha_flatten_heads_v(ggml_context * ctx,
     }
     ggml_tensor * flat_qk    = ue_rel_mha_flatten_heads_qk(ctx, heads_dhtb, head_dim, T, B, num_heads);
     ggml_tensor * permuted   = ggml_permute(ctx, flat_qk, 1, 0, 2, 3);
-    ggml_tensor * contiguous = ggml_cont(ctx, permuted);
+    ggml_tensor * contiguous = ggml_cont_if_needed(ctx, permuted);
     return ggml_reshape_3d(ctx, contiguous, T, head_dim, (int64_t) num_heads * B);
 }
 ggml_tensor * ue_rel_mha_merge_heads_to_channels(ggml_context * ctx,
@@ -4068,7 +4116,7 @@ ggml_tensor * ue_rel_mha_merge_heads_to_channels(ggml_context * ctx,
     }
     ggml_tensor * view4d     = ggml_reshape_4d(ctx, heads_flat_dtbH, head_dim, T, num_heads, B);
     ggml_tensor * permuted   = ggml_permute(ctx, view4d, 0, 2, 1, 3);
-    ggml_tensor * contiguous = ggml_cont(ctx, permuted);
+    ggml_tensor * contiguous = ggml_cont_if_needed(ctx, permuted);
     return ggml_reshape_3d(ctx, contiguous, (int64_t) head_dim * num_heads, T, B);
 }
 // 从张量中切片
@@ -4135,11 +4183,11 @@ ggml_tensor * ueRelPositionMultiHeadedAttention::build_rel_shift(ggml_context * 
     ggml_tensor * zero_scalar = ggml_arange(ctx, 0.0f, 1.0f, 1.0f);
     ggml_tensor * zero_pad    = ggml_repeat_4d(ctx, zero_scalar, 1, Tq, H, B);
     ggml_tensor * x_padded = ggml_concat(ctx, zero_pad, x, 0);
-    x_padded               = ggml_cont(ctx, x_padded);
+    x_padded               = ggml_cont_if_needed(ctx, x_padded);
     ggml_tensor * x_view = ggml_reshape_4d(ctx, x_padded, Tq, Tp + 1, H, B);
     ggml_tensor * x_sliced =
         ggml_view_4d(ctx, x_view, Tq, Tp, H, B, x_view->nb[1], x_view->nb[2], x_view->nb[3], x_view->nb[1]);
-    ggml_tensor * x_sliced_cont = ggml_cont(ctx, x_sliced);
+    ggml_tensor * x_sliced_cont = ggml_cont_if_needed(ctx, x_sliced);
     ggml_tensor * x_view_as     = ggml_reshape_4d(ctx, x_sliced_cont, Tp, Tq, H, B);
     const int64_t Tp2 = Tp / 2 + 1;
     return ggml_view_4d(ctx, x_view_as, Tp2, Tq, H, B, x_view_as->nb[1], x_view_as->nb[2], x_view_as->nb[3], 0);
@@ -4205,7 +4253,7 @@ ggml_tensor * ueRelPositionMultiHeadedAttention::build_forward_graph(ggml_contex
     if (matrix_bd->ne[0] != matrix_ac->ne[0]) {
         ggml_tensor * bd_4d         = ggml_reshape_4d(ctx, matrix_bd, Tp, Tq, n_head_, B);
         ggml_tensor * bd_shift      = build_rel_shift(ctx, bd_4d);
-        ggml_tensor * bd_shift_cont = ggml_cont(ctx, bd_shift);
+        ggml_tensor * bd_shift_cont = ggml_cont_if_needed(ctx, bd_shift);
         matrix_bd =
             ggml_reshape_3d(ctx, bd_shift_cont, bd_shift->ne[0], bd_shift->ne[1], bd_shift->ne[2] * bd_shift->ne[3]);
     }
@@ -4309,7 +4357,7 @@ static ggml_tensor * ue_up1d_repeat_upsample_ctb(ggml_context * ctx, ggml_tensor
     ggml_tensor * x_4d = ggml_reshape_4d(ctx, x_ctb, C, 1, T, B);
     ggml_tensor * rep_4d = ggml_repeat_4d(ctx, x_4d, C, up_factor, T, B);
     ggml_tensor * y_ctb = ggml_reshape_3d(ctx, rep_4d, C, up_factor * T, B);
-    return ggml_cont(ctx, y_ctb);
+    return ggml_cont_if_needed(ctx, y_ctb);
 }
 // 构建计算图
 // 构建左侧补零
@@ -4317,7 +4365,7 @@ static ggml_tensor * ue_up1d_build_left_pad_zeros_ctb(ggml_context * ctx, int64_
     ggml_tensor * zero_scalar = ggml_arange(ctx, 0.0f, 1.0f, 1.0f);
     ggml_tensor * pad_4d      = ggml_repeat_4d(ctx, zero_scalar, C, Tpad, B, 1);
     ggml_tensor * pad_3d      = ggml_reshape_3d(ctx, pad_4d, C, Tpad, B);
-    return ggml_cont(ctx, pad_3d);
+    return ggml_cont_if_needed(ctx, pad_3d);
 }
 static ggml_tensor * ue_up1d_build_conv1d_f32_ctb(ggml_context * ctx,
                                           ggml_tensor *  w_kic_oc,
@@ -4329,7 +4377,7 @@ static ggml_tensor * ue_up1d_build_conv1d_f32_ctb(ggml_context * ctx,
     const int64_t Cinw = w_kic_oc->ne[1];
     const int64_t Cout = w_kic_oc->ne[2];
     ggml_tensor * x_tcb = ggml_permute(ctx, x_ctb, 1, 0, 2, 3);
-    x_tcb               = ggml_cont(ctx, x_tcb);
+    x_tcb               = ggml_cont_if_needed(ctx, x_tcb);
     ggml_tensor * y_tcb = nullptr;
     for (int64_t b_idx = 0; b_idx < B; ++b_idx) {
         const size_t  offset = x_tcb->nb[2] * static_cast<size_t>(b_idx);
@@ -4342,7 +4390,7 @@ static ggml_tensor * ue_up1d_build_conv1d_f32_ctb(ggml_context * ctx,
         }
     }
     ggml_tensor * y_ctb = ggml_permute(ctx, y_tcb, 1, 0, 2, 3);
-    y_ctb               = ggml_cont(ctx, y_ctb);
+    y_ctb               = ggml_cont_if_needed(ctx, y_ctb);
     if (b_oc != nullptr) {
         ggml_tensor * b_bcast = ggml_reshape_3d(ctx, b_oc, Cout, 1, 1);
         y_ctb                 = ggml_add(ctx, y_ctb, b_bcast);
@@ -4374,7 +4422,7 @@ ggml_tensor * ueUpsample1D::build_forward_graph(ggml_context * ctx, ggml_tensor 
     ggml_tensor * up_ctb  = ue_up1d_repeat_upsample_ctb(ctx, inputs_ctb, up_factor);
     ggml_tensor * pad_ctb = ue_up1d_build_left_pad_zeros_ctb(ctx, C, pad_left, B);
     ggml_tensor * x_cat   = ggml_concat(ctx, pad_ctb, up_ctb, 1);
-    x_cat                 = ggml_cont(ctx, x_cat);
+    x_cat                 = ggml_cont_if_needed(ctx, x_cat);
     return ue_up1d_build_conv1d_f32_ctb(ctx, conv_weight_, conv_bias_, x_cat);
 }
 ggml_tensor * ueUpsample1D::build_forward_chunk_graph(ggml_context * ctx,
@@ -4399,12 +4447,12 @@ ggml_tensor * ueUpsample1D::build_forward_chunk_graph(ggml_context * ctx,
     } else {
     }
     ggml_tensor * x_cat = ggml_concat(ctx, cache_use, up_ctb, 1);
-    x_cat               = ggml_cont(ctx, x_cat);
+    x_cat               = ggml_cont_if_needed(ctx, x_cat);
     if (new_cache_ctb_out) {
         const int64_t Tcat = x_cat->ne[1];
         const size_t  offset         = static_cast<size_t>(Tcat - cache_t) * x_cat->nb[1];
         ggml_tensor * new_cache_view = ggml_view_3d(ctx, x_cat, C, cache_t, B, x_cat->nb[1], x_cat->nb[2], offset);
-        *new_cache_ctb_out           = ggml_cont(ctx, new_cache_view);
+        *new_cache_ctb_out           = ggml_cont_if_needed(ctx, new_cache_view);
     }
     return ue_up1d_build_conv1d_f32_ctb(ctx, conv_weight_, conv_bias_, x_cat);
 }
@@ -4442,13 +4490,13 @@ ggml_tensor * ue_uce_make_valid_mask(ggml_context * ctx, ggml_tensor * lengths_b
     ggml_tensor * neg_pad      = ggml_neg(ctx, pad_f32_tb);
     ggml_tensor * one_rep      = ggml_repeat(ctx, one_f32, neg_pad);
     ggml_tensor * valid_f32_tb = ggml_add(ctx, neg_pad, one_rep);
-    return ggml_cont(ctx, valid_f32_tb);
+    return ggml_cont_if_needed(ctx, valid_f32_tb);
 }
 // 从张量中切片
 ggml_tensor * ue_uce_slice_time_ctb(ggml_context * ctx, ggml_tensor * x_ctb, int64_t t0, int64_t tlen) {
     const size_t  off = x_ctb->nb[1] * static_cast<size_t>(t0);
     ggml_tensor * v   = ggml_view_3d(ctx, x_ctb, x_ctb->ne[0], tlen, x_ctb->ne[2], x_ctb->nb[1], x_ctb->nb[2], off);
-    return ggml_cont(ctx, v);
+    return ggml_cont_if_needed(ctx, v);
 }
 // 构建计算图
 ggml_tensor * ue_uce_build_right_pad_zeros_ctb(ggml_context * ctx, ggml_tensor * x_ctb, int64_t Tpad) {
@@ -4460,9 +4508,9 @@ ggml_tensor * ue_uce_build_right_pad_zeros_ctb(ggml_context * ctx, ggml_tensor *
     ggml_tensor * zero_scalar = ggml_arange(ctx, 0.0f, 1.0f, 1.0f);
     ggml_tensor * pad_4d      = ggml_repeat_4d(ctx, zero_scalar, C, Tpad, B, 1);
     ggml_tensor * pad_ctb     = ggml_reshape_3d(ctx, pad_4d, C, Tpad, B);
-    pad_ctb                   = ggml_cont(ctx, pad_ctb);
+    pad_ctb                   = ggml_cont_if_needed(ctx, pad_ctb);
     ggml_tensor * out         = ggml_concat(ctx, x_ctb, pad_ctb, 1);
-    return ggml_cont(ctx, out);
+    return ggml_cont_if_needed(ctx, out);
 }
 // 从张量中切片
 ggml_tensor * ue_uce_slice_att_cache_layer(ggml_context * ctx, ggml_tensor * att_cache_packed, int64_t layer_idx, int64_t B) {
@@ -4472,7 +4520,7 @@ ggml_tensor * ue_uce_slice_att_cache_layer(ggml_context * ctx, ggml_tensor * att
     const size_t  off = att_cache_packed->nb[3] * static_cast<size_t>(layer_idx * B);
     ggml_tensor * v = ggml_view_4d(ctx, att_cache_packed, E, T, H, B, att_cache_packed->nb[1], att_cache_packed->nb[2],
                                    att_cache_packed->nb[3], off);
-    return ggml_cont(ctx, v);
+    return ggml_cont_if_needed(ctx, v);
 }
 // 从张量中切片
 ggml_tensor * ue_uce_slice_att_cache_prefix(ggml_context * ctx, ggml_tensor * cache_full_ethb, int64_t offset1) {
@@ -4482,7 +4530,7 @@ ggml_tensor * ue_uce_slice_att_cache_prefix(ggml_context * ctx, ggml_tensor * ca
     ggml_tensor * v =
         ggml_view_4d(ctx, cache_full_ethb, cache_full_ethb->ne[0], offset1, cache_full_ethb->ne[2],
                      cache_full_ethb->ne[3], cache_full_ethb->nb[1], cache_full_ethb->nb[2], cache_full_ethb->nb[3], 0);
-    return ggml_cont(ctx, v);
+    return ggml_cont_if_needed(ctx, v);
 }
 }  // namespace
 ueUpsampleConformerEncoderV2::ueUpsampleConformerEncoderV2(int32_t input_size,
@@ -4583,19 +4631,19 @@ ggml_tensor * ueUpsampleConformerEncoderV2::build_forward_graph(ggml_context * c
     if (pos_emb0) {
         ggml_set_name(pos_emb0, "ue_uce_pos0");
     }
-    x = ggml_cont(ctx, x);
+    x = ggml_cont_if_needed(ctx, x);
     x = pre_lookahead_layer_->build_forward_graph(ctx, x);
-    x = ggml_cont(ctx, x);
+    x = ggml_cont_if_needed(ctx, x);
     for (int64_t li = 0; li < (int64_t) encoders_.size(); ++li) {
         const auto & layer = encoders_[(size_t) li];
         if (!layer) {
             continue;
         }
         x = layer->build_forward_graph(ctx, x, mask0, pos_emb0, nullptr, nullptr, nullptr, nullptr, nullptr);
-        x = ggml_cont(ctx, x);
+        x = ggml_cont_if_needed(ctx, x);
     }
     ggml_tensor * x_up = up_layer_->build_forward_graph(ctx, x);
-    x_up               = ggml_cont(ctx, x_up);
+    x_up               = ggml_cont_if_needed(ctx, x_up);
     ggml_tensor * pos_emb1       = nullptr;
     ggml_tensor * mask1_valid_tb = nullptr;
     if (lengths_b != nullptr) {
@@ -4609,18 +4657,18 @@ ggml_tensor * ueUpsampleConformerEncoderV2::build_forward_graph(ggml_context * c
     if (pos_emb1) {
         ggml_set_name(pos_emb1, "ue_uce_pos1");
     }
-    x2 = ggml_cont(ctx, x2);
+    x2 = ggml_cont_if_needed(ctx, x2);
     for (int64_t li = 0; li < (int64_t) up_encoders_.size(); ++li) {
         const auto & layer = up_encoders_[(size_t) li];
         if (!layer) {
             continue;
         }
         x2 = layer->build_forward_graph(ctx, x2, tmp_mask_out, pos_emb1, nullptr, nullptr, nullptr, nullptr, nullptr);
-        x2 = ggml_cont(ctx, x2);
+        x2 = ggml_cont_if_needed(ctx, x2);
     }
     if (normalize_before_) {
         x2 = ue_build_layer_norm(ctx, x2, after_norm_weight_, after_norm_bias_, 1e-5f);
-        x2 = ggml_cont(ctx, x2);
+        x2 = ggml_cont_if_needed(ctx, x2);
     }
     if (out_masks_out) {
         *out_masks_out = tmp_mask_out;
@@ -4656,13 +4704,13 @@ ggml_tensor * ueUpsampleConformerEncoderV2::build_forward_chunk_graph(ggml_conte
     }
     ggml_tensor * tmp_pos = nullptr;
     ggml_tensor * x       = embed_->build_forward_graph(ctx, xs_ctb, nullptr, 0, &tmp_pos, nullptr);
-    x                     = ggml_cont(ctx, x);
+    x                     = ggml_cont_if_needed(ctx, x);
     if (last_chunk) {
         x = ue_uce_build_right_pad_zeros_ctb(ctx, x, pre_lookahead_len_);
     }
     ggml_tensor * new_cnn_cache1 = nullptr;
     x                            = pre_lookahead_layer_->build_forward_chunk_graph(ctx, x, cnn_cache1, &new_cnn_cache1);
-    x                            = ggml_cont(ctx, x);
+    x                            = ggml_cont_if_needed(ctx, x);
     const int64_t T1   = x->ne[1];
     ggml_tensor * pos1 = embed_->position_encoding(ctx, nullptr, (int32_t) (offset1 + T1));
     if (pos1) {
@@ -4685,23 +4733,23 @@ ggml_tensor * ueUpsampleConformerEncoderV2::build_forward_chunk_graph(ggml_conte
         ggml_tensor * new_cnn_dummy = nullptr;
         x = layer->build_forward_graph(ctx, x, chunk_masks, pos1, nullptr, cache_in, nullptr, &new_cache,
                                        &new_cnn_dummy);
-        x = ggml_cont(ctx, x);
+        x = ggml_cont_if_needed(ctx, x);
         ggml_tensor * new_cache_rep = ggml_concat(ctx, new_cache, new_cache, 1);
-        new_cache_rep               = ggml_cont(ctx, new_cache_rep);
+        new_cache_rep               = ggml_cont_if_needed(ctx, new_cache_rep);
         if (li == 0) {
             Tk1                   = new_cache->ne[1];
             packed_new_att_cache1 = new_cache_rep;
         } else {
             packed_new_att_cache1 = ggml_concat(ctx, packed_new_att_cache1, new_cache_rep, 3);
-            packed_new_att_cache1 = ggml_cont(ctx, packed_new_att_cache1);
+            packed_new_att_cache1 = ggml_cont_if_needed(ctx, packed_new_att_cache1);
         }
     }
     ggml_tensor * new_cnn_cache2 = nullptr;
     ggml_tensor * x_up           = up_layer_->build_forward_chunk_graph(ctx, x, cnn_cache2, &new_cnn_cache2);
-    x_up                         = ggml_cont(ctx, x_up);
+    x_up                         = ggml_cont_if_needed(ctx, x_up);
     ggml_tensor * tmp_pos2 = nullptr;
     ggml_tensor * x2       = up_embed_->build_forward_graph(ctx, x_up, nullptr, 0, &tmp_pos2, nullptr);
-    x2                     = ggml_cont(ctx, x2);
+    x2                     = ggml_cont_if_needed(ctx, x2);
     const int64_t T2   = x2->ne[1];
     ggml_tensor * pos2 = embed_->position_encoding(ctx, nullptr, (int32_t) (offset1 * up_stride_ + T2));
     if (pos2) {
@@ -4723,30 +4771,30 @@ ggml_tensor * ueUpsampleConformerEncoderV2::build_forward_chunk_graph(ggml_conte
         ggml_tensor * new_cnn_dummy = nullptr;
         x2 = layer->build_forward_graph(ctx, x2, chunk_masks, pos2, nullptr, cache_in, nullptr, &new_cache,
                                         &new_cnn_dummy);
-        x2 = ggml_cont(ctx, x2);
+        x2 = ggml_cont_if_needed(ctx, x2);
         if (li == 0) {
             Tk2                   = new_cache->ne[1];
             packed_new_att_cache2 = new_cache;
         } else {
             packed_new_att_cache2 = ggml_concat(ctx, packed_new_att_cache2, new_cache, 3);
-            packed_new_att_cache2 = ggml_cont(ctx, packed_new_att_cache2);
+            packed_new_att_cache2 = ggml_cont_if_needed(ctx, packed_new_att_cache2);
         }
     }
     if (normalize_before_) {
         x2 = ue_build_layer_norm(ctx, x2, after_norm_weight_, after_norm_bias_, 1e-5f);
-        x2 = ggml_cont(ctx, x2);
+        x2 = ggml_cont_if_needed(ctx, x2);
     }
     ggml_tensor * new_att_packed = nullptr;
     if (packed_new_att_cache1 != nullptr && packed_new_att_cache2 != nullptr) {
         new_att_packed = ggml_concat(ctx, packed_new_att_cache1, packed_new_att_cache2, 3);
-        new_att_packed = ggml_cont(ctx, new_att_packed);
+        new_att_packed = ggml_cont_if_needed(ctx, new_att_packed);
     } else if (packed_new_att_cache1 != nullptr) {
         new_att_packed = packed_new_att_cache1;
     } else {
         new_att_packed = packed_new_att_cache2;
     }
     ggml_tensor * new_cnn_packed = ggml_concat(ctx, new_cnn_cache1, new_cnn_cache2, 1);
-    new_cnn_packed               = ggml_cont(ctx, new_cnn_packed);
+    new_cnn_packed               = ggml_cont_if_needed(ctx, new_cnn_packed);
     if (new_att_cache_out) {
         *new_att_cache_out = new_att_packed;
     }
@@ -4956,14 +5004,14 @@ static ggml_tensor * hg_f0_predictor_conv1d_k3_p1_f32(ggml_context * ctx,
     }
     ggml_tensor * im2col = ggml_im2col(ctx, w_kic_oc, x_tcb, 1, 0, 1, 0, 1, 0, false, GGML_TYPE_F32);
     ggml_tensor * im2col_2d = ggml_reshape_2d(ctx, im2col, im2col->ne[0], im2col->ne[2] * im2col->ne[1]);
-    im2col_2d               = ggml_cont(ctx, im2col_2d);
+    im2col_2d               = ggml_cont_if_needed(ctx, im2col_2d);
     ggml_tensor * w_2d = ggml_reshape_2d(ctx, w_kic_oc, K * Cin, Cout);
-    w_2d               = ggml_cont(ctx, w_2d);
+    w_2d               = ggml_cont_if_needed(ctx, w_2d);
     ggml_tensor * mm = ggml_mul_mat(ctx, im2col_2d, w_2d);
     ggml_tensor * y_tcb = ggml_reshape_3d(ctx, mm, T, Cout, B);
-    y_tcb               = ggml_cont(ctx, y_tcb);
+    y_tcb               = ggml_cont_if_needed(ctx, y_tcb);
     ggml_tensor * b_1c1  = ggml_reshape_3d(ctx, b_oc, 1, Cout, 1);
-    b_1c1                = ggml_cont(ctx, b_1c1);
+    b_1c1                = ggml_cont_if_needed(ctx, b_1c1);
     ggml_tensor * b_tcb  = ggml_repeat(ctx, b_1c1, y_tcb);
     ggml_tensor * y_bias = ggml_add(ctx, y_tcb, b_tcb);
     return y_bias;
@@ -4990,7 +5038,7 @@ ggml_tensor * hg2_f0_predictor::hg_f0_predictor_build_graph(ggml_context * ctx, 
         return nullptr;
     }
     ggml_tensor * x_tcb = ggml_permute(ctx, x_c80_t_b, 1, 0, 2, 3);
-    x_tcb               = ggml_cont(ctx, x_tcb);
+    x_tcb               = ggml_cont_if_needed(ctx, x_tcb);
     ggml_tensor * h = hg_f0_predictor_conv1d_k3_p1_f32(ctx, x_tcb, conv0_weight, conv0_bias);
     if (!h) {
         return nullptr;
@@ -5016,12 +5064,12 @@ ggml_tensor * hg2_f0_predictor::hg_f0_predictor_build_graph(ggml_context * ctx, 
         return nullptr;
     }
     h = ggml_elu(ctx, h);
-    h = ggml_cont(ctx, h);
+    h = ggml_cont_if_needed(ctx, h);
     ggml_tensor * h_ctb = ggml_permute(ctx, h, 1, 0, 2, 3);
-    h_ctb               = ggml_cont(ctx, h_ctb);
+    h_ctb               = ggml_cont_if_needed(ctx, h_ctb);
     const int64_t C     = h_ctb->ne[0];
     ggml_tensor * h_2d  = ggml_reshape_2d(ctx, h_ctb, C, T * B);
-    h_2d                = ggml_cont(ctx, h_2d);
+    h_2d                = ggml_cont_if_needed(ctx, h_2d);
     if (linear_weight->type != GGML_TYPE_F32 || linear_weight->ne[0] != C || linear_weight->ne[1] != 1) {
         LOG_ERROR( "hg2_f0_predictor_build_graph: linear_weight must be [C,1] (got [%lld,%lld])\n",
                      (long long) linear_weight->ne[0], (long long) linear_weight->ne[1]);
@@ -5038,7 +5086,7 @@ ggml_tensor * hg2_f0_predictor::hg_f0_predictor_build_graph(ggml_context * ctx, 
     ggml_tensor * bias_rep = ggml_repeat(ctx, bias_s, y_tb);
     y_tb                 = ggml_add(ctx, y_tb, bias_rep);
     y_tb                 = ggml_abs(ctx, y_tb);
-    y_tb                 = ggml_cont(ctx, y_tb);
+    y_tb                 = ggml_cont_if_needed(ctx, y_tb);
     ggml_set_name(y_tb, "hg2.f0_predictor.f0_tb");
     return y_tb;
 }
@@ -5238,14 +5286,14 @@ static ggml_tensor * hg_hift_conv1d_f32(ggml_context * ctx,
     }
     ggml_tensor * im2col = ggml_im2col(ctx, w_kic_oc, x_tcb, stride, 0, padding, 0, dilation, 0, false, GGML_TYPE_F32);
     ggml_tensor * im2col_2d = ggml_reshape_2d(ctx, im2col, im2col->ne[0], im2col->ne[2] * im2col->ne[1]);
-    im2col_2d               = ggml_cont(ctx, im2col_2d);
+    im2col_2d               = ggml_cont_if_needed(ctx, im2col_2d);
     ggml_tensor * w_2d = ggml_reshape_2d(ctx, w_kic_oc, K * Cin, Cout);
-    w_2d               = ggml_cont(ctx, w_2d);
+    w_2d               = ggml_cont_if_needed(ctx, w_2d);
     ggml_tensor * mm    = ggml_mul_mat(ctx, im2col_2d, w_2d);
     ggml_tensor * y_tcb = ggml_reshape_3d(ctx, mm, im2col->ne[1], Cout, B);
-    y_tcb               = ggml_cont(ctx, y_tcb);
+    y_tcb               = ggml_cont_if_needed(ctx, y_tcb);
     ggml_tensor * b_1c1 = ggml_reshape_3d(ctx, b_oc, 1, Cout, 1);
-    b_1c1               = ggml_cont(ctx, b_1c1);
+    b_1c1               = ggml_cont_if_needed(ctx, b_1c1);
     ggml_tensor * b_tcb = ggml_repeat(ctx, b_1c1, y_tcb);
     ggml_tensor * y     = ggml_add(ctx, y_tcb, b_tcb);
     return y;
@@ -5280,9 +5328,9 @@ static ggml_tensor * hg_hift_deconv1d_pad_f32_b1(ggml_context * ctx,
         return nullptr;
     }
     ggml_tensor * x_mat = ggml_reshape_2d(ctx, x_tcb_b1, Tin, Cin);
-    x_mat               = ggml_cont(ctx, x_mat);
+    x_mat               = ggml_cont_if_needed(ctx, x_mat);
     ggml_tensor * y_full = ggml_conv_transpose_1d(ctx, w_koc_ic_b1, x_mat, stride, 0, 1);
-    y_full               = ggml_cont(ctx, y_full);
+    y_full               = ggml_cont_if_needed(ctx, y_full);
     const int64_t L_full = y_full->ne[0];
     const int64_t L_out  = L_full - 2 * (int64_t) padding;
     if (L_out <= 0) {
@@ -5290,16 +5338,16 @@ static ggml_tensor * hg_hift_deconv1d_pad_f32_b1(ggml_context * ctx,
         return nullptr;
     }
     ggml_tensor * y2d = ggml_reshape_2d(ctx, y_full, L_full, Cout);
-    y2d               = ggml_cont(ctx, y2d);
+    y2d               = ggml_cont_if_needed(ctx, y2d);
     ggml_tensor * y_slice = ggml_view_2d(ctx, y2d, L_out, Cout, y2d->nb[1], (size_t) padding * y2d->nb[0]);
-    y_slice               = ggml_cont(ctx, y_slice);
+    y_slice               = ggml_cont_if_needed(ctx, y_slice);
     ggml_tensor * b_1c   = ggml_reshape_2d(ctx, b_oc, 1, Cout);
-    b_1c                 = ggml_cont(ctx, b_1c);
+    b_1c                 = ggml_cont_if_needed(ctx, b_1c);
     ggml_tensor * b_tc   = ggml_repeat(ctx, b_1c, y_slice);
     ggml_tensor * y_bias = ggml_add(ctx, y_slice, b_tc);
-    y_bias               = ggml_cont(ctx, y_bias);
+    y_bias               = ggml_cont_if_needed(ctx, y_bias);
     ggml_tensor * y_tcb = ggml_reshape_3d(ctx, y_bias, L_out, Cout, 1);
-    y_tcb               = ggml_cont(ctx, y_tcb);
+    y_tcb               = ggml_cont_if_needed(ctx, y_tcb);
     return y_tcb;
 }
 static ggml_tensor * hg_hift_cache_overwrite_prefix(ggml_context * ctx,
@@ -5323,9 +5371,9 @@ static ggml_tensor * hg_hift_cache_overwrite_prefix(ggml_context * ctx,
     }
     ggml_tensor * tail =
         ggml_view_3d(ctx, s_t1_b, Ts - Tc, 1, s_t1_b->ne[2], s_t1_b->nb[1], s_t1_b->nb[2], (size_t) Tc * s_t1_b->nb[0]);
-    tail              = ggml_cont(ctx, tail);
+    tail              = ggml_cont_if_needed(ctx, tail);
     ggml_tensor * out = ggml_concat(ctx, cache_t1_b, tail, 0);
-    out               = ggml_cont(ctx, out);
+    out               = ggml_cont_if_needed(ctx, out);
     return out;
 }
 bool hg2_hift_generator::build_graph_forward(ggml_context * ctx,
@@ -5350,7 +5398,7 @@ bool hg2_hift_generator::build_graph_forward(ggml_context * ctx,
         LOG_ERROR( "hg2_hift.build_graph_forward: f0_pred failed\n");
         return false;
     }
-    f0_tb = ggml_cont(ctx, f0_tb);
+    f0_tb = ggml_cont_if_needed(ctx, f0_tb);
     const int64_t Tm       = f0_tb->ne[0];
     const int64_t T_audio  = Tm * HG2_SAMPLES_PER_MEL;
     // NEAREST 上采样：每个 f0 值重复 HG2_SAMPLES_PER_MEL 次
@@ -5358,14 +5406,14 @@ bool hg2_hift_generator::build_graph_forward(ggml_context * ctx,
     // -> permute(1,0,2,3) -> [scale, Tm, B] -> reshape -> [T_audio, 1, B]
     const int64_t scale = HG2_SAMPLES_PER_MEL;
     ggml_tensor * f0_t1b = ggml_reshape_3d(ctx, f0_tb, Tm, 1, B);
-    f0_t1b = ggml_cont(ctx, f0_t1b);
+    f0_t1b = ggml_cont_if_needed(ctx, f0_t1b);
     ggml_tensor * f0_tmpl = ggml_new_tensor_3d(ctx, GGML_TYPE_F32, Tm, scale, B);
     ggml_tensor * f0_rep  = ggml_repeat(ctx, f0_t1b, f0_tmpl);
-    f0_rep = ggml_cont(ctx, f0_rep);
+    f0_rep = ggml_cont_if_needed(ctx, f0_rep);
     ggml_tensor * f0_perm = ggml_permute(ctx, f0_rep, 1, 0, 2, 3);
-    f0_perm = ggml_cont(ctx, f0_perm);
+    f0_perm = ggml_cont_if_needed(ctx, f0_perm);
     ggml_tensor * f0_t1_b = ggml_reshape_3d(ctx, f0_perm, T_audio, 1, B);
-    f0_t1_b = ggml_cont(ctx, f0_t1_b);
+    f0_t1_b = ggml_cont_if_needed(ctx, f0_t1_b);
     ggml_tensor * s_t1_b     = nullptr;
     ggml_tensor * noise_t1_b = nullptr;
     ggml_tensor * uv_t1_b    = nullptr;
@@ -5375,13 +5423,13 @@ bool hg2_hift_generator::build_graph_forward(ggml_context * ctx,
     }
     (void) noise_t1_b;
     (void) uv_t1_b;
-    s_t1_b = ggml_cont(ctx, s_t1_b);
+    s_t1_b = ggml_cont_if_needed(ctx, s_t1_b);
     ggml_tensor * s_over = hg_hift_cache_overwrite_prefix(ctx, s_t1_b, cache_source_t1_b);
     if (!s_over) {
         LOG_ERROR( "hg2_hift.build_graph_forward: cache overwrite failed\n");
         return false;
     }
-    s_over = ggml_cont(ctx, s_over);
+    s_over = ggml_cont_if_needed(ctx, s_over);
     ggml_tensor * wave_t_b = nullptr;
     if (!build_graph_decode(ctx, speech_feat_c80_t_b, s_over, &wave_t_b)) {
         LOG_ERROR( "hg2_hift.build_graph_forward: decode failed\n");
@@ -5432,124 +5480,124 @@ bool hg2_hift_generator::build_graph_decode(ggml_context * ctx,
     }
     ggml_tensor * stft_real_tfb = ggml_permute(ctx, stft_real_ftb, 1, 0, 2, 3);
     ggml_tensor * stft_imag_tfb = ggml_permute(ctx, stft_imag_ftb, 1, 0, 2, 3);
-    stft_real_tfb               = ggml_cont(ctx, stft_real_tfb);
-    stft_imag_tfb               = ggml_cont(ctx, stft_imag_tfb);
+    stft_real_tfb               = ggml_cont_if_needed(ctx, stft_real_tfb);
+    stft_imag_tfb               = ggml_cont_if_needed(ctx, stft_imag_tfb);
     ggml_tensor * s_stft_tcb    = ggml_concat(ctx, stft_real_tfb, stft_imag_tfb, 1);
-    s_stft_tcb                  = ggml_cont(ctx, s_stft_tcb);
+    s_stft_tcb                  = ggml_cont_if_needed(ctx, s_stft_tcb);
     ggml_tensor * x_tcb = ggml_permute(ctx, speech_feat_c80_t_b, 1, 0, 2, 3);
-    x_tcb               = ggml_cont(ctx, x_tcb);
+    x_tcb               = ggml_cont_if_needed(ctx, x_tcb);
     x_tcb               = hg_hift_conv1d_f32(ctx, x_tcb, conv_pre_weight, conv_pre_bias, 1, 3, 1);
     if (!x_tcb) {
         LOG_ERROR( "hg2_hift.build_graph_decode: conv_pre failed\n");
         return false;
     }
-    x_tcb = ggml_cont(ctx, x_tcb);
+    x_tcb = ggml_cont_if_needed(ctx, x_tcb);
     x_tcb = ggml_leaky_relu(ctx, x_tcb, lrelu_slope, false);
-    x_tcb = ggml_cont(ctx, x_tcb);
+    x_tcb = ggml_cont_if_needed(ctx, x_tcb);
     x_tcb = hg_hift_deconv1d_pad_f32_b1(ctx, x_tcb, up0_weight, up0_bias, 8, 4);
     if (!x_tcb) {
         return false;
     }
-    x_tcb = ggml_cont(ctx, x_tcb);
+    x_tcb = ggml_cont_if_needed(ctx, x_tcb);
     ggml_tensor * si0 =
         hg_hift_conv1d_f32(ctx, s_stft_tcb, source_down0_weight, source_down0_bias, 15, 7, 1);
     if (!si0) {
         return false;
     }
-    si0 = ggml_cont(ctx, si0);
+    si0 = ggml_cont_if_needed(ctx, si0);
     si0 = source_rb0.hg_resblock_build_graph(ctx, si0);
     if (!si0) {
         return false;
     }
-    si0   = ggml_cont(ctx, si0);
+    si0   = ggml_cont_if_needed(ctx, si0);
     x_tcb = ggml_add(ctx, x_tcb, si0);
-    x_tcb = ggml_cont(ctx, x_tcb);
+    x_tcb = ggml_cont_if_needed(ctx, x_tcb);
     ggml_tensor * xs0 = nullptr;
     for (int j = 0; j < 3; ++j) {
         ggml_tensor * y = resblocks[(size_t) (0 * 3 + j)].hg_resblock_build_graph(ctx, x_tcb);
         if (!y) {
             return false;
         }
-        y   = ggml_cont(ctx, y);
+        y   = ggml_cont_if_needed(ctx, y);
         xs0 = (xs0 == nullptr) ? y : ggml_add(ctx, xs0, y);
-        xs0 = ggml_cont(ctx, xs0);
+        xs0 = ggml_cont_if_needed(ctx, xs0);
     }
     x_tcb = ggml_scale(ctx, xs0, 1.0f / 3.0f);
-    x_tcb = ggml_cont(ctx, x_tcb);
+    x_tcb = ggml_cont_if_needed(ctx, x_tcb);
     x_tcb = ggml_leaky_relu(ctx, x_tcb, lrelu_slope, false);
-    x_tcb = ggml_cont(ctx, x_tcb);
+    x_tcb = ggml_cont_if_needed(ctx, x_tcb);
     x_tcb = hg_hift_deconv1d_pad_f32_b1(ctx, x_tcb, up1_weight, up1_bias, 5, 3);
     if (!x_tcb) {
         return false;
     }
-    x_tcb = ggml_cont(ctx, x_tcb);
+    x_tcb = ggml_cont_if_needed(ctx, x_tcb);
     ggml_tensor * si1 = hg_hift_conv1d_f32(ctx, s_stft_tcb, source_down1_weight, source_down1_bias, 3, 1, 1);
     if (!si1) {
         return false;
     }
-    si1 = ggml_cont(ctx, si1);
+    si1 = ggml_cont_if_needed(ctx, si1);
     si1 = source_rb1.hg_resblock_build_graph(ctx, si1);
     if (!si1) {
         return false;
     }
-    si1   = ggml_cont(ctx, si1);
+    si1   = ggml_cont_if_needed(ctx, si1);
     x_tcb = ggml_add(ctx, x_tcb, si1);
-    x_tcb = ggml_cont(ctx, x_tcb);
+    x_tcb = ggml_cont_if_needed(ctx, x_tcb);
     ggml_tensor * xs1 = nullptr;
     for (int j = 0; j < 3; ++j) {
         ggml_tensor * y = resblocks[(size_t) (1 * 3 + j)].hg_resblock_build_graph(ctx, x_tcb);
         if (!y) {
             return false;
         }
-        y   = ggml_cont(ctx, y);
+        y   = ggml_cont_if_needed(ctx, y);
         xs1 = (xs1 == nullptr) ? y : ggml_add(ctx, xs1, y);
-        xs1 = ggml_cont(ctx, xs1);
+        xs1 = ggml_cont_if_needed(ctx, xs1);
     }
     x_tcb = ggml_scale(ctx, xs1, 1.0f / 3.0f);
-    x_tcb = ggml_cont(ctx, x_tcb);
+    x_tcb = ggml_cont_if_needed(ctx, x_tcb);
     x_tcb = ggml_leaky_relu(ctx, x_tcb, lrelu_slope, false);
-    x_tcb = ggml_cont(ctx, x_tcb);
+    x_tcb = ggml_cont_if_needed(ctx, x_tcb);
     x_tcb = hg_hift_deconv1d_pad_f32_b1(ctx, x_tcb, up2_weight, up2_bias, 3, 2);
     if (!x_tcb) {
         return false;
     }
-    x_tcb = ggml_cont(ctx, x_tcb);
+    x_tcb = ggml_cont_if_needed(ctx, x_tcb);
     x_tcb = hg2_ops::hg_ops_reflect_pad_left_1(ctx, x_tcb);
     if (!x_tcb) {
         return false;
     }
-    x_tcb = ggml_cont(ctx, x_tcb);
+    x_tcb = ggml_cont_if_needed(ctx, x_tcb);
     ggml_tensor * si2 = hg_hift_conv1d_f32(ctx, s_stft_tcb, source_down2_weight, source_down2_bias, 1, 0, 1);
     if (!si2) {
         return false;
     }
-    si2 = ggml_cont(ctx, si2);
+    si2 = ggml_cont_if_needed(ctx, si2);
     si2 = source_rb2.hg_resblock_build_graph(ctx, si2);
     if (!si2) {
         return false;
     }
-    si2   = ggml_cont(ctx, si2);
+    si2   = ggml_cont_if_needed(ctx, si2);
     x_tcb = ggml_add(ctx, x_tcb, si2);
-    x_tcb = ggml_cont(ctx, x_tcb);
+    x_tcb = ggml_cont_if_needed(ctx, x_tcb);
     ggml_tensor * xs2 = nullptr;
     for (int j = 0; j < 3; ++j) {
         ggml_tensor * y = resblocks[(size_t) (2 * 3 + j)].hg_resblock_build_graph(ctx, x_tcb);
         if (!y) {
             return false;
         }
-        y   = ggml_cont(ctx, y);
+        y   = ggml_cont_if_needed(ctx, y);
         xs2 = (xs2 == nullptr) ? y : ggml_add(ctx, xs2, y);
-        xs2 = ggml_cont(ctx, xs2);
+        xs2 = ggml_cont_if_needed(ctx, xs2);
     }
     x_tcb = ggml_scale(ctx, xs2, 1.0f / 3.0f);
-    x_tcb = ggml_cont(ctx, x_tcb);
+    x_tcb = ggml_cont_if_needed(ctx, x_tcb);
     x_tcb                  = ggml_leaky_relu(ctx, x_tcb, 0.01f, false);
-    x_tcb                  = ggml_cont(ctx, x_tcb);
+    x_tcb                  = ggml_cont_if_needed(ctx, x_tcb);
     ggml_tensor * post_tcb = hg_hift_conv1d_f32(ctx, x_tcb, conv_post_weight, conv_post_bias, 1, 3, 1);
     if (!post_tcb) {
         return false;
     }
-    post_tcb = ggml_cont(ctx, post_tcb);
+    post_tcb = ggml_cont_if_needed(ctx, post_tcb);
     const int64_t TT    = post_tcb->ne[0];
     const int64_t Cpost = post_tcb->ne[1];
     if (Cpost != 18) {
@@ -5560,31 +5608,31 @@ bool hg2_hift_generator::build_graph_decode(ggml_context * ctx,
     ggml_tensor * mag_tfb = ggml_view_3d(ctx, post_tcb, TT, HG2_F, B, post_tcb->nb[1], post_tcb->nb[2], 0);
     ggml_tensor * raw_phase_tfb =
         ggml_view_3d(ctx, post_tcb, TT, HG2_F, B, post_tcb->nb[1], post_tcb->nb[2], post_tcb->nb[1] * (size_t) HG2_F);
-    mag_tfb       = ggml_cont(ctx, mag_tfb);
-    raw_phase_tfb = ggml_cont(ctx, raw_phase_tfb);
+    mag_tfb       = ggml_cont_if_needed(ctx, mag_tfb);
+    raw_phase_tfb = ggml_cont_if_needed(ctx, raw_phase_tfb);
     ggml_tensor * magnitude = ggml_exp(ctx, mag_tfb);
     magnitude               = ggml_clamp(ctx, magnitude, -1e30f, 1e2f);
-    magnitude               = ggml_cont(ctx, magnitude);
+    magnitude               = ggml_cont_if_needed(ctx, magnitude);
     ggml_tensor * phase = ggml_sin(ctx, raw_phase_tfb);
-    phase               = ggml_cont(ctx, phase);
+    phase               = ggml_cont_if_needed(ctx, phase);
     ggml_tensor * cos_p         = ggml_cos(ctx, phase);
     ggml_tensor * sin_p         = ggml_sin(ctx, phase);
     ggml_tensor * ifft_real_tfb = ggml_mul(ctx, magnitude, cos_p);
     ggml_tensor * ifft_imag_tfb = ggml_mul(ctx, magnitude, sin_p);
-    ifft_real_tfb               = ggml_cont(ctx, ifft_real_tfb);
-    ifft_imag_tfb               = ggml_cont(ctx, ifft_imag_tfb);
+    ifft_real_tfb               = ggml_cont_if_needed(ctx, ifft_real_tfb);
+    ifft_imag_tfb               = ggml_cont_if_needed(ctx, ifft_imag_tfb);
     ggml_tensor * real_ftb = ggml_permute(ctx, ifft_real_tfb, 1, 0, 2, 3);
     ggml_tensor * imag_ftb = ggml_permute(ctx, ifft_imag_tfb, 1, 0, 2, 3);
-    real_ftb               = ggml_cont(ctx, real_ftb);
-    imag_ftb               = ggml_cont(ctx, imag_ftb);
+    real_ftb               = ggml_cont_if_needed(ctx, real_ftb);
+    imag_ftb               = ggml_cont_if_needed(ctx, imag_ftb);
     ggml_tensor * wave_tb = nullptr;
     if (!hg2_istft16::hg_istft16_build_graph(ctx, dsp, real_ftb, imag_ftb, &wave_tb)) {
         LOG_ERROR( "hg2_hift.build_graph_decode: istft failed\n");
         return false;
     }
-    wave_tb = ggml_cont(ctx, wave_tb);
+    wave_tb = ggml_cont_if_needed(ctx, wave_tb);
     wave_tb = ggml_clamp(ctx, wave_tb, -audio_limit, audio_limit);
-    wave_tb = ggml_cont(ctx, wave_tb);
+    wave_tb = ggml_cont_if_needed(ctx, wave_tb);
     *out_wave_t_b = wave_tb;
     return true;
 }
@@ -5652,8 +5700,8 @@ bool hg2_istft16::hg_istft16_build_graph(ggml_context *            ctx,
     // 转成 TF 布局，方便按频段切片
     ggml_tensor * xr_tf = ggml_transpose(ctx, xr_ft);
     ggml_tensor * xi_tf = ggml_transpose(ctx, xi_ft);
-    xr_tf               = ggml_cont(ctx, xr_tf);
-    xi_tf               = ggml_cont(ctx, xi_tf);
+    xr_tf               = ggml_cont_if_needed(ctx, xr_tf);
+    xi_tf               = ggml_cont_if_needed(ctx, xi_tf);
     // 拆出 DC、Nyquist 和中间频段
     ggml_tensor * x0_t1 = ggml_view_2d(ctx, xr_tf, TT, 1, xr_tf->nb[1], 0);
     ggml_tensor * xnyq_t1 =
@@ -5662,8 +5710,8 @@ bool hg2_istft16::hg_istft16_build_graph(ggml_context *            ctx,
         ggml_view_2d(ctx, xr_tf, TT, hg2_stft16_params::HG2_F - 2, xr_tf->nb[1], xr_tf->nb[1] * (size_t) 1);
     ggml_tensor * xi_mid_t7 =
         ggml_view_2d(ctx, xi_tf, TT, hg2_stft16_params::HG2_F - 2, xi_tf->nb[1], xi_tf->nb[1] * (size_t) 1);
-    xr_mid_t7 = ggml_cont(ctx, xr_mid_t7);
-    xi_mid_t7 = ggml_cont(ctx, xi_mid_t7);
+    xr_mid_t7 = ggml_cont_if_needed(ctx, xr_mid_t7);
+    xi_mid_t7 = ggml_cont_if_needed(ctx, xi_mid_t7);
     // 取 DFT 表的中频部分
     ggml_tensor * cos_mid_n7 =
         ggml_view_2d(ctx, params.dft_cos_t, hg2_stft16_params::HG2_N_FFT, hg2_stft16_params::HG2_F - 2,
@@ -5673,17 +5721,17 @@ bool hg2_istft16::hg_istft16_build_graph(ggml_context *            ctx,
                      params.dft_sin_t->nb[1], params.dft_sin_t->nb[1] * (size_t) 1);
     ggml_tensor * cos_mid_7n = ggml_transpose(ctx, cos_mid_n7);
     ggml_tensor * sin_mid_7n = ggml_transpose(ctx, sin_mid_n7);
-    cos_mid_7n               = ggml_cont(ctx, cos_mid_7n);
-    sin_mid_7n               = ggml_cont(ctx, sin_mid_7n);
+    cos_mid_7n               = ggml_cont_if_needed(ctx, cos_mid_7n);
+    sin_mid_7n               = ggml_cont_if_needed(ctx, sin_mid_7n);
     ggml_tensor * xr_mid_7t = ggml_transpose(ctx, xr_mid_t7);
     ggml_tensor * xi_mid_7t = ggml_transpose(ctx, xi_mid_t7);
-    xr_mid_7t               = ggml_cont(ctx, xr_mid_7t);
-    xi_mid_7t               = ggml_cont(ctx, xi_mid_7t);
+    xr_mid_7t               = ggml_cont_if_needed(ctx, xr_mid_7t);
+    xi_mid_7t               = ggml_cont_if_needed(ctx, xi_mid_7t);
     // 中频按 cos/sin 重建到时域并求和
     ggml_tensor * mm_cos_Tn = ggml_mul_mat(ctx, xr_mid_7t, cos_mid_7n);
     ggml_tensor * mm_sin_Tn = ggml_mul_mat(ctx, xi_mid_7t, sin_mid_7n);
     ggml_tensor * sum_k_Tn  = ggml_sub(ctx, mm_cos_Tn, mm_sin_Tn);
-    sum_k_Tn                = ggml_cont(ctx, sum_k_Tn);
+    sum_k_Tn                = ggml_cont_if_needed(ctx, sum_k_Tn);
     ggml_tensor * x0_Tn   = hg_istft16_repeat_checked(ctx, x0_t1, sum_k_Tn, "x0");
     ggml_tensor * xnyq_Tn = hg_istft16_repeat_checked(ctx, xnyq_t1, sum_k_Tn, "xnyq");
     if (!x0_Tn || !xnyq_Tn) {
@@ -5692,14 +5740,14 @@ bool hg2_istft16::hg_istft16_build_graph(ggml_context *            ctx,
     // 带符号翻转
     ggml_tensor * nyq_n1 = ggml_reshape_2d(ctx, params.nyq_sign, hg2_stft16_params::HG2_N_FFT, 1);
     ggml_tensor * nyq_1n = ggml_transpose(ctx, nyq_n1);
-    nyq_1n               = ggml_cont(ctx, nyq_1n);
+    nyq_1n               = ggml_cont_if_needed(ctx, nyq_1n);
     ggml_tensor * nyq_Tn = hg_istft16_repeat_checked(ctx, nyq_1n, sum_k_Tn, "nyq_sign");
     if (!nyq_Tn) {
         return false;
     }
     ggml_tensor * win_n1 = ggml_reshape_2d(ctx, params.window, hg2_stft16_params::HG2_N_FFT, 1);
     ggml_tensor * win_1n = ggml_transpose(ctx, win_n1);
-    win_1n               = ggml_cont(ctx, win_1n);
+    win_1n               = ggml_cont_if_needed(ctx, win_1n);
     ggml_tensor * win_Tn = hg_istft16_repeat_checked(ctx, win_1n, sum_k_Tn, "window");
     if (!win_Tn) {
         return false;
@@ -5712,10 +5760,10 @@ bool hg2_istft16::hg_istft16_build_graph(ggml_context *            ctx,
     time_Tn                = ggml_scale(ctx, time_Tn, 1.0f / float(hg2_stft16_params::HG2_N_FFT));
     // 乘窗后做 overlap-add
     time_Tn = ggml_mul(ctx, time_Tn, win_Tn);
-    time_Tn = ggml_cont(ctx, time_Tn);
+    time_Tn = ggml_cont_if_needed(ctx, time_Tn);
     ggml_tensor * y_t1b1 =
         ggml_conv_transpose_1d(ctx, params.istft_ola_kernel, time_Tn, hg2_stft16_params::HG2_HOP, 0, 1);
-    y_t1b1 = ggml_cont(ctx, y_t1b1);
+    y_t1b1 = ggml_cont_if_needed(ctx, y_t1b1);
     // 用窗平方的 overlap-add 做归一化
     ggml_tensor * wsq_n1   = ggml_reshape_2d(ctx, params.window_sq, hg2_stft16_params::HG2_N_FFT, 1);
     ggml_tensor * dummy_nT = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, hg2_stft16_params::HG2_N_FFT, TT);
@@ -5724,13 +5772,13 @@ bool hg2_istft16::hg_istft16_build_graph(ggml_context *            ctx,
         return false;
     }
     ggml_tensor * wsq_Tn = ggml_transpose(ctx, wsq_nT);
-    wsq_Tn               = ggml_cont(ctx, wsq_Tn);
+    wsq_Tn               = ggml_cont_if_needed(ctx, wsq_Tn);
     ggml_tensor * wsum_t1b1 =
         ggml_conv_transpose_1d(ctx, params.istft_ola_kernel, wsq_Tn, hg2_stft16_params::HG2_HOP, 0, 1);
-    wsum_t1b1 = ggml_cont(ctx, wsum_t1b1);
+    wsum_t1b1 = ggml_cont_if_needed(ctx, wsum_t1b1);
     ggml_tensor * wsum_clamped = ggml_clamp(ctx, wsum_t1b1, 1e-8f, 1e30f);
     ggml_tensor * y_norm       = ggml_div(ctx, y_t1b1, wsum_clamped);
-    y_norm                     = ggml_cont(ctx, y_norm);
+    y_norm                     = ggml_cont_if_needed(ctx, y_norm);
     // 去掉 stft pad 对应的首尾样本
     const int64_t out_len = y_norm->ne[0];
     const int64_t trim    = 2 * (int64_t) hg2_stft16_params::HG2_PAD;
@@ -5742,7 +5790,7 @@ bool hg2_istft16::hg_istft16_build_graph(ggml_context *            ctx,
     ggml_tensor * y_outlen_1 = ggml_reshape_2d(ctx, y_norm, out_len, 1);
     ggml_tensor * y_trim     = ggml_view_2d(ctx, y_outlen_1, T_trim, 1, y_outlen_1->nb[1],
                                             (size_t) hg2_stft16_params::HG2_PAD * y_outlen_1->nb[0]);
-    y_trim                   = ggml_cont(ctx, y_trim);
+    y_trim                   = ggml_cont_if_needed(ctx, y_trim);
     ggml_set_name(y_trim, "hg2.istft16.y_tb");
     *out_y_tb = y_trim;
     return true;
@@ -5972,17 +6020,62 @@ static ggml_tensor * hg_resblock_conv1d_f32(ggml_context *                      
                      c.kernel_size, (long long) K);
         return nullptr;
     }
+    // [v8.5] E8 conv_mm 推广 hifigan（OMNI_T2W_CONV_MM=1，默认关）：K 移位视图+concat+matmul 替代 im2col。
+    // ggml 语义：x_tcb [T,Cin] 是 c-slow 布局（data[c*T+t]）；im2col 的 col 和 w 都是 [c*K+k]（c 慢 k 快）。
+    // 需 [Cin,T] 布局（c fast）+ pad dim1 + view 沿 t 移位 + concat 后转成 [c*K+k]。
+    static int conv_mm_voc = -1;
+    if (conv_mm_voc == -1) {
+        const char * e = std::getenv("OMNI_T2W_CONV_MM");
+        conv_mm_voc    = (e && e[0] == '1') ? 1 : 0;
+    }
+    if (conv_mm_voc && c.dilation > 0) {
+        static int dbg = -1;
+        if (dbg == -1) { const char * e = std::getenv("OMNI_T2W_CONV_MM_DEBUG"); dbg = (e && e[0]=='1') ? 1 : 0; }
+        if (dbg) std::fprintf(stderr, "[CONVMM] K=%lld Cin=%lld Cout=%lld T=%lld B=%lld dil=%lld pad=%d\n",
+                              (long long)K, (long long)Cin, (long long)Cout, (long long)T, (long long)B,
+                              (long long)c.dilation, c.padding);
+        const int64_t pad  = c.padding;
+        const int64_t dil  = c.dilation;
+        ggml_tensor * x_ct = ggml_cont_if_needed(ctx, ggml_permute(ctx, x_tcb, 1, 0, 2, 3));   // [Cin, T, B] c fast t slow
+        ggml_tensor * x_pad = ggml_pad_ext(ctx, x_ct, 0, 0, pad, pad, 0, 0, 0, 0);             // pad dim1(T) -> [Cin,T+2pad]
+        x_pad               = ggml_cont_if_needed(ctx, x_pad);
+        std::vector<ggml_tensor *> views;
+        views.reserve((size_t) K);
+        for (int64_t k = 0; k < K; ++k) {
+            ggml_tensor * v = ggml_view_3d(ctx, x_pad, Cin, T, B,
+                                           x_pad->nb[1], x_pad->nb[2], k * dil * x_pad->nb[1]);  // [Cin,T,B]
+            views.push_back(ggml_cont_if_needed(ctx, v));
+        }
+        ggml_tensor * x_kkc = views[0];
+        for (size_t k = 1; k < views.size(); ++k) {
+            x_kkc = ggml_concat(ctx, x_kkc, views[k], 0);   // [k*Cin, T, B] idx=k*Cin+c
+        }
+        x_kkc = ggml_cont_if_needed(ctx, x_kkc);
+        // 转成 [c*K+k] 布局（与 im2col 的 col 一致）：[Cin,K,T*B] -> permute(1,0) -> [K,Cin,T*B] cont -> [K*Cin,T*B]
+        ggml_tensor * x_3d = ggml_reshape_3d(ctx, x_kkc, Cin, K, T * B);
+        ggml_tensor * x_pk = ggml_cont_if_needed(ctx, ggml_permute(ctx, x_3d, 1, 0, 2, 3));
+        ggml_tensor * x_2d = ggml_reshape_2d(ctx, x_pk, K * Cin, T * B);
+        ggml_tensor * w_2d = ggml_reshape_2d(ctx, c.weight_kic_oc, K * Cin, Cout);
+        w_2d               = ggml_cont_if_needed(ctx, w_2d);
+        ggml_tensor * mm    = ggml_mul_mat(ctx, x_2d, w_2d);
+        ggml_tensor * y_tcb = ggml_reshape_3d(ctx, mm, T, Cout, B);
+        y_tcb               = ggml_cont_if_needed(ctx, y_tcb);
+        ggml_tensor * b_1c1 = ggml_reshape_3d(ctx, c.bias_oc, 1, Cout, 1);
+        b_1c1               = ggml_cont_if_needed(ctx, b_1c1);
+        ggml_tensor * b_tcb = ggml_repeat(ctx, b_1c1, y_tcb);
+        return ggml_add(ctx, y_tcb, b_tcb);
+    }
     ggml_tensor * im2col =
         ggml_im2col(ctx, c.weight_kic_oc, x_tcb, 1, 0, c.padding, 0, c.dilation, 0, false, GGML_TYPE_F32);
     ggml_tensor * im2col_2d = ggml_reshape_2d(ctx, im2col, im2col->ne[0], im2col->ne[2] * im2col->ne[1]);
-    im2col_2d               = ggml_cont(ctx, im2col_2d);
+    im2col_2d               = ggml_cont_if_needed(ctx, im2col_2d);
     ggml_tensor * w_2d = ggml_reshape_2d(ctx, c.weight_kic_oc, K * Cin, Cout);
-    w_2d               = ggml_cont(ctx, w_2d);
+    w_2d               = ggml_cont_if_needed(ctx, w_2d);
     ggml_tensor * mm    = ggml_mul_mat(ctx, im2col_2d, w_2d);
     ggml_tensor * y_tcb = ggml_reshape_3d(ctx, mm, T, Cout, B);
-    y_tcb               = ggml_cont(ctx, y_tcb);
+    y_tcb               = ggml_cont_if_needed(ctx, y_tcb);
     ggml_tensor * b_1c1 = ggml_reshape_3d(ctx, c.bias_oc, 1, Cout, 1);
-    b_1c1               = ggml_cont(ctx, b_1c1);
+    b_1c1               = ggml_cont_if_needed(ctx, b_1c1);
     ggml_tensor * b_tcb = ggml_repeat(ctx, b_1c1, y_tcb);
     ggml_tensor * y     = ggml_add(ctx, y_tcb, b_tcb);
     return y;
@@ -6020,7 +6113,7 @@ ggml_tensor * hg2_resblock::hg_resblock_build_graph(ggml_context * ctx, ggml_ten
         if (!xt) {
             return nullptr;
         }
-        xt = ggml_cont(ctx, xt);
+        xt = ggml_cont_if_needed(ctx, xt);
         xt = hg2_snake::hg_snake_build_graph(ctx, xt, a2);
         if (!xt) {
             return nullptr;
@@ -6029,9 +6122,9 @@ ggml_tensor * hg2_resblock::hg_resblock_build_graph(ggml_context * ctx, ggml_ten
         if (!xt) {
             return nullptr;
         }
-        xt = ggml_cont(ctx, xt);
+        xt = ggml_cont_if_needed(ctx, xt);
         x = ggml_add(ctx, x, xt);
-        x = ggml_cont(ctx, x);
+        x = ggml_cont_if_needed(ctx, x);
     }
     ggml_set_name(x, "hg2.resblock.y_tcb");
     return x;
@@ -6106,46 +6199,46 @@ bool hg2_sine_gen2::hg_sine_gen2_build_graph(ggml_context * ctx,
     const int64_t Tm = T / HG2_UPSAMPLE_SCALE;
     ggml_tensor * f0_shift = ggml_scale_bias(ctx, f0_t1_b, 1.0f, -voiced_threshold);
     ggml_tensor * uv_t1_b  = ggml_step(ctx, f0_shift);
-    uv_t1_b                = ggml_cont(ctx, uv_t1_b);
+    uv_t1_b                = ggml_cont_if_needed(ctx, uv_t1_b);
     ggml_tensor * dummy_tdb = ggml_new_tensor_3d(ctx, GGML_TYPE_F32, T, dim, B);
     ggml_tensor * f0_tdb    = ggml_repeat(ctx, f0_t1_b, dummy_tdb);
     ggml_tensor * hm_1d1 = ggml_reshape_3d(ctx, harmonic_mul, 1, dim, 1);
-    hm_1d1               = ggml_cont(ctx, hm_1d1);
+    hm_1d1               = ggml_cont_if_needed(ctx, hm_1d1);
     ggml_tensor * hm_tdb = ggml_repeat(ctx, hm_1d1, dummy_tdb);
     ggml_tensor * fn_tdb = ggml_mul(ctx, f0_tdb, hm_tdb);
     ggml_tensor * rad_tdb = ggml_scale(ctx, fn_tdb, 1.0f / float(HG2_SAMPLING_RATE));
-    rad_tdb               = ggml_cont(ctx, rad_tdb);
+    rad_tdb               = ggml_cont_if_needed(ctx, rad_tdb);
     // 🔧 用 reshape + sum + scale 替代 ggml_interpolate 下采样，支持 Metal 加速
     // 下采样 [T, dim, B] -> [Tm, dim, B]，对每 scale 个值取平均
     const int64_t scale_ds = HG2_UPSAMPLE_SCALE;
     // reshape [T, dim, B] -> [scale, Tm, dim, B]
     ggml_tensor * rad_4d = ggml_reshape_4d(ctx, rad_tdb, scale_ds, Tm, dim, B);
-    rad_4d = ggml_cont(ctx, rad_4d);
+    rad_4d = ggml_cont_if_needed(ctx, rad_4d);
     // 在 dim=0 (scale 维度) 上求和，得到 [1, Tm, dim, B]
     ggml_tensor * rad_sum_4d = ggml_sum_rows(ctx, rad_4d);
-    rad_sum_4d = ggml_cont(ctx, rad_sum_4d);
+    rad_sum_4d = ggml_cont_if_needed(ctx, rad_sum_4d);
     // 除以 scale 得到平均值
     ggml_tensor * rad_dn_4d = ggml_scale(ctx, rad_sum_4d, 1.0f / float(scale_ds));
-    rad_dn_4d = ggml_cont(ctx, rad_dn_4d);
+    rad_dn_4d = ggml_cont_if_needed(ctx, rad_dn_4d);
     ggml_tensor * rad_dn_t1db = ggml_reshape_4d(ctx, rad_dn_4d, Tm, 1, dim, B);
-    rad_dn_t1db               = ggml_cont(ctx, rad_dn_t1db);
+    rad_dn_t1db               = ggml_cont_if_needed(ctx, rad_dn_t1db);
     ggml_tensor * rad_dn_tdb = ggml_reshape_3d(ctx, rad_dn_t1db, Tm, dim, B);
-    rad_dn_tdb               = ggml_cont(ctx, rad_dn_tdb);
+    rad_dn_tdb               = ggml_cont_if_needed(ctx, rad_dn_tdb);
     dbg_rad_dn_tdb           = rad_dn_tdb;
     ggml_tensor * running   = ggml_view_3d(ctx, rad_dn_tdb, 1, dim, B, rad_dn_tdb->nb[1], rad_dn_tdb->nb[2], 0);
-    running                 = ggml_cont(ctx, running);
+    running                 = ggml_cont_if_needed(ctx, running);
     ggml_tensor * phase_tdb = running;
     for (int64_t t = 1; t < Tm; ++t) {
         ggml_tensor * rt = ggml_view_3d(ctx, rad_dn_tdb, 1, dim, B, rad_dn_tdb->nb[1], rad_dn_tdb->nb[2],
                                         (size_t) t * rad_dn_tdb->nb[0]);
-        rt               = ggml_cont(ctx, rt);
+        rt               = ggml_cont_if_needed(ctx, rt);
         running          = ggml_add(ctx, running, rt);
-        running          = ggml_cont(ctx, running);
+        running          = ggml_cont_if_needed(ctx, running);
         phase_tdb        = ggml_concat(ctx, phase_tdb, running, 0);
-        phase_tdb        = ggml_cont(ctx, phase_tdb);
+        phase_tdb        = ggml_cont_if_needed(ctx, phase_tdb);
     }
     phase_tdb = ggml_scale(ctx, phase_tdb, 2.0f * float(M_PI));
-    phase_tdb = ggml_cont(ctx, phase_tdb);
+    phase_tdb = ggml_cont_if_needed(ctx, phase_tdb);
     ggml_tensor * phase_t1db    = ggml_reshape_4d(ctx, phase_tdb, Tm, 1, dim, B);
     // 🔧 用线性插值替代 ggml_interpolate BILINEAR，支持 Metal 加速
     // 关键：相位需要平滑过渡，不能用 repeat（会产生电音）
@@ -6157,61 +6250,61 @@ bool hg2_sine_gen2::hg_sine_gen2_build_graph(ggml_context * ctx,
     ggml_tensor * phase_shift = ggml_view_4d(ctx, phase_t1db, Tm-1, 1, dim, B,
                                              phase_t1db->nb[0], phase_t1db->nb[1], phase_t1db->nb[2],
                                              phase_t1db->nb[0]);  // phase[1:Tm]
-    phase_shift = ggml_cont(ctx, phase_shift);
+    phase_shift = ggml_cont_if_needed(ctx, phase_shift);
     ggml_tensor * phase_base = ggml_view_4d(ctx, phase_t1db, Tm-1, 1, dim, B,
                                             phase_t1db->nb[0], phase_t1db->nb[1], phase_t1db->nb[2], 0);  // phase[0:Tm-1]
-    phase_base = ggml_cont(ctx, phase_base);
+    phase_base = ggml_cont_if_needed(ctx, phase_base);
     ggml_tensor * delta = ggml_sub(ctx, phase_shift, phase_base);  // [Tm-1, 1, dim, B]
-    delta = ggml_cont(ctx, delta);
+    delta = ggml_cont_if_needed(ctx, delta);
     // 获取最后一个差值并拼接，得到完整的 delta [Tm, 1, dim, B]
     ggml_tensor * last_delta = ggml_view_4d(ctx, delta, 1, 1, dim, B,
                                             delta->nb[0], delta->nb[1], delta->nb[2],
                                             (Tm-2) * delta->nb[0]);  // delta[-1]
-    last_delta = ggml_cont(ctx, last_delta);
+    last_delta = ggml_cont_if_needed(ctx, last_delta);
     ggml_tensor * delta_full = ggml_concat(ctx, delta, last_delta, 0);  // [Tm, 1, dim, B]
-    delta_full = ggml_cont(ctx, delta_full);
+    delta_full = ggml_cont_if_needed(ctx, delta_full);
     // 2. 创建 [0, 1, 2, ..., scale-1] / scale 的斜坡，用于线性插值
     ggml_tensor * ramp = ggml_arange(ctx, 0.0f, (float)scale_up, 1.0f);  // [scale]
     ramp = ggml_scale(ctx, ramp, 1.0f / (float)scale_up);  // [0, 1/scale, 2/scale, ...]
-    ramp = ggml_cont(ctx, ramp);
+    ramp = ggml_cont_if_needed(ctx, ramp);
     // 3. phase_up[t*scale + k] = phase[t] + delta[t] * (k / scale)
     //    repeat phase_t1db [Tm,1,dim,B] -> [Tm,scale,dim,B] (element repeat in ne[1])
     //    repeat delta_full [Tm,1,dim,B] -> [Tm,scale,dim,B]
     //    ramp [1,scale,1,1] -> [Tm,scale,dim,B]
     ggml_tensor * phase_tmpl = ggml_new_tensor_4d(ctx, GGML_TYPE_F32, Tm, scale_up, dim, B);
     ggml_tensor * phase_rep  = ggml_repeat(ctx, phase_t1db, phase_tmpl);
-    phase_rep = ggml_cont(ctx, phase_rep);
+    phase_rep = ggml_cont_if_needed(ctx, phase_rep);
     ggml_tensor * delta_rep = ggml_repeat(ctx, delta_full, phase_tmpl);
-    delta_rep = ggml_cont(ctx, delta_rep);
+    delta_rep = ggml_cont_if_needed(ctx, delta_rep);
     ggml_tensor * ramp_4d = ggml_reshape_4d(ctx, ramp, 1, scale_up, 1, 1);
-    ramp_4d = ggml_cont(ctx, ramp_4d);
+    ramp_4d = ggml_cont_if_needed(ctx, ramp_4d);
     ggml_tensor * ramp_rep = ggml_repeat(ctx, ramp_4d, phase_tmpl);
-    ramp_rep = ggml_cont(ctx, ramp_rep);
+    ramp_rep = ggml_cont_if_needed(ctx, ramp_rep);
     // 线性插值：phase_up = phase + delta * ramp  (all [Tm, scale, dim, B])
     ggml_tensor * interp_add = ggml_mul(ctx, delta_rep, ramp_rep);
-    interp_add = ggml_cont(ctx, interp_add);
+    interp_add = ggml_cont_if_needed(ctx, interp_add);
     ggml_tensor * phase_interp = ggml_add(ctx, phase_rep, interp_add);
-    phase_interp = ggml_cont(ctx, phase_interp);
+    phase_interp = ggml_cont_if_needed(ctx, phase_interp);
     // 4. permute(1,0,2,3) -> [scale,Tm,dim,B], then reshape -> [T,dim,B]
     ggml_tensor * phase_perm = ggml_permute(ctx, phase_interp, 1, 0, 2, 3);
-    phase_perm = ggml_cont(ctx, phase_perm);
+    phase_perm = ggml_cont_if_needed(ctx, phase_perm);
     // 5. 最后乘以 scale（因为原来 phase_scaled = phase * scale）
     ggml_tensor * phase_scaled_perm = ggml_scale(ctx, phase_perm, float(HG2_UPSAMPLE_SCALE));
-    phase_scaled_perm = ggml_cont(ctx, phase_scaled_perm);
+    phase_scaled_perm = ggml_cont_if_needed(ctx, phase_scaled_perm);
     ggml_tensor * phase_up_t1db = ggml_reshape_4d(ctx, phase_scaled_perm, T, 1, dim, B);
-    phase_up_t1db               = ggml_cont(ctx, phase_up_t1db);
+    phase_up_t1db               = ggml_cont_if_needed(ctx, phase_up_t1db);
     ggml_tensor * phase_up_tdb  = ggml_reshape_3d(ctx, phase_up_t1db, T, dim, B);
-    phase_up_tdb                = ggml_cont(ctx, phase_up_tdb);
+    phase_up_tdb                = ggml_cont_if_needed(ctx, phase_up_tdb);
     dbg_phase_up_tdb            = phase_up_tdb;
     ggml_tensor * sines_tdb = ggml_sin(ctx, phase_up_tdb);
     ggml_tensor * sine_tdb  = ggml_scale(ctx, sines_tdb, sine_amp);
     ggml_tensor * uv_1db     = ggml_reshape_3d(ctx, uv_t1_b, T, 1, B);
-    uv_1db                   = ggml_cont(ctx, uv_1db);
+    uv_1db                   = ggml_cont_if_needed(ctx, uv_1db);
     ggml_tensor * uv_tdb     = ggml_repeat(ctx, uv_1db, sine_tdb);
     ggml_tensor * sine_gated = ggml_mul(ctx, sine_tdb, uv_tdb);
-    sine_gated               = ggml_cont(ctx, sine_gated);
+    sine_gated               = ggml_cont_if_needed(ctx, sine_gated);
     ggml_tensor * noise_tdb = ggml_scale(ctx, sine_gated, 0.0f);
-    noise_tdb               = ggml_cont(ctx, noise_tdb);
+    noise_tdb               = ggml_cont_if_needed(ctx, noise_tdb);
     *out_sine_tdb  = sine_gated;
     *out_uv_t1_b   = uv_t1_b;
     *out_noise_tdb = noise_tdb;
@@ -6279,8 +6372,8 @@ bool hg2_source_nsf2::hg_source_nsf2_build_graph(ggml_context * ctx,
         LOG_ERROR( "hg2_source_nsf2_build_graph: sine_gen build_graph failed\n");
         return false;
     }
-    sine_tdb = ggml_cont(ctx, sine_tdb);
-    uv_t1_b  = ggml_cont(ctx, uv_t1_b);
+    sine_tdb = ggml_cont_if_needed(ctx, sine_tdb);
+    uv_t1_b  = ggml_cont_if_needed(ctx, uv_t1_b);
     const int64_t T   = sine_tdb->ne[0];
     const int64_t dim = sine_tdb->ne[1];
     const int64_t B   = sine_tdb->ne[2];
@@ -6298,9 +6391,9 @@ bool hg2_source_nsf2::hg_source_nsf2_build_graph(ggml_context * ctx,
         return false;
     }
     ggml_tensor * sine_dtb = ggml_permute(ctx, sine_tdb, 1, 0, 2, 3);
-    sine_dtb               = ggml_cont(ctx, sine_dtb);
+    sine_dtb               = ggml_cont_if_needed(ctx, sine_dtb);
     ggml_tensor * sine_2d  = ggml_reshape_2d(ctx, sine_dtb, dim, T * B);
-    sine_2d                = ggml_cont(ctx, sine_2d);
+    sine_2d                = ggml_cont_if_needed(ctx, sine_2d);
     ggml_tensor * mm   = ggml_mul_mat(ctx, sine_2d, w);
     ggml_tensor * y_tb = ggml_reshape_2d(ctx, mm, T, B);
     ggml_tensor * b_s = ggml_reshape_4d(ctx, linear_bias, 1, 1, 1, 1);
@@ -6308,12 +6401,12 @@ bool hg2_source_nsf2::hg_source_nsf2_build_graph(ggml_context * ctx,
     ggml_tensor * b_rep = ggml_repeat(ctx, b_s, y_tb);
     y_tb              = ggml_add(ctx, y_tb, b_rep);
     y_tb              = ggml_tanh(ctx, y_tb);
-    y_tb              = ggml_cont(ctx, y_tb);
+    y_tb              = ggml_cont_if_needed(ctx, y_tb);
     ggml_tensor * sine_merge_t1_b = ggml_reshape_3d(ctx, y_tb, T, 1, B);
-    sine_merge_t1_b               = ggml_cont(ctx, sine_merge_t1_b);
+    sine_merge_t1_b               = ggml_cont_if_needed(ctx, sine_merge_t1_b);
     ggml_set_name(sine_merge_t1_b, "hg2.source_nsf2.sine_merge_t1_b");
     ggml_tensor * noise_t1_b = ggml_scale(ctx, uv_t1_b, 0.0f);
-    noise_t1_b               = ggml_cont(ctx, noise_t1_b);
+    noise_t1_b               = ggml_cont_if_needed(ctx, noise_t1_b);
     ggml_set_name(noise_t1_b, "hg2.source_nsf2.noise_t1_b");
     *out_sine_merge_t1_b = sine_merge_t1_b;
     *out_noise_t1_b      = noise_t1_b;
@@ -6350,24 +6443,24 @@ bool hg2_stft16::hg_stft16_build_graph(ggml_context *            ctx,
     (void) T;
     // 对输入做 reflect pad，方便按窗口取帧
     ggml_tensor * x_pad_tb = ggml_pad_reflect_1d(ctx, x_tb, hg2_stft16_params::HG2_PAD, hg2_stft16_params::HG2_PAD);
-    x_pad_tb               = ggml_cont(ctx, x_pad_tb);
+    x_pad_tb               = ggml_cont_if_needed(ctx, x_pad_tb);
     ggml_tensor * x_pad_t1b = ggml_reshape_3d(ctx, x_pad_tb, x_pad_tb->ne[0], 1, B);
-    x_pad_t1b               = ggml_cont(ctx, x_pad_t1b);
+    x_pad_t1b               = ggml_cont_if_needed(ctx, x_pad_t1b);
     ggml_tensor * dummy_kernel = ggml_new_tensor_3d(ctx, GGML_TYPE_F32, hg2_stft16_params::HG2_N_FFT, 1, 1);
     ggml_set_name(dummy_kernel, "hg2.stft16.dummy_kernel");
     // 按 hop 分帧，得到每帧长度为 N_FFT 的时间片
     ggml_tensor * im2col =
         ggml_im2col(ctx, dummy_kernel, x_pad_t1b, hg2_stft16_params::HG2_HOP, 0, 0, 0, 1, 0, false, GGML_TYPE_F32);
     ggml_tensor * frames_ntb = ggml_reshape_3d(ctx, im2col, im2col->ne[0], im2col->ne[1], im2col->ne[2]);
-    frames_ntb               = ggml_cont(ctx, frames_ntb);
+    frames_ntb               = ggml_cont_if_needed(ctx, frames_ntb);
     // 逐帧乘窗
     ggml_tensor * window_n11 = ggml_reshape_3d(ctx, params.window, hg2_stft16_params::HG2_N_FFT, 1, 1);
     ggml_tensor * window_ntb = ggml_repeat(ctx, window_n11, frames_ntb);
     ggml_tensor * frames_w   = ggml_mul(ctx, frames_ntb, window_ntb);
-    frames_w                 = ggml_cont(ctx, frames_w);
+    frames_w                 = ggml_cont_if_needed(ctx, frames_w);
     ggml_tensor * frames_2d =
         ggml_reshape_2d(ctx, frames_w, hg2_stft16_params::HG2_N_FFT, frames_w->ne[1] * frames_w->ne[2]);
-    frames_2d = ggml_cont(ctx, frames_2d);
+    frames_2d = ggml_cont_if_needed(ctx, frames_2d);
     // 用预计算的 DFT 矩阵做投影，得到实部和虚部
     ggml_tensor * mm_cos = ggml_mul_mat(ctx, frames_2d, params.dft_cos_t);
     ggml_tensor * mm_sin = ggml_mul_mat(ctx, frames_2d, params.dft_sin_t);
@@ -6378,8 +6471,8 @@ bool hg2_stft16::hg_stft16_build_graph(ggml_context *            ctx,
     // 输出布局转成 FTB
     ggml_tensor * real_ftb = ggml_permute(ctx, real_tfb, 1, 0, 2, 3);
     ggml_tensor * imag_ftb = ggml_permute(ctx, imag_tfb, 1, 0, 2, 3);
-    real_ftb               = ggml_cont(ctx, real_ftb);
-    imag_ftb               = ggml_cont(ctx, imag_ftb);
+    real_ftb               = ggml_cont_if_needed(ctx, real_ftb);
+    imag_ftb               = ggml_cont_if_needed(ctx, imag_ftb);
     ggml_set_name(real_ftb, "hg2.stft16.real_ftb");
     ggml_set_name(imag_ftb, "hg2.stft16.imag_ftb");
     *out_real_ftb = real_ftb;
@@ -6701,8 +6794,8 @@ bool voc_hg2_runner::voc_hg2_runner_build_graph(ggml_context * ctx,
     if (!model->hg2->gen.build_graph_forward(ctx, speech_feat_c80_t_b, cache_source_t1_b, &wave_t_b, &source_t1_b)) {
         return false;
     }
-    wave_t_b    = ggml_cont(ctx, wave_t_b);
-    source_t1_b = ggml_cont(ctx, source_t1_b);
+    wave_t_b    = ggml_cont_if_needed(ctx, wave_t_b);
+    source_t1_b = ggml_cont_if_needed(ctx, source_t1_b);
     ggml_build_forward_expand(gf, wave_t_b);
     ggml_build_forward_expand(gf, source_t1_b);
     *out_wave_t_b    = wave_t_b;
@@ -6755,7 +6848,7 @@ bool voc_hg2_runner::voc_hg2_runner_eval_stream(const std::vector<float> & speec
         return false;
     }
     ggml_tensor * speech_upload_tcb   = ggml_new_tensor_3d(ctx, GGML_TYPE_F32, T_mel, C, B);
-    ggml_tensor * speech_feat_c80_t_b = ggml_cont(ctx, ggml_permute(ctx, speech_upload_tcb, 1, 0, 2, 3));
+    ggml_tensor * speech_feat_c80_t_b = ggml_cont_if_needed(ctx, ggml_permute(ctx, speech_upload_tcb, 1, 0, 2, 3));
     ggml_tensor * cache_source_t1_b = ggml_new_tensor_3d(ctx, GGML_TYPE_F32, Tc, 1, B);
     ggml_tensor * wave_t_b    = nullptr;
     ggml_tensor * source_t1_b = nullptr;
@@ -7538,7 +7631,7 @@ int64_t runner_n_elements_approx(const ggml_tensor * t) {
 ggml_tensor * runner_slice_time_dim1_4d(ggml_context * ctx, ggml_tensor * x, int64_t t0, int64_t tlen) {
     const size_t  off = x->nb[1] * (size_t) t0;
     ggml_tensor * v   = ggml_view_4d(ctx, x, x->ne[0], tlen, x->ne[2], x->ne[3], x->nb[1], x->nb[2], x->nb[3], off);
-    return ggml_cont(ctx, v);
+    return ggml_cont_if_needed(ctx, v);
 }
 }  // namespace
 // 用于上下文/计算图与流式缓存张量
@@ -9807,20 +9900,7 @@ bool Token2Wav::push_tokens_window(const int32_t *      tokens,
 
     const int64_t T_mel = (int64_t) mel_in_bct.size() / (int64_t) Token2Mel::kMelChannels;
 
-    std::vector<float> out_source_bt1;
-    int64_t            out_T_source = 0;
-    const auto t_voc0 = clock::now();
-    if (!voc_runner_.voc_hg2_runner_eval_stream(mel_in_bct, T_mel, voc_cache_source_bt1_, voc_Tc_, wave_bt_out,
-                                                out_T_audio, out_source_bt1, out_T_source)) {
-        LOG_ERROR( "Token2Wav.push_tokens_window: voc_hg2_runner_eval_stream failed\n");
-        return false;
-    }
-    const auto t_voc1 = clock::now();
-
-    if (!voc_speech_cache_bt_.empty()) {
-        token2wav_utils::fade_in_out_b1(wave_bt_out, voc_speech_cache_bt_, voc_speech_window_, (int64_t) kSourceCacheLen);
-    }
-
+    // mel 输入缓存由生产者维护（异步模式下在 enqueue 前更新，保证下一窗口正确）
     {
         const int64_t      C       = Token2Mel::kMelChannels;
         const int64_t      T_total = (int64_t) mel_in_bct.size() / C;
@@ -9829,25 +9909,27 @@ bool Token2Wav::push_tokens_window(const int32_t *      tokens,
         voc_mel_cache_bct_.swap(next_mel_cache);
     }
 
-    {
-        std::vector<float> next_source_cache;
-        token2wav_utils::crop_t_tail_b1(out_source_bt1, (int64_t) kSourceCacheLen, next_source_cache);
-        voc_cache_source_bt1_.swap(next_source_cache);
-        voc_Tc_ = (int64_t) voc_cache_source_bt1_.size();
+    if (voc_async_) {
+        // 🔧 [P3] 异步 vocoder：只做 token2mel，vocoder 线程异步产出 wav 并回调
+        VocItem item;
+        item.mel_in_bct = std::move(mel_in_bct);
+        item.T_mel      = T_mel;
+        item.is_final   = is_final;
+        {
+            std::lock_guard<std::mutex> lk(voc_mu_);
+            item.seq   = voc_seq_++;
+            voc_q_.push(std::move(item));
+        }
+        voc_cv_.notify_one();
+        return true;
     }
 
-    {
-        std::vector<float> next_speech_cache;
-        token2wav_utils::crop_t_tail_b1(wave_bt_out, (int64_t) kSourceCacheLen, next_speech_cache);
-        voc_speech_cache_bt_.swap(next_speech_cache);
+    const auto t_voc0 = clock::now();
+    if (!run_vocoder_(mel_in_bct, T_mel, is_final, wave_bt_out, out_T_audio)) {
+        return false;
     }
-
-    if (!is_final && (int64_t) wave_bt_out.size() > (int64_t) kSourceCacheLen) {
-        wave_bt_out.resize(wave_bt_out.size() - (size_t) kSourceCacheLen);
-        out_T_audio = (int64_t) wave_bt_out.size();
-    }
-
-    const double voc_ms   = std::chrono::duration<double, std::milli>(t_voc1 - t_voc0).count();
+    const auto   t_voc1 = clock::now();
+    const double voc_ms = std::chrono::duration<double, std::milli>(t_voc1 - t_voc0).count();
     const double total_ms = std::chrono::duration<double, std::milli>(clock::now() - t_total0).count();
 
     omni::flow::profile::record_ms("token2mel", t2m_ms, is_first);
@@ -9866,7 +9948,79 @@ bool Token2Wav::push_tokens_window(const int32_t *      tokens,
     return true;
 }
 
+bool Token2Wav::run_vocoder_(const std::vector<float> & mel_in_bct, int64_t T_mel, bool is_final,
+                             std::vector<float> & wave_bt_out, int64_t & out_T_audio) {
+    wave_bt_out.clear();
+    out_T_audio = 0;
+    std::vector<float> out_source_bt1;
+    int64_t            out_T_source = 0;
+    if (!voc_runner_.voc_hg2_runner_eval_stream(mel_in_bct, T_mel, voc_cache_source_bt1_, voc_Tc_, wave_bt_out,
+                                                out_T_audio, out_source_bt1, out_T_source)) {
+        LOG_ERROR( "Token2Wav.run_vocoder_: voc_hg2_runner_eval_stream failed\n");
+        return false;
+    }
+    if (!voc_speech_cache_bt_.empty()) {
+        token2wav_utils::fade_in_out_b1(wave_bt_out, voc_speech_cache_bt_, voc_speech_window_, (int64_t) kSourceCacheLen);
+    }
+    {
+        std::vector<float> next_source_cache;
+        token2wav_utils::crop_t_tail_b1(out_source_bt1, (int64_t) kSourceCacheLen, next_source_cache);
+        voc_cache_source_bt1_.swap(next_source_cache);
+        voc_Tc_ = (int64_t) voc_cache_source_bt1_.size();
+    }
+    {
+        std::vector<float> next_speech_cache;
+        token2wav_utils::crop_t_tail_b1(wave_bt_out, (int64_t) kSourceCacheLen, next_speech_cache);
+        voc_speech_cache_bt_.swap(next_speech_cache);
+    }
+    if (!is_final && (int64_t) wave_bt_out.size() > (int64_t) kSourceCacheLen) {
+        wave_bt_out.resize(wave_bt_out.size() - (size_t) kSourceCacheLen);
+        out_T_audio = (int64_t) wave_bt_out.size();
+    }
+    return true;
+}
+
+void Token2Wav::voc_worker_loop_() {
+    while (true) {
+        VocItem item;
+        {
+            std::unique_lock<std::mutex> lk(voc_mu_);
+            voc_cv_.wait(lk, [&] { return voc_stop_ || !voc_q_.empty(); });
+            if (voc_stop_ && voc_q_.empty()) break;
+            item = std::move(voc_q_.front());
+            voc_q_.pop();
+        }
+        std::vector<float> wav;
+        int64_t            T_audio = 0;
+        if (run_vocoder_(item.mel_in_bct, item.T_mel, item.is_final, wav, T_audio) && voc_cb_) {
+            voc_cb_(voc_cb_ud_, wav.data(), (int64_t) wav.size(), T_audio, item.seq);
+        }
+    }
+}
+
+void Token2Wav::set_vocoder_async(bool enable, t2w_async_cb cb, void * userdata) {
+    std::lock_guard<std::mutex> lk(voc_mu_);
+    if (enable && !voc_async_) {
+        voc_async_ = true;
+        voc_cb_    = cb;
+        voc_cb_ud_ = userdata;
+        voc_stop_  = false;
+        voc_thread_ = std::thread(&Token2Wav::voc_worker_loop_, this);
+    } else if (!enable && voc_async_) {
+        voc_stop_ = true;
+        voc_cv_.notify_all();
+        if (voc_thread_.joinable()) voc_thread_.join();
+        voc_async_ = false;
+        voc_cb_    = nullptr;
+        voc_cb_ud_ = nullptr;
+        while (!voc_q_.empty()) voc_q_.pop();
+    }
+}
+
 void Token2Wav::reset_stream() {
+    if (voc_async_) {
+        set_vocoder_async(false, nullptr, nullptr);
+    }
     t2m_.reset_stream();
     voc_mel_cache_bct_.clear();
     voc_cache_source_bt1_.clear();

@@ -507,10 +507,16 @@ void omni_embed_free(struct omni_embed * embed) {
 static bool encode_image_with_vision_chunks(vision_ctx * ctx_vision, int n_threads, const vision_image_u8 * img, 
                                             std::vector<std::vector<float>> & vision_chunks) {
     const int64_t t_img_enc_start_us = ggml_time_us();
+    // [P2] fine accounting between preprocess / batch_encode
+    static const bool vis_prof = []() {
+        const char * s = std::getenv("GGML_VISION_PROFILE");
+        return s && s[0] == '1';
+    }();
+    const auto vpm_t0 = std::chrono::high_resolution_clock::now();
     vision_image_f32_batch img_res_v;
     img_res_v.entries.resize(0);
     img_res_v.entries.clear();
-    if (!vision_image_preprocess(ctx_vision, img, &img_res_v)) {
+    if (!vision_image_preprocess(ctx_vision, img, &img_res_v, n_threads)) {
         LOG_ERR("%s: unable to preprocess image\n", __func__);
         img_res_v.entries.clear();
         return false;
@@ -552,6 +558,7 @@ static bool encode_image_with_vision_chunks(vision_ctx * ctx_vision, int n_threa
     if (batch_all) {
         // 合并 overview + slices 为单个 batch 编码
         const int64_t t_batch_us = ggml_time_us();
+        const auto vpm_pre_done = std::chrono::high_resolution_clock::now();
         vision_image_f32_batch all_batch;
         for (int i = 0; i < n_total; i++) {
             all_batch.entries.push_back(std::move(img_res_v.entries[i]));
@@ -559,6 +566,12 @@ static bool encode_image_with_vision_chunks(vision_ctx * ctx_vision, int n_threa
         const int per_image_floats = n_embd * n_tokens;
         std::vector<float> batched_output((size_t)per_image_floats * n_total);
         bool encoded = vision_image_batch_encode(ctx_vision, n_threads, &all_batch, batched_output.data());
+        if (vis_prof) {
+            LOG_INF("%s: [VPM-SPLIT] preproc+glue=%.2fms batch_call=%.2fms\n",
+                    __func__,
+                    std::chrono::duration<double,std::milli>(vpm_pre_done - vpm_t0).count(),
+                    std::chrono::duration<double,std::milli>(std::chrono::high_resolution_clock::now() - vpm_pre_done).count());
+        }
         if (!encoded) {
             LOG_ERR("Unable to batch-encode %d entries\n", n_total);
             return false;
@@ -710,7 +723,7 @@ void omni_bench_vision(struct vision_ctx * ctx_vision, int n_threads, const char
     vision_set_max_slice_nums(ctx_vision, 1);
     {
         vision_image_f32_batch warmup_batch;
-        vision_image_preprocess(ctx_vision, img, &warmup_batch);
+        vision_image_preprocess(ctx_vision, img, &warmup_batch, n_threads);
         if (!warmup_batch.entries.empty()) {
             std::vector<float> tmp(per_image_floats);
             vision_image_encode(ctx_vision, n_threads, warmup_batch.entries[0].get(), tmp.data());
@@ -722,7 +735,7 @@ void omni_bench_vision(struct vision_ctx * ctx_vision, int n_threads, const char
         vision_set_max_slice_nums(ctx_vision, max_s);
 
         vision_image_f32_batch img_res_v;
-        if (!vision_image_preprocess(ctx_vision, img, &img_res_v)) {
+    if (!vision_image_preprocess(ctx_vision, img, &img_res_v, n_threads)) {
             LOG_ERR("bench: preprocess failed for max_slice=%d\n", max_s);
             continue;
         }
@@ -915,31 +928,55 @@ struct omni_embed * omni_image_embed_make_with_filename(struct vision_ctx * ctx_
 
 // 🔧 [高清模式] 创建带 chunks 的 vision embed（用于 V2.6 slice schema）
 // 返回的 vector: [0] = overview, [1..n] = slices
-bool omni_image_embed_make_chunks_with_filename(struct vision_ctx * ctx_vision, int n_threads, 
-                                                 std::string image_path, 
+bool omni_image_embed_make_chunks_with_filename(struct vision_ctx * ctx_vision, int n_threads,
+                                                 std::string image_path,
                                                  std::vector<std::vector<float>> & vision_chunks) {
+    // [P2] end-to-end stage accounting for the whole vpm pipeline
+    static const bool vpm_acc = []() {
+        const char * s = std::getenv("GGML_VPM_ACCOUNT");
+        return s && s[0] == '1';
+    }();
+    const auto acc_t0 = std::chrono::high_resolution_clock::now();
+    auto since = [t0 = acc_t0]() {
+        return std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - t0).count();
+    };
+    double d_load = 0, d_decode = 0, d_preproc = 0, d_encode_call = 0;
+
     unsigned char* image_bytes;
     long image_bytes_length;
-    auto loaded = load_file_to_bytes(image_path.c_str(), &image_bytes, &image_bytes_length);
-    if (!loaded) {
-        LOG_ERR("%s: failed to load %s\n", __func__, image_path.c_str());
-        return false;
+    {
+        const auto s0 = std::chrono::high_resolution_clock::now();
+        auto loaded = load_file_to_bytes(image_path.c_str(), &image_bytes, &image_bytes_length);
+        d_load = since();
+        if (!loaded) {
+            LOG_ERR("%s: failed to load %s\n", __func__, image_path.c_str());
+            return false;
+        }
     }
-    
+
     vision_image_u8 * img = vision_image_u8_init();
-    if (!vision_image_load_from_bytes(image_bytes, image_bytes_length, img)) {
-        vision_image_u8_free(img);
-        free(image_bytes);
-        LOG_ERR("%s: can't load image from bytes, is it a valid image?", __func__);
-        return false;
+    {
+        const auto s0 = std::chrono::high_resolution_clock::now();
+        if (!vision_image_load_from_bytes(image_bytes, image_bytes_length, img)) {
+            vision_image_u8_free(img);
+            free(image_bytes);
+            LOG_ERR("%s: can't load image from bytes, is it a valid image?", __func__);
+            return false;
+        }
+        d_decode = since() - d_load;
     }
     free(image_bytes);
-    
-    bool success = encode_image_with_vision_chunks(ctx_vision, n_threads, img, vision_chunks);
+
+    const bool success = encode_image_with_vision_chunks(ctx_vision, n_threads, img, vision_chunks);
+    d_encode_call = since();
     vision_image_u8_free(img);
     
     if (success) {
         LOG_INF("%s: created %d vision chunks from %s\n", __func__, (int)vision_chunks.size(), image_path.c_str());
+    }
+    if (vpm_acc) {
+        LOG_INF("%s: [VPM-ACC] load=%.2fms stbi_decode=%.2fms encode_call=%.2fms total=%.2fms\n",
+                __func__, d_load, d_decode, d_encode_call, since());
     }
     return success;
 }

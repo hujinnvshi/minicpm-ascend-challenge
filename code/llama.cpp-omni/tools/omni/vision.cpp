@@ -31,6 +31,7 @@
 #include <array>
 #include <numeric>
 #include <functional>
+#include <thread>
 
 
 struct omni_logger_state g_logger_state = {GGML_LOG_LEVEL_CONT, omni_log_callback_default, NULL};
@@ -224,8 +225,29 @@ struct vision_ctx {
     bool debug_graph = false;
     std::vector<ggml_tensor *> debug_print_tensors;
 
+    // 🔧 [P2 H-P2-2b] 常量输入张量的 device 侧缓存（window_mask/ds_idx/positions）。
+    // 这些张量内容只由图像几何（pos_h/pos_w）决定，同尺寸逐帧完全相同；
+    // 每帧重复 H2D 上传 window_mask(≈4MB) 等，实测 ~37ms/帧 纯浪费。
+    // key = tensor name + nelements；value = 设备端 mirror tensor（专用 buffer）。
+    // 门控：GGML_VPM_CONST_CACHE=1 启用（默认关=官方行为）。正确性：
+    // 缓存命中跳过的是"内容不变的重复上传"，位元结果与逐帧上传一致。
+    struct const_input_cache_entry {
+        ggml_context_ptr ctx;                 // 持有 mirror tensor 元数据
+        ggml_backend_buffer_t buf = nullptr;  // device 持久缓冲
+        ggml_tensor * mirror = nullptr;
+        size_t nbytes = 0;
+    };
+    std::map<std::string, const_input_cache_entry> const_input_cache;
+    bool const_cache_enabled = false;
+
+    void const_cache_init_enabled() {
+        const char * s = std::getenv("GGML_VPM_CONST_CACHE");
+        const_cache_enabled = (s && s[0] == '1');
+    }
+
     vision_ctx(vision_context_params & ctx_params) {
         debug_graph = std::getenv("Omni_DEBUG_GRAPH") != nullptr;
+        const_cache_init_enabled();
         backend_cpu = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_CPU, nullptr);
         if (!backend_cpu) {
             throw std::runtime_error("failed to initialize CPU backend");
@@ -1720,8 +1742,41 @@ static void normalize_image_u8_to_f32(const vision_image_u8 & src, vision_image_
 }
 
 struct image_manipulation {
+    // [opt] 并行行循环：每行输出相互独立，线程间无竞争，结果与单线程逐字节一致。
+    static void run_parallel_rows(int n_threads, int total_rows,
+                                  const std::function<void(int, int)> & fn) {
+        static const bool par_dbg = std::getenv("GGML_VISION_PAR_DEBUG") != nullptr;
+        if (par_dbg) {
+            static bool once = true;
+            if (once) {
+                fprintf(stderr, "[RESIZE-PAR] actual n_threads=%d rows=%d\n", n_threads, total_rows);
+                once = false;
+            }
+        }
+        if (n_threads <= 0) {
+            // -1 = auto：用保守默认（避免与 CANN/NPU 线程争抢过多核）
+            n_threads = 8;
+        }
+        if (n_threads <= 1 || total_rows <= 1) {
+            fn(0, total_rows);
+            return;
+        }
+        std::vector<std::thread> ts;
+        ts.reserve(n_threads);
+        const int per = total_rows / n_threads;
+        for (int t = 0; t < n_threads; t++) {
+            const int i0 = t * per;
+            const int i1 = (t == n_threads - 1) ? total_rows : (t + 1) * per;
+            if (i0 >= i1) continue;
+            ts.emplace_back(fn, i0, i1);
+        }
+        for (auto & t : ts) {
+            t.join();
+        }
+    }
+
     // Bilinear resize function
-    static void bilinear_resize(const vision_image_u8& src, vision_image_u8& dst, int target_width, int target_height) {
+    static void bilinear_resize(const vision_image_u8& src, vision_image_u8& dst, int target_width, int target_height, int n_threads = 1) {
         dst.nx = target_width;
         dst.ny = target_height;
         dst.buf.resize(3 * target_width * target_height);
@@ -1729,7 +1784,8 @@ struct image_manipulation {
         float x_ratio = static_cast<float>(src.nx - 1) / target_width;
         float y_ratio = static_cast<float>(src.ny - 1) / target_height;
 
-        for (int y = 0; y < target_height; y++) {
+        run_parallel_rows(n_threads, target_height, [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++) {
             for (int x = 0; x < target_width; x++) {
                 float px = x_ratio * x;
                 float py = y_ratio * y;
@@ -1753,11 +1809,12 @@ struct image_manipulation {
                 }
             }
         }
+        });
     }
 
     // Bicubic resize function
     // part of image will be cropped if the aspect ratio is different
-    static bool bicubic_resize(const vision_image_u8 & img, vision_image_u8 & dst, int target_width, int target_height) {
+    static bool bicubic_resize(const vision_image_u8 & img, vision_image_u8 & dst, int target_width, int target_height, int n_threads = 1) {
         const int nx = img.nx;
         const int ny = img.ny;
 
@@ -1765,39 +1822,32 @@ struct image_manipulation {
         dst.ny = target_height;
         dst.buf.resize(3 * target_width * target_height);
 
-        float Cc;
-        float C[5] = {};
-        float d0, d2, d3, a0, a1, a2, a3;
-        int i, j, k, jj;
-        int x, y;
-        float dx, dy;
-        float tx, ty;
-
-        tx = (float)nx / (float)target_width;
-        ty = (float)ny / (float)target_height;
+        const float tx = (float)nx / (float)target_width;
+        const float ty = (float)ny / (float)target_height;
 
         // Bicubic interpolation; adapted from ViT.cpp, inspired from :
         //    -> https://github.com/yglukhov/bicubic-interpolation-image-processing/blob/master/libimage.c#L36
         //    -> https://en.wikipedia.org/wiki/Bicubic_interpolation
+        run_parallel_rows(n_threads, target_height, [&](int i0, int i1) {
+        float C[5] = {};
+        for (int i = i0; i < i1; i++) {
+            for (int j = 0; j < target_width; j++) {
+                int x = (int)(tx * j);
+                int y = (int)(ty * i);
 
-        for (i = 0; i < target_height; i++) {
-            for (j = 0; j < target_width; j++) {
-                x = (int)(tx * j);
-                y = (int)(ty * i);
+                float dx = tx * j - x;
+                float dy = ty * i - y;
 
-                dx = tx * j - x;
-                dy = ty * i - y;
+                for (int k = 0; k < 3; k++) {
+                    for (int jj = 0; jj <= 3; jj++) {
+                        float d0 = img.buf[(clip(y - 1 + jj, 0, ny - 1) * nx + clip(x - 1, 0, nx - 1)) * 3 + k] - img.buf[(clip(y - 1 + jj, 0, ny - 1) * nx + clip(x, 0, nx - 1)) * 3 + k];
+                        float d2 = img.buf[(clip(y - 1 + jj, 0, ny - 1) * nx + clip(x + 1, 0, nx - 1)) * 3 + k] - img.buf[(clip(y - 1 + jj, 0, ny - 1) * nx + clip(x, 0, nx - 1)) * 3 + k];
+                        float d3 = img.buf[(clip(y - 1 + jj, 0, ny - 1) * nx + clip(x + 2, 0, nx - 1)) * 3 + k] - img.buf[(clip(y - 1 + jj, 0, ny - 1) * nx + clip(x, 0, nx - 1)) * 3 + k];
+                        float a0 = img.buf[(clip(y - 1 + jj, 0, ny - 1) * nx + clip(x, 0, nx - 1)) * 3 + k];
 
-                for (k = 0; k < 3; k++) {
-                    for (jj = 0; jj <= 3; jj++) {
-                        d0 = img.buf[(clip(y - 1 + jj, 0, ny - 1) * nx + clip(x - 1, 0, nx - 1)) * 3 + k] - img.buf[(clip(y - 1 + jj, 0, ny - 1) * nx + clip(x, 0, nx - 1)) * 3 + k];
-                        d2 = img.buf[(clip(y - 1 + jj, 0, ny - 1) * nx + clip(x + 1, 0, nx - 1)) * 3 + k] - img.buf[(clip(y - 1 + jj, 0, ny - 1) * nx + clip(x, 0, nx - 1)) * 3 + k];
-                        d3 = img.buf[(clip(y - 1 + jj, 0, ny - 1) * nx + clip(x + 2, 0, nx - 1)) * 3 + k] - img.buf[(clip(y - 1 + jj, 0, ny - 1) * nx + clip(x, 0, nx - 1)) * 3 + k];
-                        a0 = img.buf[(clip(y - 1 + jj, 0, ny - 1) * nx + clip(x, 0, nx - 1)) * 3 + k];
-
-                        a1 = -1.0 / 3 * d0 + d2 - 1.0 / 6 * d3;
-                        a2 =  1.0 / 2 * d0 +      1.0 / 2 * d2;
-                        a3 = -1.0 / 6 * d0 -      1.0 / 2 * d2 + 1.0 / 6 * d3;
+                        float a1 = -1.0f / 3 * d0 + d2 - 1.0f / 6 * d3;
+                        float a2 =  1.0f / 2 * d0 +      1.0f / 2 * d2;
+                        float a3 = -1.0f / 6 * d0 -      1.0f / 2 * d2 + 1.0f / 6 * d3;
 
                         C[jj] = a0 + a1 * dx + a2 * dx * dx + a3 * dx * dx * dx;
 
@@ -1805,10 +1855,10 @@ struct image_manipulation {
                         d2 = C[2] - C[1];
                         d3 = C[3] - C[1];
                         a0 = C[1];
-                        a1 = -1.0 / 3 * d0 + d2 - 1.0 / 6 * d3;
-                        a2 =  1.0 / 2 * d0 +      1.0 / 2 * d2;
-                        a3 = -1.0 / 6 * d0 -      1.0 / 2 * d2 + 1.0 / 6 * d3;
-                        Cc = a0 + a1 * dy + a2 * dy * dy + a3 * dy * dy * dy;
+                        a1 = -1.0f / 3 * d0 + d2 - 1.0f / 6 * d3;
+                        a2 =  1.0f / 2 * d0 +      1.0f / 2 * d2;
+                        a3 = -1.0f / 6 * d0 -      1.0f / 2 * d2 + 1.0f / 6 * d3;
+                        const float Cc = a0 + a1 * dy + a2 * dy * dy + a3 * dy * dy * dy;
 
                         const uint8_t Cc2 = std::min(std::max(std::round(Cc), 0.0f), 255.0f);
                         dst.buf[(i * target_width + j) * 3 + k] = float(Cc2);
@@ -1816,6 +1866,7 @@ struct image_manipulation {
                 }
             }
         }
+        });
 
         return true;
     }
@@ -1823,7 +1874,7 @@ struct image_manipulation {
     // llava-1.6 type of resize_and_pad
     // if the ratio is not 1:1, padding with pad_color will be applied
     // pad_color is single channel, default is 0 (black)
-    static void resize_and_pad_image(const vision_image_u8 & image, vision_image_u8 & dst, const vision_image_size & target_resolution, std::array<uint8_t, 3> pad_color = {0, 0, 0}) {
+    static void resize_and_pad_image(const vision_image_u8 & image, vision_image_u8 & dst, const vision_image_size & target_resolution, std::array<uint8_t, 3> pad_color = {0, 0, 0}, int n_threads = 1) {
         int target_width  = target_resolution.width;
         int target_height = target_resolution.height;
 
@@ -1841,7 +1892,7 @@ struct image_manipulation {
         }
 
         vision_image_u8 resized_image;
-        bicubic_resize(image, resized_image, new_width, new_height);
+        bicubic_resize(image, resized_image, new_width, new_height, n_threads);
 
         vision_image_u8 padded_image;
         padded_image.nx = target_width;
@@ -1996,12 +2047,12 @@ struct llava_uhd {
         return res;
     }
 
-    static std::vector<vision_image_u8_ptr> slice_image(const vision_image_u8 * img, const slice_instructions & inst) {
+    static std::vector<vision_image_u8_ptr> slice_image(const vision_image_u8 * img, const slice_instructions & inst, int n_threads = 1) {
         std::vector<vision_image_u8_ptr> output;
 
         // resize to overview size
         vision_image_u8_ptr resized_img(vision_image_u8_init());
-        image_manipulation::bicubic_resize(*img, *resized_img, inst.overview_size.width, inst.overview_size.height);
+        image_manipulation::bicubic_resize(*img, *resized_img, inst.overview_size.width, inst.overview_size.height, n_threads);
         output.push_back(std::move(resized_img));
         if (inst.slices.empty()) {
             // no slices, just return the resized image
@@ -2011,9 +2062,9 @@ struct llava_uhd {
         // resize to refined size
         vision_image_u8_ptr refined_img(vision_image_u8_init());
         if (inst.padding_refined) {
-            image_manipulation::resize_and_pad_image(*img, *refined_img, inst.refined_size);
+            image_manipulation::resize_and_pad_image(*img, *refined_img, inst.refined_size, {0, 0, 0}, n_threads);
         } else {
-            image_manipulation::bilinear_resize(*img, *refined_img, inst.refined_size.width, inst.refined_size.height);
+            image_manipulation::bilinear_resize(*img, *refined_img, inst.refined_size.width, inst.refined_size.height, n_threads);
         }
 
         // create slices
@@ -2155,9 +2206,18 @@ private:
     }
 };
 
-bool vision_image_preprocess(struct vision_ctx * ctx, const vision_image_u8 * img, struct vision_image_f32_batch * res_imgs) {
+bool vision_image_preprocess(struct vision_ctx * ctx, const vision_image_u8 * img, struct vision_image_f32_batch * res_imgs, int n_threads) {
     vision_image_size original_size{img->nx, img->ny};
     auto & params = ctx->model.hparams;
+
+    // [P2] env-gated preprocess profiling (stbi-decode excluded; this covers
+    // slice/resize/normalize). GGML_VISION_PREPROC_PROFILE=1
+    static const bool preprof = []() {
+        const char * s = std::getenv("GGML_VISION_PREPROC_PROFILE");
+        return s && s[0] == '1';
+    }();
+    const auto pp_t0 = std::chrono::high_resolution_clock::now();
+    double pp_slice_ms = 0, pp_norm_ms = 0;
 
     switch (ctx->model.model_type) {
         case MiniCPM_o:
@@ -2166,17 +2226,28 @@ bool vision_image_preprocess(struct vision_ctx * ctx, const vision_image_u8 * im
             //             see llama.cpp tools/mtmd/mtmd.cpp::PROJECTOR_TYPE_MINICPMV4_6
             //             (PR currently shares MiniCPM-o's bicubic path for the o-4.6 vit)
             auto const inst = llava_uhd::get_slice_instructions(ctx, original_size);
-            std::vector<vision_image_u8_ptr> imgs = llava_uhd::slice_image(img, inst);
+            {
+                const auto t0 = std::chrono::high_resolution_clock::now();
+                std::vector<vision_image_u8_ptr> imgs = llava_uhd::slice_image(img, inst, n_threads);
+                pp_slice_ms = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - t0).count();
 
-            for (size_t i = 0; i < imgs.size(); ++i) {
-                // vision_image_save_to_bmp(*imgs[i], "slice_" + std::to_string(i) + ".bmp");
-                vision_image_f32_ptr res(vision_image_f32_init());
-                normalize_image_u8_to_f32(*imgs[i], *res, params.image_mean, params.image_std);
-                res_imgs->entries.push_back(std::move(res));
+                const auto tn0 = std::chrono::high_resolution_clock::now();
+                for (size_t i = 0; i < imgs.size(); ++i) {
+                    // vision_image_save_to_bmp(*imgs[i], "slice_" + std::to_string(i) + ".bmp");
+                    vision_image_f32_ptr res(vision_image_f32_init());
+                    normalize_image_u8_to_f32(*imgs[i], *res, params.image_mean, params.image_std);
+                    res_imgs->entries.push_back(std::move(res));
+                }
+                pp_norm_ms = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - tn0).count();
             }
 
             res_imgs->grid_x = inst.grid_size.width;
             res_imgs->grid_y = inst.grid_size.height;
+            if (preprof) {
+                LOG_INF("%s: [PREPROC] slice_resize=%.2fms normalize=%.2fms total=%.2fms\n",
+                        __func__, pp_slice_ms, pp_norm_ms,
+                        std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - pp_t0).count());
+            }
             return true;
         }
         default:
@@ -2231,7 +2302,7 @@ static std::vector<std::vector<std::vector<float>>> get_2d_sincos_pos_embed_from
 static std::vector<std::vector<float>> get_2d_sincos_pos_embed(int embed_dim, const std::pair<int, int> image_size) {
     // [P2] memoized: content is a deterministic function of (embed_dim, H, W);
     // per-frame recomputation costs ~30-40ms of sincos + nested vector churn.
-    // 门控：GGML_VPM_SINCOS_MEMO=1 启用（默认关=官方行为；v8.2 采纳 -3.7%）。
+    // 门控：GGML_VPM_SINCOS_MEMO=1 启用（默认关=官方行为；p2 曾默认开待正式采纳）。
     static std::map<std::pair<int, std::pair<int,int>>, std::vector<std::vector<float>>> memo;
     static int memo_enabled = -1;
     if (memo_enabled == -1) {
@@ -2245,6 +2316,7 @@ static std::vector<std::vector<float>> get_2d_sincos_pos_embed(int embed_dim, co
             return it->second;
         }
     }
+
     int grid_h_size = image_size.first;
     int grid_w_size = image_size.second;
 
@@ -2363,6 +2435,15 @@ bool vision_image_batch_encode(vision_ctx * ctx, const int n_threads, const visi
     const vision_image_f32_batch & imgs = *imgs_c_ptr;
     int batch_size = imgs.entries.size();
 
+    // [P2] env-gated stage profiling: BUILD / INPUT / COMPUTE split per frame
+    static const bool vis_prof = []() {
+        const char * s = std::getenv("GGML_VISION_PROFILE");
+        return s && s[0] == '1';
+    }();
+    struct VisProfTimes {
+        double build_ms = 0, input_ms = 0, compute_ms = 0;
+    } vp;
+
     if (batch_size < 1) {
         return false;
     }
@@ -2382,10 +2463,18 @@ bool vision_image_batch_encode(vision_ctx * ctx, const int n_threads, const visi
     }
 
     // build the inference graph
+    const auto vp_reset_t0 = std::chrono::high_resolution_clock::now();  // covers sched_reset too
     ctx->debug_print_tensors.clear();
     ggml_backend_sched_reset(ctx->sched.get());
+    {
+        const auto tb0 = std::chrono::high_resolution_clock::now();
+    }
+    const auto vp_build_t0 = std::chrono::high_resolution_clock::now();
     ggml_cgraph * gf = vision_image_build_graph(ctx, imgs);
+    const auto vp_alloc_t0 = std::chrono::high_resolution_clock::now();
+    double t_graph_ms = std::chrono::duration<double,std::milli>(vp_alloc_t0 - vp_build_t0).count();
     ggml_backend_sched_alloc_graph(ctx->sched.get(), gf);
+    vp.build_ms = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - vp_reset_t0).count();
 
     // set inputs
     const auto & model   = ctx->model;
@@ -2411,22 +2500,81 @@ bool vision_image_batch_encode(vision_ctx * ctx, const int n_threads, const visi
         return inp;
     };
 
-    auto set_input_f32 = [&get_inp_tensor](const char * name, std::vector<float> & values) {
+    auto set_input_f32 = [&](const char * name, std::vector<float> & values) {
         ggml_tensor * cur = get_inp_tensor(name);
         GGML_ASSERT(cur->type == GGML_TYPE_F32);
         GGML_ASSERT(ggml_nelements(cur) == (int64_t)values.size());
+        // [P2] const-cache: 非像素类输入(几何常量)复用 device mirror
+        if (ctx->const_cache_enabled && strcmp(name, "inp_raw") != 0) {
+            const std::string key = std::string(name) + ":" + std::to_string(ggml_nbytes(cur));
+            auto & e = ctx->const_input_cache[key];
+            if (e.mirror == nullptr) {
+                // mirror shape matches cur's dims to satisfy same-layout copy assert
+                if (!e.ctx) {
+                    e.ctx.reset(ggml_init({ggml_tensor_overhead() * 4, nullptr, true}));
+                }
+                e.mirror = ggml_new_tensor(e.ctx.get(), cur->type, GGML_MAX_DIMS, cur->ne);
+                ggml_backend_buffer_type_t buft = ggml_backend_get_default_buffer_type(ctx->backend ? ctx->backend : ctx->backend_cpu);
+                e.buf = ggml_backend_alloc_ctx_tensors_from_buft(e.ctx.get(), buft);
+                e.nbytes = ggml_nbytes(cur);
+            }
+            GGML_ASSERT(e.nbytes == ggml_nbytes(cur));
+            if (ggml_backend_buffer_is_host(e.buf)) {
+                ggml_backend_tensor_set(cur, values.data(), 0, e.nbytes);
+            } else {
+                static std::map<std::string, bool> seeded;
+                if (!seeded[key]) {
+                    ggml_backend_tensor_set(cur, values.data(), 0, e.nbytes);   // first frame: real upload
+                    ggml_backend_tensor_copy(cur, e.mirror);                    // keep device-side copy
+                    seeded[key] = true;
+                } else {
+                    ggml_backend_tensor_copy(e.mirror, cur);                    // D2D fast path
+                }
+            }
+            return;
+        }
         ggml_backend_tensor_set(cur, values.data(), 0, ggml_nbytes(cur));
     };
 
-    auto set_input_i32 = [&get_inp_tensor](const char * name, std::vector<int32_t> & values) {
+    auto set_input_i32 = [&](const char * name, std::vector<int32_t> & values) {
         ggml_tensor * cur = get_inp_tensor(name);
         GGML_ASSERT(cur->type == GGML_TYPE_I32);
         GGML_ASSERT(ggml_nelements(cur) == (int64_t)values.size());
+        if (ctx->const_cache_enabled && strcmp(name, "inp_raw") != 0) {
+            const std::string key = std::string(name) + ":i32:" + std::to_string(ggml_nbytes(cur));
+            auto & e = ctx->const_input_cache[key];
+            if (e.mirror == nullptr) {
+                if (!e.ctx) {
+                    e.ctx.reset(ggml_init({ggml_tensor_overhead() * 4, nullptr, true}));
+                }
+                e.mirror = ggml_new_tensor(e.ctx.get(), cur->type, GGML_MAX_DIMS, cur->ne);
+                ggml_backend_buffer_type_t buft = ggml_backend_get_default_buffer_type(ctx->backend ? ctx->backend : ctx->backend_cpu);
+                e.buf = ggml_backend_alloc_ctx_tensors_from_buft(e.ctx.get(), buft);
+                e.nbytes = ggml_nbytes(cur);
+            }
+            GGML_ASSERT(e.nbytes == ggml_nbytes(cur));
+            if (ggml_backend_buffer_is_host(e.buf)) {
+                // CPU mirror: normal upload
+                ggml_backend_tensor_set(cur, values.data(), 0, e.nbytes);
+            } else {
+                // first use of a fresh mirror is uninitialized: upload via cur then copy back
+                static std::map<std::string, bool> seeded;
+                if (!seeded[key]) {
+                    ggml_backend_tensor_set(cur, values.data(), 0, e.nbytes);
+                    ggml_backend_tensor_copy(cur, e.mirror);
+                    seeded[key] = true;
+                } else {
+                    ggml_backend_tensor_copy(e.mirror, cur);  // D2D fast path
+                }
+            }
+            return;
+        }
         ggml_backend_tensor_set(cur, values.data(), 0, ggml_nbytes(cur));
     };
 
     // set input pixel values for all images in the batch
     {
+        const auto vp_input_t0 = std::chrono::high_resolution_clock::now();
         const int nx = imgs.entries[0]->nx;
         const int ny = imgs.entries[0]->ny;
         const int n = nx * ny;
@@ -2445,7 +2593,8 @@ bool vision_image_batch_encode(vision_ctx * ctx, const int n_threads, const visi
             }
         }
         set_input_f32("inp_raw", inp_raw);
-    } 
+        vp.input_ms = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - vp_input_t0).count();
+    }
 
     // set input per projector
     switch (ctx->model.model_type) {
@@ -2575,7 +2724,13 @@ bool vision_image_batch_encode(vision_ctx * ctx, const int n_threads, const visi
         }
     }
 
+    const auto vp_compute_t0 = std::chrono::high_resolution_clock::now();
     auto status = ggml_backend_sched_graph_compute(ctx->sched.get(), gf);
+    vp.compute_ms = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - vp_compute_t0).count();
+    if (vis_prof) {
+        LOG_INF("%s: [VIS-PROF] B=%d build=%.2fms(graph_build=%.2f) input=%.2fms compute=%.2fms\n",
+                __func__, batch_size, vp.build_ms, t_graph_ms, vp.input_ms, vp.compute_ms);
+    }
     if (status != GGML_STATUS_SUCCESS) {
         LOG_ERR("%s: ggml_backend_sched_graph_compute failed with error %d\n", __func__, status);
         return false;

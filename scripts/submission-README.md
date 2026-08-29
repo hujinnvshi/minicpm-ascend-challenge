@@ -69,7 +69,10 @@
 | **v8.2 = v8.1 + VPM sincos memo** | **0.6974 → 0.6772 / 0.6698**（均值 0.6735，同机同 binary 单变量 A/B，vs v8.1 → **-3.4%**） | encode 0.181→0.152 + prefill 0.013 + decode 0.172 + tts 0.123 + t2w 0.212 |
 | **v8.3 = v8.2 + t2w 2 步流** | **0.6667 → 0.6239**（v8.2 同 binary 单变量，t2w 段 0.210→0.166） | encode 0.154 + prefill 0.013 + decode 0.170 + tts 0.122 + t2w 0.166 |
 | **v8.4 = v8.3 + t2w 1 步流** | **0.6239 → 0.6118**（v8.3 单变量，t2w 段 0.166→0.155） | encode 0.154 + prefill 0.013 + decode 0.170 + tts 0.122 + t2w 0.155 |
-| **v8.5 = v8.4 + conv_mm（本提交）** | **0.6118 → 0.5401**（v8.4 单变量，t2w 段 0.155→0.080） | encode 0.152 + prefill 0.013 + decode 0.172 + tts 0.123 + t2w 0.080 |
+| **v8.5 = v8.4 + conv_mm** | **0.6118 → 0.5401**（v8.4 单变量，t2w 段 0.155→0.080） | encode 0.152 + prefill 0.013 + decode 0.172 + tts 0.123 + t2w 0.080 |
+| **v8.6 = v8.5 + VPM resize 并行化（本提交）** | **0.5401 → ~0.51**（v8.5 单变量，slice_resize 37ms→4.6ms、encode 0.156→0.122） | encode 0.122 + prefill 0.012 + decode 0.204 + tts 0.124 + t2w 0.102 |
+
+> **v8.6 精度（VPM resize 并行化）**：bilinear/bicubic 按行并行（`run_parallel_rows`），行间独立、线程数 1/4/8/16 输出**逐字节一致**（0 字节差异）；LLM 文本逐字节一致；tts smoke WER 1.127%（20 条）。纯 CPU 数学并行化，对精度零影响。
 
 > **v8 精度验证（图 vs 普通，910C）**：LLM 输出（llm_token_ids/llm_text）**逐字节一致**；tts（seed-zh 40 条）WER **0.947% = 0.947%** 且 **40/40 wav 逐字节一致**；batch_validity 四字段全 True。唯一差异为 rts omni_duplex1 turn3 尾帧 flush 分段（文本相同、不入 core 帧，边界现象）。→ 图模式对精度零影响。
 

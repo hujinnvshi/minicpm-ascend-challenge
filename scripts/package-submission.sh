@@ -54,25 +54,27 @@ cp "$REPO_ROOT/code/llama.cpp-omni/ggml/src/ggml-cann/aclnn_ops.cpp"   "$STAGING
 cp "$REPO_ROOT/code/llama.cpp-omni/tools/omni/omni.cpp"                "$STAGING/tools/omni/omni.cpp"
 cp "$REPO_ROOT/code/llama.cpp-omni/tools/omni/omni.h"                  "$STAGING/tools/omni/omni.h"
 cp "$REPO_ROOT/code/llama.cpp-omni/tools/omni/vision.cpp"              "$STAGING/tools/omni/vision.cpp"
+cp "$REPO_ROOT/code/llama.cpp-omni/tools/omni/vision.h"                "$STAGING/tools/omni/vision.h"
 cp "$REPO_ROOT/code/llama.cpp-omni/tools/omni/token2wav/token2wav-impl.cpp" "$STAGING/tools/omni/token2wav/token2wav-impl.cpp"
 
-# 1c. 确认改动范围（v8.5 起为 7 文件，含 token2wav-impl.cpp conv_mm）
+# 1c. 确认改动范围（v8.6 起为 8 文件：+vision.h VPM 并行化）
 CHANGED=$(git -C "$STAGING" status --short)
 echo "  改动文件:"
 echo "$CHANGED" | sed 's/^/    /'
 N_CHANGED=$(echo "$CHANGED" | grep -c '^ M')
-[ "$N_CHANGED" -eq 6 ] || [ "$N_CHANGED" -eq 7 ] || { echo "WARN: 预期 6-7 个改动文件，实际 $N_CHANGED"; }
+[ "$N_CHANGED" -eq 6 ] || [ "$N_CHANGED" -eq 7 ] || [ "$N_CHANGED" -eq 8 ] || { echo "WARN: 预期 6-8 个改动文件，实际 $N_CHANGED"; }
 
 # 1d. 提交 + git archive
 git -C "$STAGING" add -A
 git -C "$STAGING" -c user.name="submission" -c user.email="submission@local" \
-  commit -q -m "chore: submission $(date +%Y-%m-%d) — 6 处 CANN/omni 优化补丁（默认行为=官方基线 b06198f）
+  commit -q -m "chore: submission $(date +%Y-%m-%d) — 8 处 CANN/omni 优化补丁（默认行为=官方基线 b06198f）
 
 - ggml-cann.h/.cpp: patch7 ggml_backend_cann_free 前 set_device + per-backend ACL 图模式接口（ggml_backend_cann_set_acl_graph，USE_ACL_GRAPH 构建时有效）
 - aclnn_ops.cpp: CANN FA contiguity 修复（非规范 [B,S,N,D] 视图连续拷贝，B<=1 忽略 dim3）——消除多 token prefill 崩溃、解锁 910C 图模式
-- omni.cpp: diag 开关（OMNI_DEBUG_PREFILL/TOPK/DUMP）+ OMNI_T2W_STEPS env + image_id 门控 + 系统提示 + NPU 串行锁（OMNI_NPU_SERIAL）+ TTS head_code 行间并行（OMNI_HEADCODE_THREADS，数值逐位一致）+ VPM 同尺寸批量编码（OMNI_VISION_BATCH_ALL，encode -22.5%、RTF -9.1%）
+- omni.cpp: diag 开关（OMNI_DEBUG_PREFILL/TOPK/DUMP）+ OMNI_T2W_STEPS env + image_id 门控 + 系统提示 + NPU 串行锁（OMNI_NPU_SERIAL）+ TTS head_code 行间并行（OMNI_HEADCODE_THREADS，数值逐位一致）+ VPM 同尺寸批量编码（OMNI_VISION_BATCH_ALL，encode -22.5%、RTF -9.1%）+ VPM resize 并行化（preprocess 传入 n_threads）
 - omni.h: T2WOut/last_chunk 结构对齐
-- vision.cpp: Omni_DUMP_EMBED diag 开关 + 图模式受限使能（per-backend set_acl_graph）"
+- vision.h: vision_image_preprocess 增加 n_threads 参数（默认 1=官方行为）
+- vision.cpp: Omni_DUMP_EMBED diag 开关 + 图模式受限使能（per-backend set_acl_graph）+ VPM bilinear/bicubic resize 行并行（run_parallel_rows，行独立位级一致，slice_resize 37ms→4.6ms、encode -22%、RTF -6%）"
 STAGING_HEAD=$(git -C "$STAGING" log --oneline -1 | cat)
 echo "  staging HEAD: $STAGING_HEAD"
 
