@@ -97,17 +97,14 @@ npu-smi info -t usages -i 1
 - **分支**：main=完整提交；`p2-duplex-exit0`=性能诊断（未 merge，信息性）。
 - **CodeGraph** 已索引（`.codegraph/`）—— 查代码先用 `codegraph_explore`，别直接 grep。
 
-## 当前进度（一句话，2026-08-26）
+## 当前进度（一句话，2026-08-26 晚更新）
 
-**官方 910C 出分（8/26 回写）：v5 配置 RTF 0.8357（beat 基线 23.1%）+ 精度 4/4 全过准入
-（Daily 79.6% / VideoMME 69.3% / WER 1.336 / ASV 0.709）→ 三张入场券全拿，进入有效排名。**
-v6（8/24 head 并行，本机 RTF 1.166）**尚未出分**，预期优于 0.8357（本地比 v5 快 14.3%）。
-⚠️ v6 包 README 最终提交哈希 af67cfe 无效（staging 已重建为 1dd42b7，复核打回才需 v7）；
-截止 8/31 剩 5 天，每天限 3 次提交，无更强配置不重提交。
-**🆕 910C 实测（8/26 晚回写，910c 分支 c7ec345）：v8 = 图模式（GGML_CANN_ACL_GRAPH=1）+ t16
-= RTF 0.7237×5 轮（-17.9%，tts -39%/t2w -20%）；✅ 精度已验证（LLM 输出逐字节一致、
-tts seed-zh 40 条 WER 0.947%=0.947%、40/40 wav 逐字节一致、batch_validity 全 true）→
-**v8 提交门禁全过，可打包提交**（6 文件：+ggml-cann.h +aclnn_ops.cpp，README 已 v8 化，
-USE_ACL_GRAPH=ON 构建）；910C 段分解最大段 = token2wav 0.238（CPU vocoder 不随 NPU 加速）
-→ Phase 2 第一候选 t2w 步数修复。详见 docs/910c-progress-v8-2026-08-26.md（精度验证版）。**
+**赛事已收官（8/26 用户确认）→ 铺路模式：无提交/排名压力，技术积累导向，可无时间压力移植验证竞品方案。**
+收官前最终成绩：官方在册 v5 = RTF 0.8357（精度 4/4 准入全过）；910C 实测优化链 v6→v7→v8
+（head 并行 → VPM batch → 图模式+t16）= **0.7237×5 轮**（纯优化 vs v6 ≈ -26%），v8 精度已验证
+（LLM 逐字节一致 / tts 40 条 WER 0.947%=0.947% / 40/40 wav 逐字节一致），提交物 6 文件已就绪
+（910c 分支 c7ec345，未提交）。
+铺路候选：① 910C 特性补验（FP8/KV 量化/大 ctx/量化重扫）② **DFlash TTS 推测解码移植**
+（详见 docs/competitor-intel-dflash-2026-08-26.md——正交剩余维度，预估 tts 段 -30~50%）③ t2w
+步数修复（910C 最大段 0.238）。
 详细见 `docs/session-2026-08-26.md`（最新交接）+ `docs/competition-readiness.md` §0。
