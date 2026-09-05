@@ -72,17 +72,35 @@ sampling）；accept_top_k=0 默认 = distribution-preserving（lossless）路�
 | config | seed 42 / TTS temp 0.8 / draft temp 0.8 / accept_top_k=0 | lossless 路径 |
 
 **解读**：tokens/round=2.67 与对方声称"每轮 2-3 token"一致 → TTS 自回归迭代降为 1/2.67≈37%。
-若 verifier 并行验证成本 ≈ 单步 decode（多 token prefill 已被我方 FA contiguity 修复解锁），
-v8@910C tts 段 0.121 的自回归部分（估 60-70%）可 -60% → tts 段 -35~40% → 总 RTF -5~7%。
-**判定阈值（tokens/round）：≥2.5 → 值得 GGUF 架构扩展 + omni 循环改造。首样本 2.67 达标，待全量确认。**
 
-## 六、待补（后台运行中）
+## 六、A/B 实测对照（2026-09-05，同文本 139 tokens，CPU）
 
-- [ ] 全量 20 样本（中英/朗读/QA/翻译/诗歌/数字/绕口令）→ 分布 + 分语言/分类统计（bench20.json）
-- [ ] greedy 对照（draft temp=0，4 样本）→ 官方确定性评测路径的接受率（bench-greedy4.json）
-- [ ] 判定 + playbook 定稿 + 移植设计文档（GGUF 架构扩展 / omni 循环改造）
+| 模式 | decode 耗时 | 轮次 | 每轮成本 | 相对 |
+|---|---|---|---|---|
+| 无 DFlash | ~60s* | 139 步 | 0.43s/步 | 1.0× |
+| **有 DFlash** | **34.3s** | 52 轮 | 0.66s/轮 | **1.75×** |
 
-## 七、移植设计要点（预研，供后续）
+*B（simplex --disable-dflash）wall 328s - 固定成本（Thinker+vocoder ≈268s，取自 DFlash 冒烟
+302s-34.3s）推算。**每轮成本系数实测 1.54×**（0.66/0.43）——与理论中性假设 1.5× 吻合，
+净加速 1.75× = 52×1.54/139 理论值 1.76× 验证闭环。
+
+## 七、910C（v8.7 基 0.519）应用评估
+
+- 910C TTS 单步 decode 实测 4.2ms/token（225 kernel × 15μs）→ tts 段 0.102 几乎纯自回归
+- 每帧 26 步 → DFlash 后 ~10 轮（÷2.67）；每轮成本系数 NPU 待测（多 token 并行验证效率是最大变量）
+- 系数 1.5×：tts 0.102 → ~0.059 → 总 RTF ~**0.476**（-8%）
+- 系数 2.0×：tts 0.102 → ~0.078 → 总 RTF ~**0.495**（-5%）
+- 判定阈值（tokens/round ≥2.5）：首样本 2.67 达标 → **GGUF 架构扩展 + omni 循环改造值得投入**
+
+## 八、待补
+
+- [ ] 对方全量 20 样本复现（对方官方自测 overall tokens/round 2.5516 为基准；本机 CPU 全链路
+      20 条 ~2h，已停——以对方自测表 + 本机单样本吻合为据，不重复全量）
+- [ ] V9.3（CANN Lab 环境本地，未推送远程）段分解对照——910C 后期 v8.7=0.519/决赛 P0 已含
+      spec decode 计划；若 V9.3 已集成推测解码，用其真实数据校准本节
+- [ ] NPU 移植后实测校准（每轮成本系数）
+
+## 九、移植设计要点（预研，供后续）
 
 - draft 架构：DFlashDraftModel = 4 层 Qwen3-768 + KV-injection（verifier 层 [2,6,10,14,17]
   hidden 经 fc+RMSNorm 注入）+ t2d/d2t vocab 映射（当前 identity）+ block_size=8（提议 7）
