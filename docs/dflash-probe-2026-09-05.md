@@ -4,6 +4,7 @@
 > 判定 llama.cpp-omni + CANN 移植是否值得投入。
 > 方法：对方开源 benchmark（HF transformers 全链路）在本机 CPU（256 核/2TB 内存）上复测。
 > 背景：赛事已收官 → 铺路模式，本探针是"竞品方案快速验证"基础设施的第一个实例。
+> 关联：docs/competitor-intel-dflash-2026-08-26.md（方案分析）+ docs/dflash-assets-2026-09-05.md（资产/方法论）
 
 ## 一、资源与通道（可复用）
 

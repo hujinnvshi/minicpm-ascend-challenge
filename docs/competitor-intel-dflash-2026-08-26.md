@@ -4,6 +4,8 @@
 > 状态：赛事已收官（8/26 确认）→ 本文作为**技术资产**归档，供未来优化/参赛复用
 > 分析日期：2026-08-26。开源材料：模型 cs-qyzhang/MiniCPM-o-4_5-tts-dflash (HF) /
 > 代码 cs-qyzhang/minicpm-o-4.5-tts-dflash (GitHub) / 训练日志 wandb.ai/cs-qyzhang-hust
+> 📎 知识链（按时间）：本文（方案分析）→ docs/dflash-probe-2026-09-05.md（CPU 复测验证）
+> → docs/dflash-assets-2026-09-05.md（资产保全 + 自训方法论）
 
 ## 一、问题洞察（与我们一致）
 

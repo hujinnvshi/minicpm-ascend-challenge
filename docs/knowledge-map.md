@@ -332,6 +332,9 @@ v7 哈希修复重提交，RTF 预期持平或小幅改善（优化空间已系�
 | reproduce-guide.md | 提交物：复现说明 | 定稿时 |
 | decisions.md | 决策链（时间倒序）| 理解"为什么" |
 | env-scan.md | 910B3 环境基线 | 环境排查 |
+| competitor-intel-dflash-2026-08-26.md | 竞品 DFlash 推测解码方案分析（机制/lossless/移植路径）| 了解外部方案 |
+| dflash-probe-2026-09-05.md | DFlash CPU 复测验证（环境/依赖坑/接受率数据）| 移植前看收益上限 |
+| dflash-assets-2026-09-05.md | DFlash 资产保全 + 自训方法论（数据构造/训练配置）| 复用模型/自训 draft 前 |
 
 ## 附录 B · 术语速查
 
@@ -347,6 +350,10 @@ v7 哈希修复重提交，RTF 预期持平或小幅改善（优化空间已系�
 | AICore | NPU 计算核心占用率 |
 | HBM 带宽 | 显存带宽（高 = 真在 NPU 算）|
 | dequant-bound | 反量化开销吃满收益 |
+| Speculative decoding | 推测解码：小 draft 模型提议 γ token + 大模型并行验证；lossless 接受 min(1,p/q) |
+| DFlash | block-diffusion 草稿模型（每轮单次前向填整块，block=8 提议 7）|
+| EAL | 每轮平均接受的 draft token 数（满分 = 提议数）|
+| tokens/round | 每轮净推进 token 数（含 bonus）= 迭代减少倍率，推测解码真实收益 |
 | OMNI_TTS_QUEUE | LLM↔TTS 队列深度（P1.7 主杠杆）|
 | USE_ACL_GRAPH | 图模式（910B 不支持）|
 | SPEAK→WAV RTF | 官方性能指标口径 |

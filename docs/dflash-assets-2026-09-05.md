@@ -107,3 +107,27 @@ tts.model.norm → model.norm；embed/lm_head 各追加 1 行作 mask token（id
    未验证）+ ~1TB 记录数据磁盘 + vllm-omni fork 记录管线
 4. **本方案对 llama.cpp-omni 移植的落点**：draft 权重 GGUF 化（4 层 Qwen3 + KV-injection 自定义层）
    + omni.cpp TTS decode 循环改造（多 token 并行验证已被 FA contiguity 修复解锁）
+
+## 五、推测解码通用范式（为什么到处能用——方法论层）
+
+**机制本质**：用"并行验证"换"串行猜测"。NPU/GPU 并行前向成本远低于串行轮次（batch 大 N 倍
+只贵一点），而自回归的逐 token 串行是硬成本。draft 质量决定收益（EAL），但"猜错"惩罚只是
+退回原位不亏本——哪怕接受率 23%（DFlash 实测）也有 2.67× 净推进。
+
+**三条成立条件**（评估任何新场景是否可挂推测解码）：
+1. 目标模型自回归串行生成（逐 token 依赖，无法并行）
+2. 存在廉价猜测器（小模型 / N-gram / 规则近似；embedding-fed 可解决非 token-id 输入）
+3. 验证成本 < 省下的串行成本（需实测，用 tokens/round 判）
+
+**适用场景清单**（猜测器 / 先例）：
+| 场景 | 猜测器 | 状态 |
+|---|---|---|
+| 通用 LLM 文本生成 | EAGLE / Medusa / 自推测 / 小 draft | 工业界标配 |
+| TTS 音频 codec 生成 | DFlash（本文）| 对方验证 tokens/round 2.55 |
+| 自回归语音合成（CosyVoice/GPT-SoVITS 系）| 同思路 | 架构同源，方法论直接搬 |
+| 自回归图像/视频 token | VAR / LlamaGen 类 | 学术圈已验证 |
+| 多模态流式解码 | 各路共享/独立 draft | 前沿 |
+
+**lossless 保证**：distribution-preserving 接受（min(1,p/q) + 残差重采样）→ 输出分布与
+verifier 原样数学等价——这是推测解码区别于 layer-cap 等"改推理数学"方案的根本优势，
+可过最严精度门禁（greedy 下逐字节一致）。
