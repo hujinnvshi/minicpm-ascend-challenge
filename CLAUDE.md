@@ -105,6 +105,7 @@ npu-smi info -t usages -i 1
 （LLM 逐字节一致 / tts 40 条 WER 0.947%=0.947% / 40/40 wav 逐字节一致），提交物 6 文件已就绪
 （910c 分支 c7ec345，未提交）。
 铺路候选：① 910C 特性补验（FP8/KV 量化/大 ctx/量化重扫）② **DFlash TTS 推测解码移植**
-（详见 docs/competitor-intel-dflash-2026-08-26.md——正交剩余维度，预估 tts 段 -30~50%）③ t2w
-步数修复（910C 最大段 0.238）。
+（⭐执行路线图 docs/dflash-port-roadmap-2026-09-05.md——CPU A/B 实测 1.75×、v8.7 基评估
+0.48-0.50，P0-P4 分阶段就绪待执行；知识链 competitor-intel→probe→assets→roadmap）
+③ t2w 步数修复（910C 最大段 0.238，v8.5 已用 1 步+conv_mm 解决——gitcode 后期已做）。
 详细见 `docs/session-2026-08-26.md`（最新交接）+ `docs/competition-readiness.md` §0。

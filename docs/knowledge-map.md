@@ -335,6 +335,7 @@ v7 哈希修复重提交，RTF 预期持平或小幅改善（优化空间已系�
 | competitor-intel-dflash-2026-08-26.md | 竞品 DFlash 推测解码方案分析（机制/lossless/移植路径）| 了解外部方案 |
 | dflash-probe-2026-09-05.md | DFlash CPU 复测验证（环境/依赖坑/接受率数据）| 移植前看收益上限 |
 | dflash-assets-2026-09-05.md | DFlash 资产保全 + 自训方法论（数据构造/训练配置）| 复用模型/自训 draft 前 |
+| dflash-port-roadmap-2026-09-05.md | ⭐DFlash 移植执行路线图（P0-P4 阶段/工具/门禁/风险）| 启动移植时 |
 
 ## 附录 B · 术语速查
 
